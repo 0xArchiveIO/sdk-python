@@ -1,6 +1,10 @@
 # oxarchive
 
-Official Python SDK for [0xarchive](https://0xarchive.io) - Hyperliquid Historical Data API.
+Official Python SDK for [0xarchive](https://0xarchive.io) - Historical Market Data API.
+
+Supports multiple exchanges:
+- **Hyperliquid** - Perpetuals data from April 2023
+- **Lighter.xyz** - Perpetuals data with orderbook reconstruction
 
 ## Installation
 
@@ -21,12 +25,16 @@ from oxarchive import Client
 
 client = Client(api_key="ox_your_api_key")
 
-# Get current order book
-orderbook = client.orderbook.get("BTC")
-print(f"BTC mid price: {orderbook.mid_price}")
+# Hyperliquid data
+hl_orderbook = client.hyperliquid.orderbook.get("BTC")
+print(f"Hyperliquid BTC mid price: {hl_orderbook.mid_price}")
+
+# Lighter.xyz data
+lighter_orderbook = client.lighter.orderbook.get("BTC")
+print(f"Lighter BTC mid price: {lighter_orderbook.mid_price}")
 
 # Get historical order book snapshots
-history = client.orderbook.history(
+history = client.hyperliquid.orderbook.history(
     "ETH",
     start="2024-01-01",
     end="2024-01-02",
@@ -45,9 +53,12 @@ from oxarchive import Client
 async def main():
     client = Client(api_key="ox_your_api_key")
 
-    # Async get
-    orderbook = await client.orderbook.aget("BTC")
+    # Async get (Hyperliquid)
+    orderbook = await client.hyperliquid.orderbook.aget("BTC")
     print(f"BTC mid price: {orderbook.mid_price}")
+
+    # Async get (Lighter.xyz)
+    lighter_ob = await client.lighter.orderbook.aget("BTC")
 
     # Don't forget to close the client
     await client.aclose()
@@ -59,7 +70,7 @@ Or use as async context manager:
 
 ```python
 async with Client(api_key="ox_your_api_key") as client:
-    orderbook = await client.orderbook.aget("BTC")
+    orderbook = await client.hyperliquid.orderbook.aget("BTC")
 ```
 
 ## Configuration
@@ -74,20 +85,25 @@ client = Client(
 
 ## REST API Reference
 
+All examples use `client.hyperliquid.*` but the same methods are available on `client.lighter.*` for Lighter.xyz data.
+
 ### Order Book
 
 ```python
-# Get current order book
-orderbook = client.orderbook.get("BTC")
+# Get current order book (Hyperliquid)
+orderbook = client.hyperliquid.orderbook.get("BTC")
+
+# Get current order book (Lighter.xyz)
+orderbook = client.lighter.orderbook.get("BTC")
 
 # Get order book at specific timestamp
-historical = client.orderbook.get("BTC", timestamp=1704067200000)
+historical = client.hyperliquid.orderbook.get("BTC", timestamp=1704067200000)
 
 # Get with limited depth
-shallow = client.orderbook.get("BTC", depth=10)
+shallow = client.hyperliquid.orderbook.get("BTC", depth=10)
 
 # Get historical snapshots (start and end are required)
-history = client.orderbook.history(
+history = client.hyperliquid.orderbook.history(
     "BTC",
     start="2024-01-01",
     end="2024-01-02",
@@ -96,8 +112,8 @@ history = client.orderbook.history(
 )
 
 # Async versions
-orderbook = await client.orderbook.aget("BTC")
-history = await client.orderbook.ahistory("BTC", start=..., end=...)
+orderbook = await client.hyperliquid.orderbook.aget("BTC")
+history = await client.hyperliquid.orderbook.ahistory("BTC", start=..., end=...)
 ```
 
 ### Trades
@@ -106,15 +122,15 @@ The trades API uses cursor-based pagination for efficient retrieval of large dat
 
 ```python
 # Get recent trades
-recent = client.trades.recent("BTC", limit=100)
+recent = client.hyperliquid.trades.recent("BTC", limit=100)
 
 # Get trade history with cursor-based pagination
-result = client.trades.list("ETH", start="2024-01-01", end="2024-01-02", limit=1000)
+result = client.hyperliquid.trades.list("ETH", start="2024-01-01", end="2024-01-02", limit=1000)
 trades = result.data
 
 # Paginate through all results
 while result.next_cursor:
-    result = client.trades.list(
+    result = client.hyperliquid.trades.list(
         "ETH",
         start="2024-01-01",
         end="2024-01-02",
@@ -124,61 +140,73 @@ while result.next_cursor:
     trades.extend(result.data)
 
 # Filter by side
-buys = client.trades.list("BTC", start=..., end=..., side="buy")
+buys = client.hyperliquid.trades.list("BTC", start=..., end=..., side="buy")
 
 # Async versions
-recent = await client.trades.arecent("BTC")
-result = await client.trades.alist("ETH", start=..., end=...)
+recent = await client.hyperliquid.trades.arecent("BTC")
+result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
 ```
 
 ### Instruments
 
 ```python
 # List all trading instruments
-instruments = client.instruments.list()
+instruments = client.hyperliquid.instruments.list()
 
 # Get specific instrument details
-btc = client.instruments.get("BTC")
+btc = client.hyperliquid.instruments.get("BTC")
 
 # Async versions
-instruments = await client.instruments.alist()
-btc = await client.instruments.aget("BTC")
+instruments = await client.hyperliquid.instruments.alist()
+btc = await client.hyperliquid.instruments.aget("BTC")
 ```
 
 ### Funding Rates
 
 ```python
 # Get current funding rate
-current = client.funding.current("BTC")
+current = client.hyperliquid.funding.current("BTC")
 
 # Get funding rate history (start is required)
-history = client.funding.history(
+history = client.hyperliquid.funding.history(
     "ETH",
     start="2024-01-01",
     end="2024-01-07"
 )
 
 # Async versions
-current = await client.funding.acurrent("BTC")
-history = await client.funding.ahistory("ETH", start=..., end=...)
+current = await client.hyperliquid.funding.acurrent("BTC")
+history = await client.hyperliquid.funding.ahistory("ETH", start=..., end=...)
 ```
 
 ### Open Interest
 
 ```python
 # Get current open interest
-current = client.open_interest.current("BTC")
+current = client.hyperliquid.open_interest.current("BTC")
 
 # Get open interest history (start is required)
-history = client.open_interest.history(
+history = client.hyperliquid.open_interest.history(
     "ETH",
     start="2024-01-01",
     end="2024-01-07"
 )
 
 # Async versions
-current = await client.open_interest.acurrent("BTC")
-history = await client.open_interest.ahistory("ETH", start=..., end=...)
+current = await client.hyperliquid.open_interest.acurrent("BTC")
+history = await client.hyperliquid.open_interest.ahistory("ETH", start=..., end=...)
+```
+
+### Legacy API (Deprecated)
+
+The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:
+
+```python
+# Deprecated - use client.hyperliquid.orderbook.get() instead
+orderbook = client.orderbook.get("BTC")
+
+# Deprecated - use client.hyperliquid.trades.list() instead
+trades = client.trades.list("BTC", start=..., end=...)
 ```
 
 ## WebSocket Client

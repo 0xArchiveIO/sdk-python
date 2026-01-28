@@ -27,8 +27,9 @@ class TradesResource:
         ...     trades.extend(result.data)
     """
 
-    def __init__(self, http: HttpClient):
+    def __init__(self, http: HttpClient, base_path: str = "/v1"):
         self._http = http
+        self._base_path = base_path
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -86,7 +87,7 @@ class TradesResource:
             ...     trades.extend(result.data)
         """
         data = self._http.get(
-            f"/v1/trades/{coin.upper()}",
+            f"{self._base_path}/trades/{coin.upper()}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -116,7 +117,7 @@ class TradesResource:
         Uses cursor-based pagination by default.
         """
         data = await self._http.aget(
-            f"/v1/trades/{coin.upper()}",
+            f"{self._base_path}/trades/{coin.upper()}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -142,7 +143,7 @@ class TradesResource:
             List of recent trades
         """
         data = self._http.get(
-            f"/v1/trades/{coin.upper()}/recent",
+            f"{self._base_path}/trades/{coin.upper()}/recent",
             params={"limit": limit},
         )
         return [Trade.model_validate(item) for item in data["data"]]
@@ -150,7 +151,7 @@ class TradesResource:
     async def arecent(self, coin: str, limit: Optional[int] = None) -> list[Trade]:
         """Async version of recent()."""
         data = await self._http.aget(
-            f"/v1/trades/{coin.upper()}/recent",
+            f"{self._base_path}/trades/{coin.upper()}/recent",
             params={"limit": limit},
         )
         return [Trade.model_validate(item) for item in data["data"]]

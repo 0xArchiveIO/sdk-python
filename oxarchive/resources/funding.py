@@ -21,8 +21,9 @@ class FundingResource:
         >>> history = client.funding.history("ETH", start="2024-01-01", end="2024-01-07")
     """
 
-    def __init__(self, http: HttpClient):
+    def __init__(self, http: HttpClient, base_path: str = "/v1"):
         self._http = http
+        self._base_path = base_path
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -72,7 +73,7 @@ class FundingResource:
             ...     rates.extend(result.data)
         """
         data = self._http.get(
-            f"/v1/funding/{coin.upper()}",
+            f"{self._base_path}/funding/{coin.upper()}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -96,7 +97,7 @@ class FundingResource:
     ) -> CursorResponse[list[FundingRate]]:
         """Async version of history(). start and end are required."""
         data = await self._http.aget(
-            f"/v1/funding/{coin.upper()}",
+            f"{self._base_path}/funding/{coin.upper()}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -119,10 +120,10 @@ class FundingResource:
         Returns:
             Current funding rate
         """
-        data = self._http.get(f"/v1/funding/{coin.upper()}/current")
+        data = self._http.get(f"{self._base_path}/funding/{coin.upper()}/current")
         return FundingRate.model_validate(data["data"])
 
     async def acurrent(self, coin: str) -> FundingRate:
         """Async version of current()."""
-        data = await self._http.aget(f"/v1/funding/{coin.upper()}/current")
+        data = await self._http.aget(f"{self._base_path}/funding/{coin.upper()}/current")
         return FundingRate.model_validate(data["data"])

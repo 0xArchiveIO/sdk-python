@@ -14,18 +14,22 @@ class OrderBookResource:
     Order book API resource.
 
     Example:
-        >>> # Get current order book
-        >>> orderbook = client.orderbook.get("BTC")
+        >>> # Get current order book (Hyperliquid)
+        >>> orderbook = client.hyperliquid.orderbook.get("BTC")
         >>>
         >>> # Get order book at specific timestamp
-        >>> historical = client.orderbook.get("ETH", timestamp=1704067200000)
+        >>> historical = client.hyperliquid.orderbook.get("ETH", timestamp=1704067200000)
         >>>
         >>> # Get order book history
-        >>> history = client.orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> history = client.hyperliquid.orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>>
+        >>> # Lighter.xyz order book
+        >>> lighter_ob = client.lighter.orderbook.get("BTC")
     """
 
-    def __init__(self, http: HttpClient):
+    def __init__(self, http: HttpClient, base_path: str = "/v1"):
         self._http = http
+        self._base_path = base_path
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -63,7 +67,7 @@ class OrderBookResource:
             Order book snapshot
         """
         data = self._http.get(
-            f"/v1/orderbook/{coin.upper()}",
+            f"{self._base_path}/orderbook/{coin.upper()}",
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
@@ -80,7 +84,7 @@ class OrderBookResource:
     ) -> OrderBook:
         """Async version of get()."""
         data = await self._http.aget(
-            f"/v1/orderbook/{coin.upper()}",
+            f"{self._base_path}/orderbook/{coin.upper()}",
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
@@ -122,7 +126,7 @@ class OrderBookResource:
             ...     snapshots.extend(result.data)
         """
         data = self._http.get(
-            f"/v1/orderbook/{coin.upper()}/history",
+            f"{self._base_path}/orderbook/{coin.upper()}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -148,7 +152,7 @@ class OrderBookResource:
     ) -> CursorResponse[list[OrderBook]]:
         """Async version of history(). start and end are required."""
         data = await self._http.aget(
-            f"/v1/orderbook/{coin.upper()}/history",
+            f"{self._base_path}/orderbook/{coin.upper()}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),

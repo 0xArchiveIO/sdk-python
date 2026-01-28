@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .http import HttpClient
+from .exchanges import HyperliquidClient, LighterClient
 from .resources import (
     OrderBookResource,
     TradesResource,
@@ -21,20 +22,27 @@ class Client:
     """
     0xarchive API client.
 
+    Supports multiple exchanges:
+    - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
+    - `client.lighter` - Lighter.xyz perpetuals
+
     Example:
         >>> from oxarchive import Client
         >>>
         >>> client = Client(api_key="ox_your_api_key")
         >>>
-        >>> # Get current order book
-        >>> orderbook = client.orderbook.get("BTC")
-        >>> print(f"BTC mid price: {orderbook.mid_price}")
+        >>> # Hyperliquid data
+        >>> hl_orderbook = client.hyperliquid.orderbook.get("BTC")
+        >>> print(f"BTC mid price: {hl_orderbook.mid_price}")
+        >>>
+        >>> # Lighter.xyz data
+        >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
         >>>
         >>> # Get historical snapshots
-        >>> history = client.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
+        >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
         >>>
         >>> # List all instruments
-        >>> instruments = client.instruments.list()
+        >>> instruments = client.hyperliquid.instruments.list()
 
     Async example:
         >>> import asyncio
@@ -42,11 +50,15 @@ class Client:
         >>>
         >>> async def main():
         ...     client = Client(api_key="ox_your_api_key")
-        ...     orderbook = await client.orderbook.aget("BTC")
+        ...     orderbook = await client.hyperliquid.orderbook.aget("BTC")
         ...     print(f"BTC mid price: {orderbook.mid_price}")
         ...     await client.aclose()
         >>>
         >>> asyncio.run(main())
+
+    Legacy usage (deprecated, will be removed in v2.0):
+        >>> # These still work but use client.hyperliquid.* instead
+        >>> orderbook = client.orderbook.get("BTC")  # deprecated
     """
 
     def __init__(
@@ -73,21 +85,31 @@ class Client:
             timeout=timeout or DEFAULT_TIMEOUT,
         )
 
-        # Initialize resource namespaces
-        self.orderbook = OrderBookResource(self._http)
-        """Order book data (L2 snapshots from April 2023)"""
+        # Exchange-specific clients (recommended)
+        self.hyperliquid = HyperliquidClient(self._http)
+        """Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)"""
 
-        self.trades = TradesResource(self._http)
-        """Trade/fill history"""
+        self.lighter = LighterClient(self._http)
+        """Lighter.xyz exchange data (orderbook reconstructed from checkpoints + deltas)"""
 
-        self.instruments = InstrumentsResource(self._http)
-        """Trading instruments metadata"""
+        # Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
+        # These will be removed in v2.0
+        # Note: Using /v1/hyperliquid base path for backward compatibility
+        legacy_base = "/v1/hyperliquid"
+        self.orderbook = OrderBookResource(self._http, legacy_base)
+        """[DEPRECATED] Use client.hyperliquid.orderbook instead"""
 
-        self.funding = FundingResource(self._http)
-        """Funding rates"""
+        self.trades = TradesResource(self._http, legacy_base)
+        """[DEPRECATED] Use client.hyperliquid.trades instead"""
 
-        self.open_interest = OpenInterestResource(self._http)
-        """Open interest"""
+        self.instruments = InstrumentsResource(self._http, legacy_base)
+        """[DEPRECATED] Use client.hyperliquid.instruments instead"""
+
+        self.funding = FundingResource(self._http, legacy_base)
+        """[DEPRECATED] Use client.hyperliquid.funding instead"""
+
+        self.open_interest = OpenInterestResource(self._http, legacy_base)
+        """[DEPRECATED] Use client.hyperliquid.open_interest instead"""
 
     def close(self) -> None:
         """Close the HTTP client and release resources."""

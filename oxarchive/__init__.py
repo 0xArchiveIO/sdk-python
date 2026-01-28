@@ -1,22 +1,28 @@
 """
 oxarchive - Official Python SDK for 0xarchive
 
-Hyperliquid Historical Data API.
+Historical Market Data API for multiple exchanges:
+- Hyperliquid (perpetuals data from April 2023)
+- Lighter.xyz (perpetuals data)
 
 Example:
     >>> from oxarchive import Client
     >>>
     >>> client = Client(api_key="ox_your_api_key")
     >>>
-    >>> # Get current order book
-    >>> orderbook = client.orderbook.get("BTC")
-    >>> print(f"BTC mid price: {orderbook.mid_price}")
+    >>> # Hyperliquid data
+    >>> hl_orderbook = client.hyperliquid.orderbook.get("BTC")
+    >>> print(f"BTC mid price: {hl_orderbook.mid_price}")
+    >>>
+    >>> # Lighter.xyz data
+    >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
     >>>
     >>> # Get historical snapshots
-    >>> history = client.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
+    >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
 """
 
 from .client import Client
+from .exchanges import HyperliquidClient, LighterClient
 from .types import (
     OrderBook,
     Trade,
@@ -57,11 +63,14 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.3.11"
+__version__ = "0.4.0"
 
 __all__ = [
     # Client
     "Client",
+    # Exchange Clients
+    "HyperliquidClient",
+    "LighterClient",
     # WebSocket Client
     "OxArchiveWs",
     "WsOptions",

@@ -18,8 +18,9 @@ class InstrumentsResource:
         >>> btc = client.instruments.get("BTC")
     """
 
-    def __init__(self, http: HttpClient):
+    def __init__(self, http: HttpClient, base_path: str = "/v1"):
         self._http = http
+        self._base_path = base_path
 
     def list(self) -> list[Instrument]:
         """
@@ -28,12 +29,12 @@ class InstrumentsResource:
         Returns:
             List of instruments
         """
-        data = self._http.get("/v1/instruments")
+        data = self._http.get(f"{self._base_path}/instruments")
         return [Instrument.model_validate(item) for item in data["data"]]
 
     async def alist(self) -> list[Instrument]:
         """Async version of list()."""
-        data = await self._http.aget("/v1/instruments")
+        data = await self._http.aget(f"{self._base_path}/instruments")
         return [Instrument.model_validate(item) for item in data["data"]]
 
     def get(self, coin: str) -> Instrument:
@@ -46,10 +47,10 @@ class InstrumentsResource:
         Returns:
             Instrument details
         """
-        data = self._http.get(f"/v1/instruments/{coin.upper()}")
+        data = self._http.get(f"{self._base_path}/instruments/{coin.upper()}")
         return Instrument.model_validate(data["data"])
 
     async def aget(self, coin: str) -> Instrument:
         """Async version of get()."""
-        data = await self._http.aget(f"/v1/instruments/{coin.upper()}")
+        data = await self._http.aget(f"{self._base_path}/instruments/{coin.upper()}")
         return Instrument.model_validate(data["data"])
