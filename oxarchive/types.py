@@ -140,7 +140,7 @@ class Trade(BaseModel):
 
 
 class Instrument(BaseModel):
-    """Trading instrument specification."""
+    """Trading instrument specification (Hyperliquid)."""
 
     model_config = {"populate_by_name": True}
 
@@ -160,6 +160,53 @@ class Instrument(BaseModel):
     """Type of instrument."""
 
     is_active: bool = Field(default=True, alias="isActive")
+    """Whether the instrument is currently tradeable."""
+
+
+class LighterInstrument(BaseModel):
+    """Trading instrument specification (Lighter.xyz).
+
+    Lighter instruments have a different schema than Hyperliquid with more
+    detailed market configuration including fees and minimum amounts.
+    """
+
+    symbol: str
+    """Instrument symbol (e.g., BTC, ETH)."""
+
+    market_id: int
+    """Unique market identifier."""
+
+    market_type: str
+    """Market type (e.g., 'perp')."""
+
+    status: str
+    """Market status (e.g., 'active')."""
+
+    taker_fee: float
+    """Taker fee rate (e.g., 0.0005 = 0.05%)."""
+
+    maker_fee: float
+    """Maker fee rate (e.g., 0.0002 = 0.02%)."""
+
+    liquidation_fee: float
+    """Liquidation fee rate."""
+
+    min_base_amount: float
+    """Minimum order size in base currency."""
+
+    min_quote_amount: float
+    """Minimum order size in quote currency."""
+
+    size_decimals: int
+    """Size decimal precision."""
+
+    price_decimals: int
+    """Price decimal precision."""
+
+    quote_decimals: int
+    """Quote currency decimal precision."""
+
+    is_active: bool
     """Whether the instrument is currently tradeable."""
 
 
