@@ -7,6 +7,7 @@ from .resources import (
     OrderBookResource,
     TradesResource,
     InstrumentsResource,
+    LighterInstrumentsResource,
     FundingResource,
     OpenInterestResource,
 )
@@ -54,6 +55,8 @@ class LighterClient:
         >>> client = oxarchive.Client(api_key="...")
         >>> orderbook = client.lighter.orderbook.get("BTC")
         >>> trades = client.lighter.trades.list("ETH", start=..., end=...)
+        >>> instruments = client.lighter.instruments.list()
+        >>> print(f"ETH taker fee: {instruments[0].taker_fee}")
     """
 
     def __init__(self, http: HttpClient):
@@ -66,8 +69,8 @@ class LighterClient:
         self.trades = TradesResource(http, base_path)
         """Trade/fill history"""
 
-        self.instruments = InstrumentsResource(http, base_path)
-        """Trading instruments metadata"""
+        self.instruments = LighterInstrumentsResource(http, base_path)
+        """Trading instruments metadata (returns LighterInstrument with fees, min amounts, etc.)"""
 
         self.funding = FundingResource(http, base_path)
         """Funding rates"""

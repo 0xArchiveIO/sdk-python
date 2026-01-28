@@ -150,16 +150,46 @@ result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
 ### Instruments
 
 ```python
-# List all trading instruments
+# List all trading instruments (Hyperliquid)
 instruments = client.hyperliquid.instruments.list()
 
 # Get specific instrument details
 btc = client.hyperliquid.instruments.get("BTC")
+print(f"BTC size decimals: {btc.sz_decimals}")
 
 # Async versions
 instruments = await client.hyperliquid.instruments.alist()
 btc = await client.hyperliquid.instruments.aget("BTC")
 ```
+
+#### Lighter.xyz Instruments
+
+Lighter instruments have a different schema with additional fields for fees, market IDs, and minimum order amounts:
+
+```python
+# List Lighter instruments (returns LighterInstrument, not Instrument)
+lighter_instruments = client.lighter.instruments.list()
+
+# Get specific Lighter instrument
+eth = client.lighter.instruments.get("ETH")
+print(f"ETH taker fee: {eth.taker_fee}")
+print(f"ETH maker fee: {eth.maker_fee}")
+print(f"ETH market ID: {eth.market_id}")
+print(f"ETH min base amount: {eth.min_base_amount}")
+
+# Async versions
+lighter_instruments = await client.lighter.instruments.alist()
+eth = await client.lighter.instruments.aget("ETH")
+```
+
+**Key differences:**
+| Field | Hyperliquid (`Instrument`) | Lighter (`LighterInstrument`) |
+|-------|---------------------------|------------------------------|
+| Symbol | `name` | `symbol` |
+| Size decimals | `sz_decimals` | `size_decimals` |
+| Fee info | Not available | `taker_fee`, `maker_fee`, `liquidation_fee` |
+| Market ID | Not available | `market_id` |
+| Min amounts | Not available | `min_base_amount`, `min_quote_amount` |
 
 ### Funding Rates
 
@@ -413,7 +443,7 @@ Full type hint support with Pydantic models:
 
 ```python
 from oxarchive import Client
-from oxarchive.types import OrderBook, Trade, Instrument, FundingRate, OpenInterest
+from oxarchive.types import OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest
 from oxarchive.resources.trades import CursorResponse
 
 client = Client(api_key="ox_your_api_key")
