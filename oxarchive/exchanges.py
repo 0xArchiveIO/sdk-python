@@ -49,7 +49,6 @@ class LighterClient:
     Lighter.xyz exchange client.
 
     Access Lighter.xyz market data through the 0xarchive API.
-    Lighter orderbooks are reconstructed from checkpoint + delta data.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -62,7 +61,7 @@ class LighterClient:
         base_path = "/v1/lighter"
 
         self.orderbook = OrderBookResource(http, base_path)
-        """Order book data (reconstructed from checkpoints + deltas)"""
+        """Order book data (L2 snapshots)"""
 
         self.trades = TradesResource(http, base_path)
         """Trade/fill history"""

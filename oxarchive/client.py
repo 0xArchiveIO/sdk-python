@@ -90,7 +90,7 @@ class Client:
         """Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)"""
 
         self.lighter = LighterClient(self._http)
-        """Lighter.xyz exchange data (orderbook reconstructed from checkpoints + deltas)"""
+        """Lighter.xyz exchange data (August 2025+)"""
 
         # Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
         # These will be removed in v2.0
