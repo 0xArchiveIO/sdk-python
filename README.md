@@ -116,6 +116,46 @@ orderbook = await client.hyperliquid.orderbook.aget("BTC")
 history = await client.hyperliquid.orderbook.ahistory("BTC", start=..., end=...)
 ```
 
+#### Lighter Orderbook Granularity
+
+Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions. Tier restrictions apply.
+
+| Granularity | Interval | Tier Required | Credit Multiplier |
+|-------------|----------|---------------|-------------------|
+| `checkpoint` | ~60s | Free+ | 1x |
+| `30s` | 30s | Build+ | 2x |
+| `10s` | 10s | Build+ | 3x |
+| `1s` | 1s | Pro+ | 10x |
+| `tick` | tick-level | Enterprise | 20x |
+
+```python
+# Get Lighter orderbook history with 10s resolution (Build+ tier)
+history = client.lighter.orderbook.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    granularity="10s"
+)
+
+# Get 1-second resolution (Pro+ tier)
+history = client.lighter.orderbook.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    granularity="1s"
+)
+
+# Tick-level data (Enterprise tier) - returns checkpoint + raw deltas
+history = client.lighter.orderbook.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    granularity="tick"
+)
+```
+
+**Note:** The `granularity` parameter is ignored for Hyperliquid orderbook history.
+
 ### Trades
 
 The trades API uses cursor-based pagination for efficient retrieval of large datasets.
@@ -442,7 +482,7 @@ except OxArchiveError as e:
 Full type hint support with Pydantic models:
 
 ```python
-from oxarchive import Client
+from oxarchive import Client, LighterGranularity
 from oxarchive.types import OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest
 from oxarchive.resources.trades import CursorResponse
 
@@ -451,6 +491,9 @@ client = Client(api_key="ox_your_api_key")
 orderbook: OrderBook = client.orderbook.get("BTC")
 trades: list[Trade] = client.trades.recent("BTC")
 result: CursorResponse = client.trades.list("BTC", start=..., end=...)
+
+# Lighter granularity type hint
+granularity: LighterGranularity = "10s"
 ```
 
 ## Requirements

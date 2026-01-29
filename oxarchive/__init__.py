@@ -23,6 +23,7 @@ Example:
 
 from .client import Client
 from .exchanges import HyperliquidClient, LighterClient
+from .resources.orderbook import LighterGranularity
 from .types import (
     OrderBook,
     Trade,
@@ -64,7 +65,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 __all__ = [
     # Client
@@ -80,6 +81,7 @@ __all__ = [
     "Trade",
     "Instrument",
     "LighterInstrument",
+    "LighterGranularity",
     "FundingRate",
     "OpenInterest",
     "OxArchiveError",

@@ -6,7 +6,12 @@ from datetime import datetime
 from typing import Optional, Union
 
 from ..http import HttpClient
+from typing import Literal
+
 from ..types import CursorResponse, OrderBook, Timestamp
+
+# Lighter orderbook granularity levels (Lighter.xyz only)
+LighterGranularity = Literal["checkpoint", "30s", "10s", "1s", "tick"]
 
 
 class OrderBookResource:
@@ -101,6 +106,7 @@ class OrderBookResource:
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
         depth: Optional[int] = None,
+        granularity: Optional[LighterGranularity] = None,
     ) -> CursorResponse[list[OrderBook]]:
         """
         Get historical order book snapshots with cursor-based pagination.
@@ -112,6 +118,9 @@ class OrderBookResource:
             cursor: Cursor from previous response's next_cursor (timestamp)
             limit: Maximum number of results (default: 100, max: 1000)
             depth: Number of price levels per side
+            granularity: Data resolution for Lighter orderbook (Lighter.xyz only, ignored for Hyperliquid).
+                Options: 'checkpoint' (1min, default), '30s', '10s', '1s', 'tick'.
+                Tier restrictions apply. Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
 
         Returns:
             CursorResponse with order book snapshots and next_cursor for pagination
@@ -124,6 +133,11 @@ class OrderBookResource:
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
             ...     snapshots.extend(result.data)
+            >>>
+            >>> # Lighter.xyz with 10s granularity (Build+ tier)
+            >>> result = client.lighter.orderbook.history(
+            ...     "BTC", start=start, end=end, granularity="10s"
+            ... )
         """
         data = self._http.get(
             f"{self._base_path}/orderbook/{coin.upper()}/history",
@@ -133,6 +147,7 @@ class OrderBookResource:
                 "cursor": self._convert_timestamp(cursor),
                 "limit": limit,
                 "depth": depth,
+                "granularity": granularity,
             },
         )
         return CursorResponse(
@@ -149,8 +164,9 @@ class OrderBookResource:
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
         depth: Optional[int] = None,
+        granularity: Optional[LighterGranularity] = None,
     ) -> CursorResponse[list[OrderBook]]:
-        """Async version of history(). start and end are required."""
+        """Async version of history(). start and end are required. See history() for granularity details."""
         data = await self._http.aget(
             f"{self._base_path}/orderbook/{coin.upper()}/history",
             params={
@@ -159,6 +175,7 @@ class OrderBookResource:
                 "cursor": self._convert_timestamp(cursor),
                 "limit": limit,
                 "depth": depth,
+                "granularity": granularity,
             },
         )
         return CursorResponse(
