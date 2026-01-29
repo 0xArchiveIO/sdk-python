@@ -381,6 +381,19 @@ async def main():
         speed=10                                     # Optional, defaults to 1x
     )
 
+    # Lighter.xyz replay with granularity (tier restrictions apply)
+    await ws.replay(
+        "orderbook", "BTC",
+        start=int(time.time() * 1000) - 86400000,
+        speed=10,
+        granularity="10s"  # Options: 'checkpoint', '30s', '10s', '1s', 'tick'
+    )
+
+    # Handle tick-level data (granularity='tick', Enterprise tier)
+    ws.on_historical_tick_data(lambda coin, checkpoint, deltas:
+        print(f"Checkpoint: {len(checkpoint['bids'])} bids, Deltas: {len(deltas)}")
+    )
+
     # Control playback
     await ws.replay_pause()
     await ws.replay_resume()
@@ -424,6 +437,14 @@ async def main():
         start=int(time.time() * 1000) - 3600000,  # 1 hour ago
         end=int(time.time() * 1000),
         batch_size=1000                            # Optional, defaults to 1000
+    )
+
+    # Lighter.xyz stream with granularity (tier restrictions apply)
+    await ws.stream(
+        "orderbook", "BTC",
+        start=int(time.time() * 1000) - 3600000,
+        end=int(time.time() * 1000),
+        granularity="10s"  # Options: 'checkpoint', '30s', '10s', '1s', 'tick'
     )
 
     # Stop if needed

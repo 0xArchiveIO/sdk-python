@@ -382,6 +382,41 @@ class WsHistoricalData(BaseModel):
     data: dict[str, Any]
 
 
+class OrderbookDelta(BaseModel):
+    """Orderbook delta for tick-level data."""
+
+    timestamp: int
+    """Timestamp in milliseconds."""
+
+    side: Literal["bid", "ask"]
+    """Side: 'bid' or 'ask'."""
+
+    price: float
+    """Price level."""
+
+    size: float
+    """New size (0 = level removed)."""
+
+    sequence: int
+    """Sequence number for ordering."""
+
+
+class WsHistoricalTickData(BaseModel):
+    """Historical tick data (granularity='tick' mode) - checkpoint + deltas.
+
+    This message type is sent when using granularity='tick' for Lighter.xyz
+    orderbook data. It provides a full checkpoint followed by incremental deltas.
+    """
+
+    type: Literal["historical_tick_data"]
+    channel: WsChannel
+    coin: str
+    checkpoint: dict[str, Any]
+    """Initial checkpoint (full orderbook snapshot)."""
+    deltas: list[OrderbookDelta]
+    """Incremental deltas to apply after checkpoint."""
+
+
 # =============================================================================
 # WebSocket Bulk Stream Types (Bulk Download Mode)
 # =============================================================================

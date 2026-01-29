@@ -42,6 +42,7 @@ except ImportError:
 
 from .types import (
     OrderBook,
+    OrderbookDelta,
     PriceLevel,
     Trade,
     WsChannel,
@@ -57,6 +58,7 @@ from .types import (
     WsReplayCompleted,
     WsReplayStopped,
     WsHistoricalData,
+    WsHistoricalTickData,
     WsStreamStarted,
     WsStreamProgress,
     WsHistoricalBatch,
@@ -110,6 +112,7 @@ ErrorHandler = Callable[[Exception], None]
 
 # Replay handlers
 HistoricalDataHandler = Callable[[str, int, dict], None]
+HistoricalTickDataHandler = Callable[[str, dict, list[OrderbookDelta]], None]  # coin, checkpoint, deltas
 ReplayStartHandler = Callable[[WsChannel, str, int, int, float], None]  # channel, coin, start, end, speed
 ReplayCompleteHandler = Callable[[WsChannel, str, int], None]  # channel, coin, snapshots_sent
 
@@ -276,6 +279,7 @@ class OxArchiveWs:
 
         # Replay handlers (Option B)
         self._on_historical_data: Optional[HistoricalDataHandler] = None
+        self._on_historical_tick_data: Optional[HistoricalTickDataHandler] = None
         self._on_replay_start: Optional[ReplayStartHandler] = None
         self._on_replay_complete: Optional[ReplayCompleteHandler] = None
 
@@ -307,7 +311,8 @@ class OxArchiveWs:
         url = f"{self.options.ws_url}?apiKey={self.options.api_key}"
 
         try:
-            self._ws = await ws_connect(url)
+            # Increase max_size from default 1MB to 10MB for large Lighter orderbook data
+            self._ws = await ws_connect(url, max_size=10 * 1024 * 1024)
             self._reconnect_attempts = 0
             self._set_state("connected")
 
@@ -427,6 +432,7 @@ class OxArchiveWs:
         start: int,
         end: Optional[int] = None,
         speed: float = 1.0,
+        granularity: Optional[str] = None,
     ) -> None:
         """Start historical replay with timing preserved.
 
@@ -436,6 +442,7 @@ class OxArchiveWs:
             start: Start timestamp (Unix ms)
             end: End timestamp (Unix ms, defaults to now)
             speed: Playback speed multiplier (1 = real-time, 10 = 10x faster)
+            granularity: Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick')
 
         Example:
             >>> await ws.replay("orderbook", "BTC", start=time.time()*1000 - 86400000, speed=10)
@@ -449,6 +456,8 @@ class OxArchiveWs:
         }
         if end is not None:
             msg["end"] = end
+        if granularity is not None:
+            msg["granularity"] = granularity
         await self._send(msg)
 
     async def replay_pause(self) -> None:
@@ -482,6 +491,7 @@ class OxArchiveWs:
         start: int,
         end: int,
         batch_size: int = 1000,
+        granularity: Optional[str] = None,
     ) -> None:
         """Start bulk streaming for fast data download.
 
@@ -491,18 +501,22 @@ class OxArchiveWs:
             start: Start timestamp (Unix ms)
             end: End timestamp (Unix ms)
             batch_size: Records per batch message
+            granularity: Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick')
 
         Example:
             >>> await ws.stream("orderbook", "ETH", start=..., end=..., batch_size=1000)
         """
-        await self._send({
+        msg = {
             "op": "stream",
             "channel": channel,
             "coin": coin,
             "start": start,
             "end": end,
             "batch_size": batch_size,
-        })
+        }
+        if granularity is not None:
+            msg["granularity"] = granularity
+        await self._send(msg)
 
     async def stream_stop(self) -> None:
         """Stop the current bulk stream."""
@@ -546,6 +560,16 @@ class OxArchiveWs:
         Handler receives: (coin, timestamp, data)
         """
         self._on_historical_data = handler
+
+    def on_historical_tick_data(self, handler: HistoricalTickDataHandler) -> None:
+        """Set handler for historical tick data (granularity='tick' mode).
+
+        This is for tick-level granularity on Lighter.xyz orderbook data.
+        Receives a checkpoint (full orderbook) followed by incremental deltas.
+
+        Handler receives: (coin, checkpoint, deltas)
+        """
+        self._on_historical_tick_data = handler
 
     def on_replay_start(self, handler: ReplayStartHandler) -> None:
         """Set handler for replay started event.
@@ -721,6 +745,10 @@ class OxArchiveWs:
 
             elif msg_type == "historical_data" and self._on_historical_data:
                 self._on_historical_data(data["coin"], data["timestamp"], data["data"])
+
+            elif msg_type == "historical_tick_data" and self._on_historical_tick_data:
+                msg = WsHistoricalTickData(**data)
+                self._on_historical_tick_data(msg.coin, msg.checkpoint, msg.deltas)
 
             elif msg_type == "replay_completed" and self._on_replay_complete:
                 self._on_replay_complete(data["channel"], data["coin"], data["snapshots_sent"])
