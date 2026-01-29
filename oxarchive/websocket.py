@@ -311,8 +311,9 @@ class OxArchiveWs:
         url = f"{self.options.ws_url}?apiKey={self.options.api_key}"
 
         try:
-            # Increase max_size from default 1MB to 10MB for large Lighter orderbook data
-            self._ws = await ws_connect(url, max_size=10 * 1024 * 1024)
+            # Increase max_size to 50MB for large Lighter orderbook data with high granularity
+            # Lighter tick data with full depth (~3700 levels) can exceed 14MB per message
+            self._ws = await ws_connect(url, max_size=50 * 1024 * 1024)
             self._reconnect_attempts = 0
             self._set_state("connected")
 
