@@ -271,10 +271,47 @@ class OpenInterest(BaseModel):
 
 
 # =============================================================================
+# Candle Types
+# =============================================================================
+
+
+CandleInterval = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+"""Candle interval for OHLCV data."""
+
+
+class Candle(BaseModel):
+    """OHLCV candle data."""
+
+    timestamp: datetime
+    """Candle open timestamp (UTC)."""
+
+    open: float
+    """Opening price."""
+
+    high: float
+    """Highest price during the interval."""
+
+    low: float
+    """Lowest price during the interval."""
+
+    close: float
+    """Closing price."""
+
+    volume: float
+    """Total volume traded during the interval."""
+
+    quote_volume: Optional[float] = None
+    """Total quote volume (volume * price)."""
+
+    trade_count: Optional[int] = None
+    """Number of trades during the interval."""
+
+
+# =============================================================================
 # WebSocket Types
 # =============================================================================
 
-WsChannel = Literal["orderbook", "trades", "ticker", "all_tickers"]
+WsChannel = Literal["orderbook", "trades", "candles", "ticker", "all_tickers"]
 """Available WebSocket channels. Note: ticker/all_tickers are real-time only."""
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]

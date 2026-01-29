@@ -5,6 +5,7 @@ from .trades import TradesResource
 from .instruments import InstrumentsResource, LighterInstrumentsResource
 from .funding import FundingResource
 from .openinterest import OpenInterestResource
+from .candles import CandlesResource
 
 __all__ = [
     "OrderBookResource",
@@ -13,4 +14,5 @@ __all__ = [
     "LighterInstrumentsResource",
     "FundingResource",
     "OpenInterestResource",
+    "CandlesResource",
 ]

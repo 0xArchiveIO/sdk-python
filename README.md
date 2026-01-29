@@ -280,6 +280,57 @@ current = await client.hyperliquid.open_interest.acurrent("BTC")
 history = await client.hyperliquid.open_interest.ahistory("ETH", start=..., end=...)
 ```
 
+### Candles (OHLCV)
+
+Get historical OHLCV candle data aggregated from trades.
+
+```python
+# Get candle history (start is required)
+candles = client.hyperliquid.candles.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    interval="1h",  # 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
+    limit=100
+)
+
+# Iterate through candles
+for candle in candles.data:
+    print(f"{candle.timestamp}: O={candle.open} H={candle.high} L={candle.low} C={candle.close} V={candle.volume}")
+
+# Cursor-based pagination for large datasets
+result = client.hyperliquid.candles.history("BTC", start=..., end=..., interval="1m", limit=1000)
+while result.next_cursor:
+    result = client.hyperliquid.candles.history(
+        "BTC", start=..., end=..., interval="1m",
+        cursor=result.next_cursor, limit=1000
+    )
+
+# Lighter.xyz candles
+lighter_candles = client.lighter.candles.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    interval="15m"
+)
+
+# Async versions
+candles = await client.hyperliquid.candles.ahistory("BTC", start=..., end=..., interval="1h")
+```
+
+#### Available Intervals
+
+| Interval | Description |
+|----------|-------------|
+| `1m` | 1 minute |
+| `5m` | 5 minutes |
+| `15m` | 15 minutes |
+| `30m` | 30 minutes |
+| `1h` | 1 hour (default) |
+| `4h` | 4 hours |
+| `1d` | 1 day |
+| `1w` | 1 week |
+
 ### Legacy API (Deprecated)
 
 The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:
@@ -468,12 +519,43 @@ ws = OxArchiveWs(WsOptions(
 
 ### Available Channels
 
-| Channel | Description | Requires Coin |
-|---------|-------------|---------------|
-| `orderbook` | L2 order book updates | Yes |
-| `trades` | Trade/fill updates | Yes |
-| `ticker` | Price and 24h volume | Yes |
-| `all_tickers` | All market tickers | No |
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `orderbook` | L2 order book updates | Yes | Yes |
+| `trades` | Trade/fill updates | Yes | Yes |
+| `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
+| `ticker` | Price and 24h volume | Yes | Real-time only |
+| `all_tickers` | All market tickers | No | Real-time only |
+
+#### Candle Replay/Stream
+
+```python
+# Replay candles at 10x speed
+await ws.replay(
+    "candles", "BTC",
+    start=int(time.time() * 1000) - 86400000,
+    end=int(time.time() * 1000),
+    speed=10,
+    interval="15m"  # 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
+)
+
+# Bulk stream candles
+await ws.stream(
+    "candles", "ETH",
+    start=int(time.time() * 1000) - 3600000,
+    end=int(time.time() * 1000),
+    batch_size=1000,
+    interval="1h"
+)
+
+# Lighter.xyz candles
+await ws.replay(
+    "lighter_candles", "BTC",
+    start=...,
+    speed=10,
+    interval="5m"
+)
+```
 
 ## Timestamp Formats
 

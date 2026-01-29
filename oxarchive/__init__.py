@@ -31,6 +31,8 @@ from .types import (
     LighterInstrument,
     FundingRate,
     OpenInterest,
+    Candle,
+    CandleInterval,
     OxArchiveError,
     # WebSocket types
     WsChannel,
@@ -65,7 +67,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.4.6"
+__version__ = "0.5.0"
 
 __all__ = [
     # Client
@@ -84,6 +86,8 @@ __all__ = [
     "LighterGranularity",
     "FundingRate",
     "OpenInterest",
+    "Candle",
+    "CandleInterval",
     "OxArchiveError",
     # WebSocket Types
     "WsChannel",

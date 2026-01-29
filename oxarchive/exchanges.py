@@ -10,6 +10,7 @@ from .resources import (
     LighterInstrumentsResource,
     FundingResource,
     OpenInterestResource,
+    CandlesResource,
 )
 
 
@@ -44,6 +45,9 @@ class HyperliquidClient:
         self.open_interest = OpenInterestResource(http, base_path)
         """Open interest"""
 
+        self.candles = CandlesResource(http, base_path)
+        """OHLCV candle data"""
+
 
 class LighterClient:
     """
@@ -77,3 +81,6 @@ class LighterClient:
 
         self.open_interest = OpenInterestResource(http, base_path)
         """Open interest"""
+
+        self.candles = CandlesResource(http, base_path)
+        """OHLCV candle data"""
