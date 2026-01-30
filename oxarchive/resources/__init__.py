@@ -6,6 +6,7 @@ from .instruments import InstrumentsResource, LighterInstrumentsResource
 from .funding import FundingResource
 from .openinterest import OpenInterestResource
 from .candles import CandlesResource
+from .liquidations import LiquidationsResource
 
 __all__ = [
     "OrderBookResource",
@@ -15,4 +16,5 @@ __all__ = [
     "FundingResource",
     "OpenInterestResource",
     "CandlesResource",
+    "LiquidationsResource",
 ]

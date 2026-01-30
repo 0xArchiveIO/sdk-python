@@ -11,6 +11,7 @@ from .resources import (
     FundingResource,
     OpenInterestResource,
     CandlesResource,
+    LiquidationsResource,
 )
 
 
@@ -47,6 +48,9 @@ class HyperliquidClient:
 
         self.candles = CandlesResource(http, base_path)
         """OHLCV candle data"""
+
+        self.liquidations = LiquidationsResource(http, base_path)
+        """Liquidation events (May 2025+)"""
 
 
 class LighterClient:

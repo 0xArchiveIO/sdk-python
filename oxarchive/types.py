@@ -271,6 +271,51 @@ class OpenInterest(BaseModel):
 
 
 # =============================================================================
+# Liquidation Types
+# =============================================================================
+
+
+class Liquidation(BaseModel):
+    """Liquidation event record."""
+
+    coin: str
+    """Trading pair symbol."""
+
+    timestamp: datetime
+    """Liquidation timestamp (UTC)."""
+
+    liquidated_user: str
+    """Address of the liquidated user."""
+
+    liquidator_user: str
+    """Address of the liquidator."""
+
+    price: str
+    """Liquidation execution price."""
+
+    size: str
+    """Liquidation size."""
+
+    side: Literal["B", "S"]
+    """Side: 'B' (buy) or 'S' (sell)."""
+
+    mark_price: Optional[str] = None
+    """Mark price at time of liquidation."""
+
+    closed_pnl: Optional[str] = None
+    """Realized PnL from the liquidation."""
+
+    direction: Optional[str] = None
+    """Position direction (e.g., 'Open Long', 'Close Short')."""
+
+    trade_id: Optional[int] = None
+    """Unique trade ID."""
+
+    tx_hash: Optional[str] = None
+    """Blockchain transaction hash."""
+
+
+# =============================================================================
 # Candle Types
 # =============================================================================
 
@@ -311,8 +356,8 @@ class Candle(BaseModel):
 # WebSocket Types
 # =============================================================================
 
-WsChannel = Literal["orderbook", "trades", "candles", "ticker", "all_tickers"]
-"""Available WebSocket channels. Note: ticker/all_tickers are real-time only."""
+WsChannel = Literal["orderbook", "trades", "candles", "liquidations", "ticker", "all_tickers"]
+"""Available WebSocket channels. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+)."""
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]
 """WebSocket connection state."""
