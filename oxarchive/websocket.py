@@ -434,6 +434,7 @@ class OxArchiveWs:
         end: Optional[int] = None,
         speed: float = 1.0,
         granularity: Optional[str] = None,
+        interval: Optional[str] = None,
     ) -> None:
         """Start historical replay with timing preserved.
 
@@ -444,9 +445,11 @@ class OxArchiveWs:
             end: End timestamp (Unix ms, defaults to now)
             speed: Playback speed multiplier (1 = real-time, 10 = 10x faster)
             granularity: Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick')
+            interval: Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w')
 
         Example:
             >>> await ws.replay("orderbook", "BTC", start=time.time()*1000 - 86400000, speed=10)
+            >>> await ws.replay("candles", "BTC", start=..., speed=10, interval="15m")
         """
         msg = {
             "op": "replay",
@@ -459,6 +462,8 @@ class OxArchiveWs:
             msg["end"] = end
         if granularity is not None:
             msg["granularity"] = granularity
+        if interval is not None:
+            msg["interval"] = interval
         await self._send(msg)
 
     async def replay_pause(self) -> None:
@@ -493,6 +498,7 @@ class OxArchiveWs:
         end: int,
         batch_size: int = 1000,
         granularity: Optional[str] = None,
+        interval: Optional[str] = None,
     ) -> None:
         """Start bulk streaming for fast data download.
 
@@ -503,9 +509,11 @@ class OxArchiveWs:
             end: End timestamp (Unix ms)
             batch_size: Records per batch message
             granularity: Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick')
+            interval: Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w')
 
         Example:
             >>> await ws.stream("orderbook", "ETH", start=..., end=..., batch_size=1000)
+            >>> await ws.stream("candles", "BTC", start=..., end=..., interval="1h")
         """
         msg = {
             "op": "stream",
@@ -517,6 +525,8 @@ class OxArchiveWs:
         }
         if granularity is not None:
             msg["granularity"] = granularity
+        if interval is not None:
+            msg["interval"] = interval
         await self._send(msg)
 
     async def stream_stop(self) -> None:
