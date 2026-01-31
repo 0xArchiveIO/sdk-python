@@ -14,17 +14,17 @@ class TradesResource:
     Trades API resource.
 
     Example:
-        >>> # Get recent trades
-        >>> trades = client.trades.recent("BTC")
-        >>>
         >>> # Get trade history with cursor-based pagination (recommended)
-        >>> result = client.trades.list("BTC", start="2024-01-01", end="2024-01-02")
+        >>> result = client.hyperliquid.trades.list("BTC", start="2024-01-01", end="2024-01-02")
         >>> trades = result.data
         >>>
         >>> # Get all pages
         >>> while result.next_cursor:
-        ...     result = client.trades.list("BTC", start="2024-01-01", end="2024-01-02", cursor=result.next_cursor)
+        ...     result = client.hyperliquid.trades.list("BTC", start="2024-01-01", end="2024-01-02", cursor=result.next_cursor)
         ...     trades.extend(result.data)
+        >>>
+        >>> # Get recent trades (Lighter only - has real-time data)
+        >>> recent = client.lighter.trades.recent("BTC")
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1"):
@@ -134,6 +134,10 @@ class TradesResource:
     def recent(self, coin: str, limit: Optional[int] = None) -> list[Trade]:
         """
         Get most recent trades for a coin.
+
+        Note: This method is only available for Lighter (client.lighter.trades.recent())
+        which has real-time data ingestion. Hyperliquid uses hourly backfill so this
+        endpoint is not available for Hyperliquid.
 
         Args:
             coin: The coin symbol (e.g., 'BTC', 'ETH')

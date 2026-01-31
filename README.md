@@ -174,9 +174,6 @@ history = client.lighter.orderbook.history(
 The trades API uses cursor-based pagination for efficient retrieval of large datasets.
 
 ```python
-# Get recent trades
-recent = client.hyperliquid.trades.recent("BTC", limit=100)
-
 # Get trade history with cursor-based pagination
 result = client.hyperliquid.trades.list("ETH", start="2024-01-01", end="2024-01-02", limit=1000)
 trades = result.data
@@ -195,8 +192,7 @@ while result.next_cursor:
 # Filter by side
 buys = client.hyperliquid.trades.list("BTC", start=..., end=..., side="buy")
 
-# Async versions
-recent = await client.hyperliquid.trades.arecent("BTC")
+# Async version
 result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
 ```
 
@@ -604,9 +600,11 @@ from oxarchive.resources.trades import CursorResponse
 
 client = Client(api_key="ox_your_api_key")
 
-orderbook: OrderBook = client.orderbook.get("BTC")
-trades: list[Trade] = client.trades.recent("BTC")
-result: CursorResponse = client.trades.list("BTC", start=..., end=...)
+orderbook: OrderBook = client.hyperliquid.orderbook.get("BTC")
+result: CursorResponse = client.hyperliquid.trades.list("BTC", start=..., end=...)
+
+# Lighter has real-time data, so recent() is available
+recent: list[Trade] = client.lighter.trades.recent("BTC")
 
 # Lighter granularity type hint
 granularity: LighterGranularity = "10s"
