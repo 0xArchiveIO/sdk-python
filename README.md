@@ -192,8 +192,12 @@ while result.next_cursor:
 # Filter by side
 buys = client.hyperliquid.trades.list("BTC", start=..., end=..., side="buy")
 
-# Async version
+# Get recent trades (Lighter only - has real-time data)
+recent = client.lighter.trades.recent("BTC", limit=100)
+
+# Async versions
 result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
+recent = await client.lighter.trades.arecent("BTC", limit=100)
 ```
 
 ### Instruments
@@ -274,6 +278,44 @@ history = client.hyperliquid.open_interest.history(
 # Async versions
 current = await client.hyperliquid.open_interest.acurrent("BTC")
 history = await client.hyperliquid.open_interest.ahistory("ETH", start=..., end=...)
+```
+
+### Liquidations (Hyperliquid only)
+
+Get historical liquidation events. Data available from May 2025 onwards.
+
+```python
+# Get liquidation history for a coin
+liquidations = client.hyperliquid.liquidations.history(
+    "BTC",
+    start="2025-06-01",
+    end="2025-06-02",
+    limit=100
+)
+
+# Paginate through all results
+all_liquidations = list(liquidations.data)
+while liquidations.next_cursor:
+    liquidations = client.hyperliquid.liquidations.history(
+        "BTC",
+        start="2025-06-01",
+        end="2025-06-02",
+        cursor=liquidations.next_cursor,
+        limit=1000
+    )
+    all_liquidations.extend(liquidations.data)
+
+# Get liquidations for a specific user
+user_liquidations = client.hyperliquid.liquidations.by_user(
+    "0x1234...",
+    start="2025-06-01",
+    end="2025-06-07",
+    coin="BTC"  # optional filter
+)
+
+# Async versions
+liquidations = await client.hyperliquid.liquidations.ahistory("BTC", start=..., end=...)
+user_liquidations = await client.hyperliquid.liquidations.aby_user("0x...", start=..., end=...)
 ```
 
 ### Candles (OHLCV)
@@ -595,7 +637,7 @@ Full type hint support with Pydantic models:
 
 ```python
 from oxarchive import Client, LighterGranularity
-from oxarchive.types import OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest
+from oxarchive.types import OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest, Candle, Liquidation
 from oxarchive.resources.trades import CursorResponse
 
 client = Client(api_key="ox_your_api_key")

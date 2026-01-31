@@ -31,6 +31,7 @@ from .types import (
     LighterInstrument,
     FundingRate,
     OpenInterest,
+    Liquidation,
     Candle,
     CandleInterval,
     OxArchiveError,
@@ -67,7 +68,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 __all__ = [
     # Client
@@ -86,6 +87,7 @@ __all__ = [
     "LighterGranularity",
     "FundingRate",
     "OpenInterest",
+    "Liquidation",
     "Candle",
     "CandleInterval",
     "OxArchiveError",
