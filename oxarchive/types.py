@@ -555,6 +555,24 @@ class WsStreamStopped(BaseModel):
     snapshots_sent: int
 
 
+class WsGapDetected(BaseModel):
+    """Gap detected in historical data stream.
+
+    Sent when there's a gap exceeding the threshold between consecutive data points.
+    Thresholds: 2 minutes for orderbook/candles/liquidations, 60 minutes for trades.
+    """
+
+    type: Literal["gap_detected"]
+    channel: WsChannel
+    coin: str
+    gap_start: int
+    """Start of the gap (last data point timestamp in ms)."""
+    gap_end: int
+    """End of the gap (next data point timestamp in ms)."""
+    duration_minutes: int
+    """Gap duration in minutes."""
+
+
 # =============================================================================
 # Error Types
 # =============================================================================

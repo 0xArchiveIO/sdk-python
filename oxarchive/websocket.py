@@ -64,6 +64,7 @@ from .types import (
     WsHistoricalBatch,
     WsStreamCompleted,
     WsStreamStopped,
+    WsGapDetected,
     TimestampedRecord,
 )
 
@@ -121,6 +122,9 @@ BatchHandler = Callable[[str, list[TimestampedRecord]], None]
 StreamStartHandler = Callable[[WsChannel, str, int, int], None]  # channel, coin, start, end
 StreamProgressHandler = Callable[[int], None]  # snapshots_sent
 StreamCompleteHandler = Callable[[WsChannel, str, int], None]  # channel, coin, snapshots_sent
+
+# Gap detection handler
+GapHandler = Callable[[WsChannel, str, int, int, int], None]  # channel, coin, gap_start, gap_end, duration_minutes
 
 
 def _transform_trade(coin: str, raw: dict) -> Trade:
@@ -288,6 +292,9 @@ class OxArchiveWs:
         self._on_stream_start: Optional[StreamStartHandler] = None
         self._on_stream_progress: Optional[StreamProgressHandler] = None
         self._on_stream_complete: Optional[StreamCompleteHandler] = None
+
+        # Gap detection handler
+        self._on_gap: Optional[GapHandler] = None
 
     @property
     def state(self) -> WsConnectionState:
@@ -626,6 +633,23 @@ class OxArchiveWs:
         """
         self._on_stream_complete = handler
 
+    def on_gap(self, handler: GapHandler) -> None:
+        """Set handler for gap detected events during replay or streaming.
+
+        Called when there's a gap in the historical data exceeding the threshold.
+        Thresholds: 2 minutes for orderbook/candles/liquidations, 60 minutes for trades.
+
+        Handler receives: (channel, coin, gap_start, gap_end, duration_minutes)
+
+        Example:
+            >>> def handle_gap(channel, coin, gap_start, gap_end, duration_minutes):
+            ...     print(f"Gap detected in {channel} {coin}: {duration_minutes} minutes")
+            ...     print(f"  From: {datetime.fromtimestamp(gap_start/1000)}")
+            ...     print(f"  To:   {datetime.fromtimestamp(gap_end/1000)}")
+            >>> ws.on_gap(handle_gap)
+        """
+        self._on_gap = handler
+
     # Private methods
 
     async def _send(self, msg: dict) -> None:
@@ -777,6 +801,16 @@ class OxArchiveWs:
 
             elif msg_type == "stream_completed" and self._on_stream_complete:
                 self._on_stream_complete(data["channel"], data["coin"], data["snapshots_sent"])
+
+            # Gap detection
+            elif msg_type == "gap_detected" and self._on_gap:
+                self._on_gap(
+                    data["channel"],
+                    data["coin"],
+                    data["gap_start"],
+                    data["gap_end"],
+                    data["duration_minutes"],
+                )
 
         except Exception as e:
             logger.error(f"Error handling message: {e}")

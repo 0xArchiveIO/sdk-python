@@ -602,6 +602,43 @@ async def main():
 asyncio.run(main())
 ```
 
+### Gap Detection
+
+During historical replay and bulk streaming, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
+
+```python
+import asyncio
+from oxarchive import OxArchiveWs, WsOptions
+
+async def main():
+    ws = OxArchiveWs(WsOptions(api_key="ox_..."))
+
+    # Handle gap notifications during replay/stream
+    def handle_gap(channel, coin, gap_start, gap_end, duration_minutes):
+        print(f"Gap detected in {channel}/{coin}:")
+        print(f"  From: {gap_start}")
+        print(f"  To: {gap_end}")
+        print(f"  Duration: {duration_minutes} minutes")
+
+    ws.on_gap(handle_gap)
+
+    await ws.connect()
+
+    # Start replay - gaps will be reported via on_gap callback
+    await ws.replay(
+        "orderbook", "BTC",
+        start=int(time.time() * 1000) - 86400000,
+        end=int(time.time() * 1000),
+        speed=10
+    )
+
+asyncio.run(main())
+```
+
+Gap thresholds vary by channel:
+- **orderbook**, **candles**, **liquidations**: 2 minutes
+- **trades**: 60 minutes (trades can naturally have longer gaps during low activity periods)
+
 ### WebSocket Configuration
 
 ```python
@@ -622,6 +659,7 @@ ws = OxArchiveWs(WsOptions(
 | `orderbook` | L2 order book updates | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
+| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
 
