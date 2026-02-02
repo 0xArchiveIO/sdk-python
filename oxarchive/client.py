@@ -12,6 +12,7 @@ from .resources import (
     InstrumentsResource,
     FundingResource,
     OpenInterestResource,
+    DataQualityResource,
 )
 
 DEFAULT_BASE_URL = "https://api.0xarchive.io"
@@ -91,6 +92,10 @@ class Client:
 
         self.lighter = LighterClient(self._http)
         """Lighter.xyz exchange data (August 2025+)"""
+
+        # Data quality monitoring (cross-exchange)
+        self.data_quality = DataQualityResource(self._http)
+        """Data quality metrics: status, coverage, incidents, latency, SLA"""
 
         # Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
         # These will be removed in v2.0

@@ -7,6 +7,7 @@ from .funding import FundingResource
 from .openinterest import OpenInterestResource
 from .candles import CandlesResource
 from .liquidations import LiquidationsResource
+from .data_quality import DataQualityResource
 
 __all__ = [
     "OrderBookResource",
@@ -17,4 +18,5 @@ __all__ = [
     "OpenInterestResource",
     "CandlesResource",
     "LiquidationsResource",
+    "DataQualityResource",
 ]

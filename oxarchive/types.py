@@ -593,3 +593,353 @@ class CursorResponse(BaseModel, Generic[T]):
 # Type alias for timestamp parameters
 Timestamp = Union[int, str, datetime]
 """Timestamp can be Unix ms (int), ISO string, or datetime object."""
+
+
+# =============================================================================
+# Data Quality Types
+# =============================================================================
+
+
+class SystemStatus(BaseModel):
+    """System status values: operational, degraded, outage, maintenance."""
+
+    status: Literal["operational", "degraded", "outage", "maintenance"]
+
+
+class ExchangeStatus(BaseModel):
+    """Status of a single exchange."""
+
+    status: Literal["operational", "degraded", "outage", "maintenance"]
+    """Current status."""
+
+    last_data_at: Optional[datetime] = None
+    """Timestamp of last received data."""
+
+    latency_ms: Optional[int] = None
+    """Current latency in milliseconds."""
+
+
+class DataTypeStatus(BaseModel):
+    """Status of a data type (orderbook, fills, etc.)."""
+
+    status: Literal["operational", "degraded", "outage", "maintenance"]
+    """Current status."""
+
+    completeness_24h: float
+    """Data completeness over last 24 hours (0-100)."""
+
+
+class StatusResponse(BaseModel):
+    """Overall system status response."""
+
+    status: Literal["operational", "degraded", "outage", "maintenance"]
+    """Overall system status."""
+
+    updated_at: datetime
+    """When this status was computed."""
+
+    exchanges: dict[str, ExchangeStatus]
+    """Per-exchange status."""
+
+    data_types: dict[str, DataTypeStatus]
+    """Per-data-type status."""
+
+    active_incidents: int
+    """Number of active incidents."""
+
+
+class DataTypeCoverage(BaseModel):
+    """Coverage information for a specific data type."""
+
+    earliest: datetime
+    """Earliest available data timestamp."""
+
+    latest: datetime
+    """Latest available data timestamp."""
+
+    total_records: int
+    """Total number of records."""
+
+    symbols: int
+    """Number of symbols with data."""
+
+    resolution: Optional[str] = None
+    """Data resolution (e.g., '1.2s', '1m')."""
+
+    lag: Optional[str] = None
+    """Current data lag."""
+
+    completeness: float
+    """Completeness percentage (0-100)."""
+
+
+class ExchangeCoverage(BaseModel):
+    """Coverage for a single exchange."""
+
+    exchange: str
+    """Exchange name."""
+
+    data_types: dict[str, DataTypeCoverage]
+    """Coverage per data type."""
+
+
+class CoverageResponse(BaseModel):
+    """Overall coverage response."""
+
+    exchanges: list[ExchangeCoverage]
+    """Coverage for all exchanges."""
+
+
+class CoverageGap(BaseModel):
+    """Gap information for per-symbol coverage."""
+
+    start: datetime
+    """Start of the gap (last data before gap)."""
+
+    end: datetime
+    """End of the gap (first data after gap)."""
+
+    duration_minutes: int
+    """Duration of the gap in minutes."""
+
+
+class SymbolDataTypeCoverage(BaseModel):
+    """Coverage for a specific symbol and data type."""
+
+    earliest: datetime
+    """Earliest available data timestamp."""
+
+    latest: datetime
+    """Latest available data timestamp."""
+
+    total_records: int
+    """Total number of records."""
+
+    completeness: float
+    """Completeness percentage (0-100)."""
+
+    gaps: list[CoverageGap]
+    """Detected data gaps."""
+
+
+class SymbolCoverageResponse(BaseModel):
+    """Per-symbol coverage response."""
+
+    exchange: str
+    """Exchange name."""
+
+    symbol: str
+    """Symbol name."""
+
+    data_types: dict[str, SymbolDataTypeCoverage]
+    """Coverage per data type."""
+
+
+class Incident(BaseModel):
+    """Data quality incident."""
+
+    id: str
+    """Unique incident ID."""
+
+    status: str
+    """Status: open, investigating, identified, monitoring, resolved."""
+
+    severity: str
+    """Severity: minor, major, critical."""
+
+    exchange: Optional[str] = None
+    """Affected exchange (if specific to one)."""
+
+    data_types: list[str]
+    """Affected data types."""
+
+    symbols_affected: list[str]
+    """Affected symbols."""
+
+    started_at: datetime
+    """When the incident started."""
+
+    resolved_at: Optional[datetime] = None
+    """When the incident was resolved."""
+
+    duration_minutes: Optional[int] = None
+    """Total duration in minutes."""
+
+    title: str
+    """Incident title."""
+
+    description: Optional[str] = None
+    """Detailed description."""
+
+    root_cause: Optional[str] = None
+    """Root cause analysis."""
+
+    resolution: Optional[str] = None
+    """Resolution details."""
+
+    records_affected: Optional[int] = None
+    """Number of records affected."""
+
+    records_recovered: Optional[int] = None
+    """Number of records recovered."""
+
+
+class Pagination(BaseModel):
+    """Pagination info for incident list."""
+
+    total: int
+    """Total number of incidents."""
+
+    limit: int
+    """Page size limit."""
+
+    offset: int
+    """Current offset."""
+
+
+class IncidentsResponse(BaseModel):
+    """Incidents list response."""
+
+    incidents: list[Incident]
+    """List of incidents."""
+
+    pagination: Pagination
+    """Pagination info."""
+
+
+class WebSocketLatency(BaseModel):
+    """WebSocket latency metrics."""
+
+    current_ms: int
+    """Current latency."""
+
+    avg_1h_ms: int
+    """1-hour average latency."""
+
+    avg_24h_ms: int
+    """24-hour average latency."""
+
+    p99_24h_ms: Optional[int] = None
+    """24-hour P99 latency."""
+
+
+class ApiLatency(BaseModel):
+    """REST API latency metrics."""
+
+    current_ms: int
+    """Current latency."""
+
+    avg_1h_ms: int
+    """1-hour average latency."""
+
+    avg_24h_ms: int
+    """24-hour average latency."""
+
+
+class DataFreshness(BaseModel):
+    """Data freshness metrics (lag from source)."""
+
+    orderbook_lag_ms: Optional[int] = None
+    """Orderbook data lag."""
+
+    fills_lag_ms: Optional[int] = None
+    """Fills/trades data lag."""
+
+    funding_lag_ms: Optional[int] = None
+    """Funding rate data lag."""
+
+    oi_lag_ms: Optional[int] = None
+    """Open interest data lag."""
+
+
+class ExchangeLatency(BaseModel):
+    """Latency metrics for a single exchange."""
+
+    websocket: Optional[WebSocketLatency] = None
+    """WebSocket latency metrics."""
+
+    rest_api: Optional[ApiLatency] = None
+    """REST API latency metrics."""
+
+    data_freshness: DataFreshness
+    """Data freshness metrics."""
+
+
+class LatencyResponse(BaseModel):
+    """Overall latency response."""
+
+    measured_at: datetime
+    """When these metrics were measured."""
+
+    exchanges: dict[str, ExchangeLatency]
+    """Per-exchange latency metrics."""
+
+
+class SlaTargets(BaseModel):
+    """SLA targets."""
+
+    uptime: float
+    """Uptime target percentage."""
+
+    data_completeness: float
+    """Data completeness target percentage."""
+
+    api_latency_p99_ms: int
+    """API P99 latency target in milliseconds."""
+
+
+class CompletenessMetrics(BaseModel):
+    """Completeness metrics per data type."""
+
+    orderbook: float
+    """Orderbook completeness percentage."""
+
+    fills: float
+    """Fills completeness percentage."""
+
+    funding: float
+    """Funding rate completeness percentage."""
+
+    overall: float
+    """Overall completeness percentage."""
+
+
+class SlaActual(BaseModel):
+    """Actual SLA metrics."""
+
+    uptime: float
+    """Actual uptime percentage."""
+
+    uptime_status: str
+    """'met' or 'missed'."""
+
+    data_completeness: CompletenessMetrics
+    """Actual completeness metrics."""
+
+    completeness_status: str
+    """'met' or 'missed'."""
+
+    api_latency_p99_ms: int
+    """Actual API P99 latency."""
+
+    latency_status: str
+    """'met' or 'missed'."""
+
+
+class SlaResponse(BaseModel):
+    """SLA compliance response."""
+
+    period: str
+    """Period covered (e.g., '2026-01')."""
+
+    sla_targets: SlaTargets
+    """Target SLA metrics."""
+
+    actual: SlaActual
+    """Actual SLA metrics."""
+
+    incidents_this_period: int
+    """Number of incidents in this period."""
+
+    total_downtime_minutes: int
+    """Total downtime in minutes."""

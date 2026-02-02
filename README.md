@@ -369,6 +369,66 @@ candles = await client.hyperliquid.candles.ahistory("BTC", start=..., end=..., i
 | `1d` | 1 day |
 | `1w` | 1 week |
 
+### Data Quality Monitoring
+
+Monitor data coverage, incidents, latency, and SLA compliance across all exchanges.
+
+```python
+# Get overall system health status
+status = client.data_quality.status()
+print(f"System status: {status.status}")
+for exchange, info in status.exchanges.items():
+    print(f"  {exchange}: {info.status}")
+
+# Get data coverage summary for all exchanges
+coverage = client.data_quality.coverage()
+for exchange in coverage.exchanges:
+    print(f"{exchange.exchange}:")
+    for dtype, info in exchange.data_types.items():
+        print(f"  {dtype}: {info.total_records:,} records, {info.completeness}% complete")
+
+# Get symbol-specific coverage with gap detection
+btc = client.data_quality.symbol_coverage("hyperliquid", "BTC")
+oi = btc.data_types["open_interest"]
+print(f"BTC OI completeness: {oi.completeness}%")
+print(f"Gaps found: {len(oi.gaps)}")
+for gap in oi.gaps[:5]:
+    print(f"  {gap.duration_minutes} min gap: {gap.start} -> {gap.end}")
+
+# List incidents with filtering
+result = client.data_quality.list_incidents(status="open")
+for incident in result.incidents:
+    print(f"[{incident.severity}] {incident.title}")
+
+# Get latency metrics
+latency = client.data_quality.latency()
+for exchange, metrics in latency.exchanges.items():
+    print(f"{exchange}: OB lag {metrics.data_freshness.orderbook_lag_ms}ms")
+
+# Get SLA compliance metrics for a specific month
+sla = client.data_quality.sla(year=2026, month=1)
+print(f"Period: {sla.period}")
+print(f"Uptime: {sla.actual.uptime}% ({sla.actual.uptime_status})")
+print(f"API P99: {sla.actual.api_latency_p99_ms}ms ({sla.actual.latency_status})")
+
+# Async versions available for all methods
+status = await client.data_quality.astatus()
+coverage = await client.data_quality.acoverage()
+```
+
+#### Data Quality Endpoints
+
+| Method | Description |
+|--------|-------------|
+| `status()` | Overall system health and per-exchange status |
+| `coverage()` | Data coverage summary for all exchanges |
+| `exchange_coverage(exchange)` | Coverage details for a specific exchange |
+| `symbol_coverage(exchange, symbol)` | Coverage with gap detection for specific symbol |
+| `list_incidents(...)` | List incidents with filtering and pagination |
+| `get_incident(incident_id)` | Get specific incident details |
+| `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
+| `sla(year, month)` | SLA compliance metrics for a specific month |
+
 ### Legacy API (Deprecated)
 
 The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:
