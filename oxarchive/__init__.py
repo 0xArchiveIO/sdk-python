@@ -24,6 +24,15 @@ Example:
 from .client import Client
 from .exchanges import HyperliquidClient, LighterClient
 from .resources.orderbook import LighterGranularity
+from .orderbook_reconstructor import (
+    OrderBookReconstructor,
+    OrderbookDelta,
+    TickData,
+    ReconstructedOrderBook,
+    ReconstructOptions,
+    reconstruct_orderbook,
+    reconstruct_final,
+)
 from .types import (
     OrderBook,
     Trade,
@@ -68,7 +77,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 
 __all__ = [
     # Client
@@ -79,6 +88,14 @@ __all__ = [
     # WebSocket Client
     "OxArchiveWs",
     "WsOptions",
+    # Orderbook Reconstructor (Enterprise tier)
+    "OrderBookReconstructor",
+    "OrderbookDelta",
+    "TickData",
+    "ReconstructedOrderBook",
+    "ReconstructOptions",
+    "reconstruct_orderbook",
+    "reconstruct_final",
     # Types
     "OrderBook",
     "Trade",

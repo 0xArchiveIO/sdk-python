@@ -169,6 +169,71 @@ history = client.lighter.orderbook.history(
 
 **Note:** The `granularity` parameter is ignored for Hyperliquid orderbook history.
 
+#### Orderbook Reconstruction (Enterprise Tier)
+
+For tick-level data, the SDK provides client-side orderbook reconstruction. This efficiently reconstructs full orderbook state from a checkpoint and incremental deltas.
+
+```python
+from datetime import datetime, timedelta
+from oxarchive import OrderBookReconstructor
+
+# Option 1: Get fully reconstructed snapshots (simplest)
+snapshots = client.lighter.orderbook.history_reconstructed(
+    "BTC",
+    start=datetime.now() - timedelta(hours=1),
+    end=datetime.now()
+)
+
+for ob in snapshots:
+    print(f"{ob.timestamp}: bid={ob.bids[0].px} ask={ob.asks[0].px}")
+
+# Option 2: Get raw tick data for custom reconstruction
+tick_data = client.lighter.orderbook.history_tick(
+    "BTC",
+    start=datetime.now() - timedelta(hours=1),
+    end=datetime.now()
+)
+
+print(f"Checkpoint: {len(tick_data.checkpoint.bids)} bids")
+print(f"Deltas: {len(tick_data.deltas)} updates")
+
+# Option 3: Memory-efficient iteration (for large datasets)
+for snapshot in client.lighter.orderbook.iterate_reconstructed(
+    "BTC", start=start, end=end
+):
+    # Process each snapshot without loading all into memory
+    process(snapshot)
+    if some_condition:
+        break  # Early exit if needed
+
+# Option 4: Get only final state (most efficient)
+reconstructor = client.lighter.orderbook.create_reconstructor()
+final = reconstructor.reconstruct_final(tick_data.checkpoint, tick_data.deltas)
+
+# Check for sequence gaps
+gaps = OrderBookReconstructor.detect_gaps(tick_data.deltas)
+if gaps:
+    print("Sequence gaps detected:", gaps)
+
+# Async versions available
+snapshots = await client.lighter.orderbook.ahistory_reconstructed("BTC", start=..., end=...)
+tick_data = await client.lighter.orderbook.ahistory_tick("BTC", start=..., end=...)
+```
+
+**Methods:**
+| Method | Description |
+|--------|-------------|
+| `history_tick(coin, ...)` | Get raw checkpoint + deltas for custom reconstruction |
+| `history_reconstructed(coin, ...)` | Get fully reconstructed snapshots |
+| `iterate_reconstructed(coin, ...)` | Memory-efficient iterator over reconstructed snapshots |
+| `create_reconstructor()` | Create a reconstructor instance for manual control |
+
+**Parameters:**
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `depth` | all | Maximum price levels in output |
+| `emit_all` | `True` | If `False`, only return final state |
+
 ### Trades
 
 The trades API uses cursor-based pagination for efficient retrieval of large datasets.
@@ -738,6 +803,15 @@ from oxarchive import Client, LighterGranularity
 from oxarchive.types import OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest, Candle, Liquidation
 from oxarchive.resources.trades import CursorResponse
 
+# Orderbook reconstruction types (Enterprise)
+from oxarchive import (
+    OrderBookReconstructor,
+    OrderbookDelta,
+    TickData,
+    ReconstructedOrderBook,
+    ReconstructOptions,
+)
+
 client = Client(api_key="ox_your_api_key")
 
 orderbook: OrderBook = client.hyperliquid.orderbook.get("BTC")
@@ -748,6 +822,10 @@ recent: list[Trade] = client.lighter.trades.recent("BTC")
 
 # Lighter granularity type hint
 granularity: LighterGranularity = "10s"
+
+# Orderbook reconstruction (Enterprise)
+tick_data: TickData = client.lighter.orderbook.history_tick("BTC", start=..., end=...)
+snapshots: list[ReconstructedOrderBook] = client.lighter.orderbook.history_reconstructed("BTC", start=..., end=...)
 ```
 
 ## Requirements

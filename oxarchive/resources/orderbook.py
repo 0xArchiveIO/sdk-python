@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Union
+from typing import Iterator, Optional, Union
 
 from ..http import HttpClient
 from typing import Literal
 
 from ..types import CursorResponse, OrderBook, Timestamp
+from ..orderbook_reconstructor import (
+    OrderBookReconstructor,
+    OrderbookDelta,
+    TickData,
+    ReconstructedOrderBook,
+    ReconstructOptions,
+)
 
 # Lighter orderbook granularity levels (Lighter.xyz only)
 LighterGranularity = Literal["checkpoint", "30s", "10s", "1s", "tick"]
@@ -182,3 +189,242 @@ class OrderBookResource:
             data=[OrderBook.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
+
+    def history_tick(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+    ) -> TickData:
+        """
+        Get raw tick-level orderbook data (Enterprise tier only).
+
+        Returns a checkpoint (full orderbook state) and array of deltas.
+        Use this when you want to implement custom reconstruction logic
+        (e.g., in Rust for maximum performance).
+
+        For automatic reconstruction, use `history_reconstructed()` instead.
+
+        Args:
+            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            depth: Number of price levels in checkpoint (default: all)
+
+        Returns:
+            TickData with checkpoint and deltas
+
+        Example:
+            >>> tick_data = client.lighter.orderbook.history_tick(
+            ...     "BTC",
+            ...     start=datetime.now() - timedelta(hours=1),
+            ...     end=datetime.now()
+            ... )
+            >>> print(f"Checkpoint: {tick_data.checkpoint}")
+            >>> print(f"Deltas: {len(tick_data.deltas)}")
+            >>>
+            >>> # Implement your own reconstruction...
+            >>> for delta in tick_data.deltas:
+            ...     # delta: OrderbookDelta with timestamp, side, price, size, sequence
+            ...     pass
+        """
+        data = self._http.get(
+            f"{self._base_path}/orderbook/{coin.upper()}/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "depth": depth,
+                "granularity": "tick",
+            },
+        )
+
+        # Check if tick-level data was returned
+        if "checkpoint" not in data or data.get("checkpoint") is None:
+            error_msg = data.get("error") or data.get("message") or (
+                "Tick-level orderbook data requires Enterprise tier. "
+                "Upgrade your subscription or use a different granularity."
+            )
+            raise ValueError(error_msg)
+
+        checkpoint = OrderBook.model_validate(data["checkpoint"])
+        deltas = [
+            OrderbookDelta(
+                timestamp=d["timestamp"],
+                side=d["side"],
+                price=float(d["price"]),
+                size=float(d["size"]),
+                sequence=d["sequence"],
+            )
+            for d in data.get("deltas", [])
+        ]
+
+        return TickData(checkpoint=checkpoint, deltas=deltas)
+
+    async def ahistory_tick(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+    ) -> TickData:
+        """Async version of history_tick(). See history_tick() for details."""
+        data = await self._http.aget(
+            f"{self._base_path}/orderbook/{coin.upper()}/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "depth": depth,
+                "granularity": "tick",
+            },
+        )
+
+        # Check if tick-level data was returned
+        if "checkpoint" not in data or data.get("checkpoint") is None:
+            error_msg = data.get("error") or data.get("message") or (
+                "Tick-level orderbook data requires Enterprise tier. "
+                "Upgrade your subscription or use a different granularity."
+            )
+            raise ValueError(error_msg)
+
+        checkpoint = OrderBook.model_validate(data["checkpoint"])
+        deltas = [
+            OrderbookDelta(
+                timestamp=d["timestamp"],
+                side=d["side"],
+                price=float(d["price"]),
+                size=float(d["size"]),
+                sequence=d["sequence"],
+            )
+            for d in data.get("deltas", [])
+        ]
+
+        return TickData(checkpoint=checkpoint, deltas=deltas)
+
+    def history_reconstructed(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+        emit_all: bool = True,
+    ) -> list[ReconstructedOrderBook]:
+        """
+        Get reconstructed tick-level orderbook history (Enterprise tier only).
+
+        Fetches raw tick data and reconstructs full orderbook state at each delta.
+        All reconstruction happens client-side for optimal server performance.
+
+        For large time ranges, consider using `history_tick()` with the
+        `OrderBookReconstructor.iterate()` method for memory efficiency.
+
+        Args:
+            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            depth: Maximum price levels to include in output
+            emit_all: If True, return snapshot after every delta.
+                     If False, only return final state.
+
+        Returns:
+            List of reconstructed orderbook snapshots
+
+        Example:
+            >>> # Get all snapshots
+            >>> snapshots = client.lighter.orderbook.history_reconstructed(
+            ...     "BTC",
+            ...     start=datetime.now() - timedelta(hours=1),
+            ...     end=datetime.now()
+            ... )
+            >>> for ob in snapshots:
+            ...     print(ob.timestamp, "Best bid:", ob.bids[0].px, "Best ask:", ob.asks[0].px)
+            >>>
+            >>> # Get only final state
+            >>> [final] = client.lighter.orderbook.history_reconstructed(
+            ...     "BTC", start=start, end=end, emit_all=False
+            ... )
+        """
+        tick_data = self.history_tick(coin, start=start, end=end, depth=depth)
+        reconstructor = OrderBookReconstructor()
+        options = ReconstructOptions(depth=depth, emit_all=emit_all)
+        return reconstructor.reconstruct_all(tick_data.checkpoint, tick_data.deltas, options)
+
+    async def ahistory_reconstructed(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+        emit_all: bool = True,
+    ) -> list[ReconstructedOrderBook]:
+        """Async version of history_reconstructed(). See history_reconstructed() for details."""
+        tick_data = await self.ahistory_tick(coin, start=start, end=end, depth=depth)
+        reconstructor = OrderBookReconstructor()
+        options = ReconstructOptions(depth=depth, emit_all=emit_all)
+        return reconstructor.reconstruct_all(tick_data.checkpoint, tick_data.deltas, options)
+
+    def iterate_reconstructed(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+    ) -> Iterator[ReconstructedOrderBook]:
+        """
+        Iterate over reconstructed orderbook states (memory-efficient).
+
+        Fetches tick data and yields snapshots one at a time.
+        Use this for large time ranges to avoid loading all snapshots into memory.
+
+        Args:
+            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            depth: Maximum price levels to include
+
+        Yields:
+            Reconstructed orderbook snapshots
+
+        Example:
+            >>> for snapshot in client.lighter.orderbook.iterate_reconstructed(
+            ...     "BTC", start=start, end=end
+            ... ):
+            ...     process(snapshot)
+            ...     if some_condition:
+            ...         break  # Early exit if needed
+        """
+        tick_data = self.history_tick(coin, start=start, end=end, depth=depth)
+        reconstructor = OrderBookReconstructor()
+        yield from reconstructor.iterate(tick_data.checkpoint, tick_data.deltas, depth)
+
+    def create_reconstructor(self) -> OrderBookReconstructor:
+        """
+        Create a reconstructor for streaming tick-level data.
+
+        Returns an OrderBookReconstructor instance that you can use
+        to process tick data incrementally or with custom logic.
+
+        Returns:
+            A new OrderBookReconstructor instance
+
+        Example:
+            >>> reconstructor = client.lighter.orderbook.create_reconstructor()
+            >>> tick_data = client.lighter.orderbook.history_tick("BTC", start=start, end=end)
+            >>>
+            >>> # Memory-efficient iteration
+            >>> for snapshot in reconstructor.iterate(tick_data.checkpoint, tick_data.deltas):
+            ...     # Process each snapshot
+            ...     if some_condition(snapshot):
+            ...         break  # Early exit if needed
+            >>>
+            >>> # Check for gaps
+            >>> gaps = OrderBookReconstructor.detect_gaps(tick_data.deltas)
+            >>> if gaps:
+            ...     print("Sequence gaps detected:", gaps)
+        """
+        return OrderBookReconstructor()
