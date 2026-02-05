@@ -230,7 +230,7 @@ class OrderBookResource:
             ...     # delta: OrderbookDelta with timestamp, side, price, size, sequence
             ...     pass
         """
-        data = self._http.get(
+        response = self._http.get(
             f"{self._base_path}/orderbook/{coin.upper()}/history",
             params={
                 "start": self._convert_timestamp(start),
@@ -240,15 +240,16 @@ class OrderBookResource:
             },
         )
 
-        # Check if tick-level data was returned
-        if "checkpoint" not in data or data.get("checkpoint") is None:
-            error_msg = data.get("error") or data.get("message") or (
+        # Check if tick-level data was returned (nested inside "data" wrapper)
+        tick_data = response.get("data", {})
+        if not isinstance(tick_data, dict) or "checkpoint" not in tick_data or tick_data.get("checkpoint") is None:
+            error_msg = response.get("error") or response.get("message") or (
                 "Tick-level orderbook data requires Enterprise tier. "
                 "Upgrade your subscription or use a different granularity."
             )
             raise ValueError(error_msg)
 
-        checkpoint = OrderBook.model_validate(data["checkpoint"])
+        checkpoint = OrderBook.model_validate(tick_data["checkpoint"])
         deltas = [
             OrderbookDelta(
                 timestamp=d["timestamp"],
@@ -257,7 +258,7 @@ class OrderBookResource:
                 size=float(d["size"]),
                 sequence=d["sequence"],
             )
-            for d in data.get("deltas", [])
+            for d in tick_data.get("deltas", [])
         ]
 
         return TickData(checkpoint=checkpoint, deltas=deltas)
@@ -271,7 +272,7 @@ class OrderBookResource:
         depth: Optional[int] = None,
     ) -> TickData:
         """Async version of history_tick(). See history_tick() for details."""
-        data = await self._http.aget(
+        response = await self._http.aget(
             f"{self._base_path}/orderbook/{coin.upper()}/history",
             params={
                 "start": self._convert_timestamp(start),
@@ -281,15 +282,16 @@ class OrderBookResource:
             },
         )
 
-        # Check if tick-level data was returned
-        if "checkpoint" not in data or data.get("checkpoint") is None:
-            error_msg = data.get("error") or data.get("message") or (
+        # Check if tick-level data was returned (nested inside "data" wrapper)
+        tick_data = response.get("data", {})
+        if not isinstance(tick_data, dict) or "checkpoint" not in tick_data or tick_data.get("checkpoint") is None:
+            error_msg = response.get("error") or response.get("message") or (
                 "Tick-level orderbook data requires Enterprise tier. "
                 "Upgrade your subscription or use a different granularity."
             )
             raise ValueError(error_msg)
 
-        checkpoint = OrderBook.model_validate(data["checkpoint"])
+        checkpoint = OrderBook.model_validate(tick_data["checkpoint"])
         deltas = [
             OrderbookDelta(
                 timestamp=d["timestamp"],
@@ -298,7 +300,7 @@ class OrderBookResource:
                 size=float(d["size"]),
                 sequence=d["sequence"],
             )
-            for d in data.get("deltas", [])
+            for d in tick_data.get("deltas", [])
         ]
 
         return TickData(checkpoint=checkpoint, deltas=deltas)
