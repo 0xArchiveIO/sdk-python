@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterator, Optional, Union
+from typing import AsyncIterator, Iterator, Optional, Union
 
 from ..http import HttpClient
 from typing import Literal
@@ -430,3 +430,156 @@ class OrderBookResource:
             ...     print("Sequence gaps detected:", gaps)
         """
         return OrderBookReconstructor()
+
+    def iterate_tick_history(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+    ) -> Iterator[ReconstructedOrderBook]:
+        """
+        Iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
+
+        This generator automatically handles pagination, fetching up to 1,000 deltas
+        per API request and yielding reconstructed orderbook snapshots one at a time.
+        Memory-efficient for processing large time ranges.
+
+        Args:
+            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            depth: Maximum price levels to include in output snapshots
+
+        Yields:
+            Reconstructed orderbook snapshots
+
+        Example:
+            >>> # Process 24 hours of tick data with automatic pagination
+            >>> for snapshot in client.lighter.orderbook.iterate_tick_history(
+            ...     "BTC",
+            ...     start=datetime.now() - timedelta(days=1),
+            ...     end=datetime.now()
+            ... ):
+            ...     print(snapshot.timestamp, "Mid:", snapshot.mid_price)
+            ...     if some_condition:
+            ...         break  # Early exit supported
+            >>>
+            >>> # Collect all snapshots (caution: memory usage for large ranges)
+            >>> snapshots = list(client.lighter.orderbook.iterate_tick_history(
+            ...     "BTC", start=start, end=end
+            ... ))
+        """
+        start_ts = self._convert_timestamp(start)
+        end_ts = self._convert_timestamp(end)
+        if start_ts is None or end_ts is None:
+            raise ValueError("start and end timestamps are required")
+
+        cursor = start_ts
+        reconstructor = OrderBookReconstructor()
+        max_deltas_per_page = 1000
+        is_first_page = True
+
+        while cursor < end_ts:
+            tick_data = self.history_tick(coin, start=cursor, end=end_ts, depth=depth)
+
+            if len(tick_data.deltas) == 0:
+                # No deltas - yield checkpoint only on first page if no data
+                if is_first_page:
+                    reconstructor.initialize(tick_data.checkpoint)
+                    yield reconstructor.get_snapshot(depth)
+                break
+
+            # Yield each reconstructed snapshot
+            # Skip initial checkpoint on subsequent pages to avoid duplicates
+            skip_first = not is_first_page
+            for snapshot in reconstructor.iterate(tick_data.checkpoint, tick_data.deltas, depth):
+                if skip_first:
+                    skip_first = False
+                    continue
+                yield snapshot
+
+            is_first_page = False
+
+            # Move cursor past the last delta
+            last_delta = tick_data.deltas[-1]
+            cursor = last_delta.timestamp + 1
+
+            # If we got fewer than max deltas, we've reached the end
+            if len(tick_data.deltas) < max_deltas_per_page:
+                break
+
+    async def aiterate_tick_history(
+        self,
+        coin: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        depth: Optional[int] = None,
+    ) -> AsyncIterator[ReconstructedOrderBook]:
+        """
+        Async iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
+
+        This async generator automatically handles pagination, fetching up to 1,000 deltas
+        per API request and yielding reconstructed orderbook snapshots one at a time.
+        Memory-efficient for processing large time ranges.
+
+        Args:
+            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            depth: Maximum price levels to include in output snapshots
+
+        Yields:
+            Reconstructed orderbook snapshots
+
+        Example:
+            >>> # Process 24 hours of tick data with automatic pagination
+            >>> async for snapshot in client.lighter.orderbook.aiterate_tick_history(
+            ...     "BTC",
+            ...     start=datetime.now() - timedelta(days=1),
+            ...     end=datetime.now()
+            ... ):
+            ...     print(snapshot.timestamp, "Mid:", snapshot.mid_price)
+            ...     if some_condition:
+            ...         break  # Early exit supported
+        """
+        start_ts = self._convert_timestamp(start)
+        end_ts = self._convert_timestamp(end)
+        if start_ts is None or end_ts is None:
+            raise ValueError("start and end timestamps are required")
+
+        cursor = start_ts
+        reconstructor = OrderBookReconstructor()
+        max_deltas_per_page = 1000
+        is_first_page = True
+
+        while cursor < end_ts:
+            tick_data = await self.ahistory_tick(coin, start=cursor, end=end_ts, depth=depth)
+
+            if len(tick_data.deltas) == 0:
+                # No deltas - yield checkpoint only on first page if no data
+                if is_first_page:
+                    reconstructor.initialize(tick_data.checkpoint)
+                    yield reconstructor.get_snapshot(depth)
+                break
+
+            # Yield each reconstructed snapshot
+            # Skip initial checkpoint on subsequent pages to avoid duplicates
+            skip_first = not is_first_page
+            for snapshot in reconstructor.iterate(tick_data.checkpoint, tick_data.deltas, depth):
+                if skip_first:
+                    skip_first = False
+                    continue
+                yield snapshot
+
+            is_first_page = False
+
+            # Move cursor past the last delta
+            last_delta = tick_data.deltas[-1]
+            cursor = last_delta.timestamp + 1
+
+            # If we got fewer than max deltas, we've reached the end
+            if len(tick_data.deltas) < max_deltas_per_page:
+                break
