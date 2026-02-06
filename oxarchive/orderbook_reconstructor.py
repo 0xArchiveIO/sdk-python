@@ -25,7 +25,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterator, Optional
 
 from .types import OrderBook, PriceLevel
@@ -160,8 +160,8 @@ class OrderBookReconstructor:
                 orders=1,  # Deltas don't include order count
             )
 
-        # Convert timestamp to ISO format
-        self._last_timestamp = datetime.utcfromtimestamp(delta.timestamp / 1000).isoformat() + "Z"
+        # Convert timestamp to ISO format (timezone-aware)
+        self._last_timestamp = datetime.fromtimestamp(delta.timestamp / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         self._last_sequence = delta.sequence
 
     def get_snapshot(self, depth: Optional[int] = None) -> ReconstructedOrderBook:

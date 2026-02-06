@@ -197,7 +197,18 @@ tick_data = client.lighter.orderbook.history_tick(
 print(f"Checkpoint: {len(tick_data.checkpoint.bids)} bids")
 print(f"Deltas: {len(tick_data.deltas)} updates")
 
-# Option 3: Memory-efficient iteration (for large datasets)
+# Option 3: Auto-paginating iterator (recommended for large time ranges)
+# Automatically handles pagination, fetching up to 1,000 deltas per request
+for snapshot in client.lighter.orderbook.iterate_tick_history(
+    "BTC",
+    start=datetime.now() - timedelta(days=1),  # 24 hours of data
+    end=datetime.now()
+):
+    print(snapshot.timestamp, "Mid:", snapshot.mid_price)
+    if some_condition:
+        break  # Early exit supported
+
+# Option 4: Manual iteration (single page, for custom logic)
 for snapshot in client.lighter.orderbook.iterate_reconstructed(
     "BTC", start=start, end=end
 ):
@@ -206,7 +217,7 @@ for snapshot in client.lighter.orderbook.iterate_reconstructed(
     if some_condition:
         break  # Early exit if needed
 
-# Option 4: Get only final state (most efficient)
+# Option 5: Get only final state (most efficient)
 reconstructor = client.lighter.orderbook.create_reconstructor()
 final = reconstructor.reconstruct_final(tick_data.checkpoint, tick_data.deltas)
 
@@ -218,15 +229,22 @@ if gaps:
 # Async versions available
 snapshots = await client.lighter.orderbook.ahistory_reconstructed("BTC", start=..., end=...)
 tick_data = await client.lighter.orderbook.ahistory_tick("BTC", start=..., end=...)
+# Async auto-paginating iterator
+async for snapshot in client.lighter.orderbook.aiterate_tick_history("BTC", start=..., end=...):
+    process(snapshot)
 ```
 
 **Methods:**
 | Method | Description |
 |--------|-------------|
-| `history_tick(coin, ...)` | Get raw checkpoint + deltas for custom reconstruction |
-| `history_reconstructed(coin, ...)` | Get fully reconstructed snapshots |
-| `iterate_reconstructed(coin, ...)` | Memory-efficient iterator over reconstructed snapshots |
+| `history_tick(coin, ...)` | Get raw checkpoint + deltas (single page, max 1,000 deltas) |
+| `history_reconstructed(coin, ...)` | Get fully reconstructed snapshots (single page) |
+| `iterate_tick_history(coin, ...)` | Auto-paginating iterator for large time ranges |
+| `aiterate_tick_history(coin, ...)` | Async auto-paginating iterator |
+| `iterate_reconstructed(coin, ...)` | Memory-efficient iterator (single page) |
 | `create_reconstructor()` | Create a reconstructor instance for manual control |
+
+**Note:** The API returns a maximum of 1,000 deltas per request. For time ranges with more deltas, use `iterate_tick_history()` / `aiterate_tick_history()` which handle pagination automatically.
 
 **Parameters:**
 | Parameter | Default | Description |
@@ -264,6 +282,8 @@ recent = client.lighter.trades.recent("BTC", limit=100)
 result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
 recent = await client.lighter.trades.arecent("BTC", limit=100)
 ```
+
+**Note:** The `recent()` method is only available for Lighter.xyz (`client.lighter.trades.recent()`). Hyperliquid does not have a recent trades endpoint - use `list()` with a time range instead.
 
 ### Instruments
 
