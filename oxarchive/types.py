@@ -721,6 +721,19 @@ class CoverageGap(BaseModel):
     """Duration of the gap in minutes."""
 
 
+class DataCadence(BaseModel):
+    """Empirical data cadence measurement based on last 7 days of data."""
+
+    median_interval_seconds: float
+    """Median interval between consecutive records in seconds."""
+
+    p95_interval_seconds: float
+    """95th percentile interval between consecutive records in seconds."""
+
+    sample_count: int
+    """Number of intervals sampled for this measurement."""
+
+
 class SymbolDataTypeCoverage(BaseModel):
     """Coverage for a specific symbol and data type."""
 
@@ -734,10 +747,16 @@ class SymbolDataTypeCoverage(BaseModel):
     """Total number of records."""
 
     completeness: float
-    """Completeness percentage (0-100)."""
+    """24-hour completeness percentage (0-100)."""
+
+    historical_coverage: float | None = None
+    """Historical coverage percentage (0-100) based on hours with data / total hours."""
 
     gaps: list[CoverageGap]
-    """Detected data gaps."""
+    """Detected data gaps within the requested time window."""
+
+    cadence: DataCadence | None = None
+    """Empirical data cadence (present when sufficient data exists)."""
 
 
 class SymbolCoverageResponse(BaseModel):

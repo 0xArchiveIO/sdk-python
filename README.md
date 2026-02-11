@@ -476,9 +476,20 @@ for exchange in coverage.exchanges:
 btc = client.data_quality.symbol_coverage("hyperliquid", "BTC")
 oi = btc.data_types["open_interest"]
 print(f"BTC OI completeness: {oi.completeness}%")
+print(f"Historical coverage: {oi.historical_coverage}%")  # Hour-level granularity
 print(f"Gaps found: {len(oi.gaps)}")
 for gap in oi.gaps[:5]:
     print(f"  {gap.duration_minutes} min gap: {gap.start} -> {gap.end}")
+
+# Check empirical data cadence (when available)
+ob = btc.data_types["orderbook"]
+if ob.cadence:
+    print(f"Orderbook cadence: ~{ob.cadence.median_interval_seconds}s median, p95={ob.cadence.p95_interval_seconds}s")
+
+# Time-bounded gap detection (last 7 days)
+from datetime import datetime, timedelta, timezone
+week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+btc_7d = client.data_quality.symbol_coverage("hyperliquid", "BTC", from_time=week_ago)
 
 # List incidents with filtering
 result = client.data_quality.list_incidents(status="open")
@@ -508,11 +519,20 @@ coverage = await client.data_quality.acoverage()
 | `status()` | Overall system health and per-exchange status |
 | `coverage()` | Data coverage summary for all exchanges |
 | `exchange_coverage(exchange)` | Coverage details for a specific exchange |
-| `symbol_coverage(exchange, symbol)` | Coverage with gap detection for specific symbol |
+| `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage |
 | `list_incidents(...)` | List incidents with filtering and pagination |
 | `get_incident(incident_id)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
 | `sla(year, month)` | SLA compliance metrics for a specific month |
+
+**Note:** Data Quality endpoints (`coverage()`, `exchange_coverage()`, `symbol_coverage()`) perform complex aggregation queries and may take 30-60 seconds on first request (results are cached server-side for 5 minutes). If you encounter timeout errors, create a client with a longer timeout:
+
+```python
+client = Client(
+    api_key="ox_your_api_key",
+    timeout=60.0  # 60 seconds for data quality endpoints
+)
+```
 
 ### Legacy API (Deprecated)
 
