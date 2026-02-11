@@ -134,18 +134,31 @@ class DataQualityResource:
         data = await self._http.aget(f"{self._base_path}/coverage/{exchange.lower()}")
         return ExchangeCoverage.model_validate(data)
 
-    def symbol_coverage(self, exchange: str, symbol: str) -> SymbolCoverageResponse:
+    def symbol_coverage(
+        self,
+        exchange: str,
+        symbol: str,
+        *,
+        from_time: Optional[Timestamp] = None,
+        to_time: Optional[Timestamp] = None,
+    ) -> SymbolCoverageResponse:
         """
         Get data coverage for a specific symbol on an exchange.
 
-        Includes gap detection showing periods where data may be missing.
+        Includes gap detection, empirical data cadence, and hour-level
+        historical coverage.
 
         Args:
             exchange: Exchange name ('hyperliquid' or 'lighter')
             symbol: Symbol name (e.g., 'BTC', 'ETH')
+            from_time: Start of gap detection window (default: now - 30 days).
+                Accepts Unix ms, datetime, or ISO string.
+            to_time: End of gap detection window (default: now).
+                Accepts Unix ms, datetime, or ISO string.
 
         Returns:
-            SymbolCoverageResponse with per-data-type coverage including gaps.
+            SymbolCoverageResponse with per-data-type coverage including gaps,
+            cadence, and historical coverage.
 
         Example:
             >>> btc = client.data_quality.symbol_coverage("hyperliquid", "BTC")
@@ -154,16 +167,40 @@ class DataQualityResource:
             >>> print(f"Gaps found: {len(oi.gaps)}")
             >>> for gap in oi.gaps[:3]:
             ...     print(f"  {gap.duration_minutes} min gap at {gap.start}")
+            >>>
+            >>> # With time bounds (last 7 days)
+            >>> from datetime import datetime, timedelta, timezone
+            >>> week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+            >>> btc = client.data_quality.symbol_coverage(
+            ...     "hyperliquid", "BTC", from_time=week_ago
+            ... )
+            >>> if btc.data_types["orderbook"].cadence:
+            ...     print(f"Cadence: {btc.data_types['orderbook'].cadence.median_interval_seconds}s")
         """
         data = self._http.get(
-            f"{self._base_path}/coverage/{exchange.lower()}/{symbol.upper()}"
+            f"{self._base_path}/coverage/{exchange.lower()}/{symbol.upper()}",
+            params={
+                "from": self._convert_timestamp(from_time),
+                "to": self._convert_timestamp(to_time),
+            },
         )
         return SymbolCoverageResponse.model_validate(data)
 
-    async def asymbol_coverage(self, exchange: str, symbol: str) -> SymbolCoverageResponse:
+    async def asymbol_coverage(
+        self,
+        exchange: str,
+        symbol: str,
+        *,
+        from_time: Optional[Timestamp] = None,
+        to_time: Optional[Timestamp] = None,
+    ) -> SymbolCoverageResponse:
         """Async version of symbol_coverage()."""
         data = await self._http.aget(
-            f"{self._base_path}/coverage/{exchange.lower()}/{symbol.upper()}"
+            f"{self._base_path}/coverage/{exchange.lower()}/{symbol.upper()}",
+            params={
+                "from": self._convert_timestamp(from_time),
+                "to": self._convert_timestamp(to_time),
+            },
         )
         return SymbolCoverageResponse.model_validate(data)
 
