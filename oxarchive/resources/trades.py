@@ -27,9 +27,10 @@ class TradesResource:
         >>> recent = client.lighter.trades.recent("BTC")
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1"):
+    def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
         self._base_path = base_path
+        self._coin_transform = coin_transform
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -87,7 +88,7 @@ class TradesResource:
             ...     trades.extend(result.data)
         """
         data = self._http.get(
-            f"{self._base_path}/trades/{coin.upper()}",
+            f"{self._base_path}/trades/{self._coin_transform(coin)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -117,7 +118,7 @@ class TradesResource:
         Uses cursor-based pagination by default.
         """
         data = await self._http.aget(
-            f"{self._base_path}/trades/{coin.upper()}",
+            f"{self._base_path}/trades/{self._coin_transform(coin)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -135,8 +136,9 @@ class TradesResource:
         """
         Get most recent trades for a coin.
 
-        Note: This method is only available for Lighter (client.lighter.trades.recent())
-        which has real-time data ingestion. Hyperliquid uses hourly backfill so this
+        Note: This method is available for Lighter (client.lighter.trades.recent())
+        and HIP-3 (client.hyperliquid.hip3.trades.recent()), both of which have
+        real-time data ingestion. Hyperliquid uses hourly backfill so this
         endpoint is not available for Hyperliquid.
 
         Args:
@@ -147,7 +149,7 @@ class TradesResource:
             List of recent trades
         """
         data = self._http.get(
-            f"{self._base_path}/trades/{coin.upper()}/recent",
+            f"{self._base_path}/trades/{self._coin_transform(coin)}/recent",
             params={"limit": limit},
         )
         return [Trade.model_validate(item) for item in data["data"]]
@@ -155,7 +157,7 @@ class TradesResource:
     async def arecent(self, coin: str, limit: Optional[int] = None) -> list[Trade]:
         """Async version of recent()."""
         data = await self._http.aget(
-            f"{self._base_path}/trades/{coin.upper()}/recent",
+            f"{self._base_path}/trades/{self._coin_transform(coin)}/recent",
             params={"limit": limit},
         )
         return [Trade.model_validate(item) for item in data["data"]]

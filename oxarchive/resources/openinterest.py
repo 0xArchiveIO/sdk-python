@@ -21,9 +21,10 @@ class OpenInterestResource:
         >>> history = client.open_interest.history("ETH", start="2024-01-01", end="2024-01-07")
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1"):
+    def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
         self._base_path = base_path
+        self._coin_transform = coin_transform
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -73,7 +74,7 @@ class OpenInterestResource:
             ...     records.extend(result.data)
         """
         data = self._http.get(
-            f"{self._base_path}/openinterest/{coin.upper()}",
+            f"{self._base_path}/openinterest/{self._coin_transform(coin)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -97,7 +98,7 @@ class OpenInterestResource:
     ) -> CursorResponse[list[OpenInterest]]:
         """Async version of history(). start and end are required."""
         data = await self._http.aget(
-            f"{self._base_path}/openinterest/{coin.upper()}",
+            f"{self._base_path}/openinterest/{self._coin_transform(coin)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -120,10 +121,10 @@ class OpenInterestResource:
         Returns:
             Current open interest
         """
-        data = self._http.get(f"{self._base_path}/openinterest/{coin.upper()}/current")
+        data = self._http.get(f"{self._base_path}/openinterest/{self._coin_transform(coin)}/current")
         return OpenInterest.model_validate(data["data"])
 
     async def acurrent(self, coin: str) -> OpenInterest:
         """Async version of current()."""
-        data = await self._http.aget(f"{self._base_path}/openinterest/{coin.upper()}/current")
+        data = await self._http.aget(f"{self._base_path}/openinterest/{self._coin_transform(coin)}/current")
         return OpenInterest.model_validate(data["data"])

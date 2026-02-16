@@ -39,9 +39,10 @@ class OrderBookResource:
         >>> lighter_ob = client.lighter.orderbook.get("BTC")
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1"):
+    def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
         self._base_path = base_path
+        self._coin_transform = coin_transform
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -79,7 +80,7 @@ class OrderBookResource:
             Order book snapshot
         """
         data = self._http.get(
-            f"{self._base_path}/orderbook/{coin.upper()}",
+            f"{self._base_path}/orderbook/{self._coin_transform(coin)}",
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
@@ -96,7 +97,7 @@ class OrderBookResource:
     ) -> OrderBook:
         """Async version of get()."""
         data = await self._http.aget(
-            f"{self._base_path}/orderbook/{coin.upper()}",
+            f"{self._base_path}/orderbook/{self._coin_transform(coin)}",
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
@@ -147,7 +148,7 @@ class OrderBookResource:
             ... )
         """
         data = self._http.get(
-            f"{self._base_path}/orderbook/{coin.upper()}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -175,7 +176,7 @@ class OrderBookResource:
     ) -> CursorResponse[list[OrderBook]]:
         """Async version of history(). start and end are required. See history() for granularity details."""
         data = await self._http.aget(
-            f"{self._base_path}/orderbook/{coin.upper()}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -231,7 +232,7 @@ class OrderBookResource:
             ...     pass
         """
         response = self._http.get(
-            f"{self._base_path}/orderbook/{coin.upper()}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -273,7 +274,7 @@ class OrderBookResource:
     ) -> TickData:
         """Async version of history_tick(). See history_tick() for details."""
         response = await self._http.aget(
-            f"{self._base_path}/orderbook/{coin.upper()}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),

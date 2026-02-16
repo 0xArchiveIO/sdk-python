@@ -4,6 +4,7 @@ Official Python SDK for [0xarchive](https://0xarchive.io) - Historical Market Da
 
 Supports multiple exchanges:
 - **Hyperliquid** - Perpetuals data from April 2023
+- **Hyperliquid HIP-3** - Builder-deployed perpetuals (Pro+ only, February 2026+)
 - **Lighter.xyz** - Perpetuals data (August 2025+ for fills, Jan 2026+ for OB, OI, Funding Rate)
 
 ## Installation
@@ -32,6 +33,12 @@ print(f"Hyperliquid BTC mid price: {hl_orderbook.mid_price}")
 # Lighter.xyz data
 lighter_orderbook = client.lighter.orderbook.get("BTC")
 print(f"Lighter BTC mid price: {lighter_orderbook.mid_price}")
+
+# HIP-3 builder perps (Pro+ only, February 2026+)
+hip3_orderbook = client.hyperliquid.hip3.orderbook.get("xyz:XYZ100")
+hip3_trades = client.hyperliquid.hip3.trades.recent("xyz:XYZ100")
+hip3_funding = client.hyperliquid.hip3.funding.current("xyz:XYZ100")
+hip3_oi = client.hyperliquid.hip3.open_interest.current("xyz:XYZ100")
 
 # Get historical order book snapshots
 history = client.hyperliquid.orderbook.history(

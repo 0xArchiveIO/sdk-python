@@ -3,6 +3,7 @@ oxarchive - Official Python SDK for 0xarchive
 
 Historical Market Data API for multiple exchanges:
 - Hyperliquid (perpetuals data from April 2023)
+- Hyperliquid HIP-3 builder perps (Pro+ only, February 2026+)
 - Lighter.xyz (perpetuals data)
 
 Example:
@@ -22,7 +23,7 @@ Example:
 """
 
 from .client import Client
-from .exchanges import HyperliquidClient, LighterClient
+from .exchanges import HyperliquidClient, Hip3Client, LighterClient
 from .resources.orderbook import LighterGranularity
 from .orderbook_reconstructor import (
     OrderBookReconstructor,
@@ -77,13 +78,14 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     # Client
     "Client",
     # Exchange Clients
     "HyperliquidClient",
+    "Hip3Client",
     "LighterClient",
     # WebSocket Client
     "OxArchiveWs",

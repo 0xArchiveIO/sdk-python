@@ -117,7 +117,7 @@ class DataQualityResource:
         Get data coverage for a specific exchange.
 
         Args:
-            exchange: Exchange name ('hyperliquid' or 'lighter')
+            exchange: Exchange name ('hyperliquid', 'lighter', or 'hip3')
 
         Returns:
             ExchangeCoverage with coverage info for all data types on this exchange.
@@ -149,8 +149,8 @@ class DataQualityResource:
         historical coverage.
 
         Args:
-            exchange: Exchange name ('hyperliquid' or 'lighter')
-            symbol: Symbol name (e.g., 'BTC', 'ETH')
+            exchange: Exchange name ('hyperliquid', 'lighter', or 'hip3')
+            symbol: Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
             from_time: Start of gap detection window (default: now - 30 days).
                 Accepts Unix ms, datetime, or ISO string.
             to_time: End of gap detection window (default: now).
