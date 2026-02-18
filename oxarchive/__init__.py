@@ -39,6 +39,7 @@ from .types import (
     Trade,
     Instrument,
     LighterInstrument,
+    Hip3Instrument,
     FundingRate,
     OpenInterest,
     Liquidation,
@@ -78,7 +79,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 __all__ = [
     # Client
@@ -103,6 +104,7 @@ __all__ = [
     "Trade",
     "Instrument",
     "LighterInstrument",
+    "Hip3Instrument",
     "LighterGranularity",
     "FundingRate",
     "OpenInterest",

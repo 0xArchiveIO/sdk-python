@@ -163,6 +163,35 @@ class Instrument(BaseModel):
     """Whether the instrument is currently tradeable."""
 
 
+class Hip3Instrument(BaseModel):
+    """HIP-3 Builder Perps instrument with latest market data.
+
+    Derived from live open interest data. Useful for discovering
+    available HIP-3 coins and their current market context.
+    """
+
+    coin: str
+    """Full coin name (e.g., km:US500, xyz:XYZ100)."""
+
+    namespace: str
+    """Builder namespace (e.g., km, xyz)."""
+
+    ticker: str
+    """Ticker within the namespace (e.g., US500, XYZ100)."""
+
+    mark_price: Optional[float] = None
+    """Latest mark price."""
+
+    open_interest: Optional[float] = None
+    """Latest open interest."""
+
+    mid_price: Optional[float] = None
+    """Latest mid price."""
+
+    latest_timestamp: Optional[datetime] = None
+    """Timestamp of latest data point."""
+
+
 class LighterInstrument(BaseModel):
     """Trading instrument specification (Lighter.xyz).
 
@@ -356,7 +385,11 @@ class Candle(BaseModel):
 # WebSocket Types
 # =============================================================================
 
-WsChannel = Literal["orderbook", "trades", "candles", "liquidations", "ticker", "all_tickers"]
+WsChannel = Literal[
+    "orderbook", "trades", "candles", "liquidations", "ticker", "all_tickers",
+    "lighter_orderbook", "lighter_trades", "lighter_candles",
+    "hip3_orderbook", "hip3_trades",
+]
 """Available WebSocket channels. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+)."""
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]

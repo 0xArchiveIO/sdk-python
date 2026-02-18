@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import HttpClient
-from ..types import Instrument, LighterInstrument
+from ..types import Hip3Instrument, Instrument, LighterInstrument
 
 
 class InstrumentsResource:
@@ -108,3 +108,60 @@ class LighterInstrumentsResource:
         """Async version of get()."""
         data = await self._http.aget(f"{self._base_path}/instruments/{coin.upper()}")
         return LighterInstrument.model_validate(data["data"])
+
+
+class Hip3InstrumentsResource:
+    """
+    HIP-3 Builder Perps Instruments API resource.
+
+    HIP-3 instruments are derived from live market data and include
+    mark price, open interest, and mid price context.
+
+    Example:
+        >>> # List all HIP-3 instruments
+        >>> instruments = client.hyperliquid.hip3.instruments.list()
+        >>>
+        >>> # Get specific instrument
+        >>> us500 = client.hyperliquid.hip3.instruments.get("km:US500")
+        >>> print(f"Mark price: {us500.mark_price}")
+    """
+
+    def __init__(self, http: HttpClient, base_path: str = "/v1/hyperliquid/hip3", coin_transform=None):
+        self._http = http
+        self._base_path = base_path
+        self._coin_transform = coin_transform or (lambda c: c)
+
+    def list(self) -> list[Hip3Instrument]:
+        """
+        List all available HIP-3 instruments with latest market data.
+
+        Returns:
+            List of HIP-3 instruments
+        """
+        data = self._http.get(f"{self._base_path}/instruments")
+        return [Hip3Instrument.model_validate(item) for item in data["data"]]
+
+    async def alist(self) -> list[Hip3Instrument]:
+        """Async version of list()."""
+        data = await self._http.aget(f"{self._base_path}/instruments")
+        return [Hip3Instrument.model_validate(item) for item in data["data"]]
+
+    def get(self, coin: str) -> Hip3Instrument:
+        """
+        Get a specific HIP-3 instrument by coin name.
+
+        Args:
+            coin: The coin name (e.g., 'km:US500', 'xyz:XYZ100'). Case-sensitive.
+
+        Returns:
+            HIP-3 instrument details with latest market data
+        """
+        coin = self._coin_transform(coin)
+        data = self._http.get(f"{self._base_path}/instruments/{coin}")
+        return Hip3Instrument.model_validate(data["data"])
+
+    async def aget(self, coin: str) -> Hip3Instrument:
+        """Async version of get()."""
+        coin = self._coin_transform(coin)
+        data = await self._http.aget(f"{self._base_path}/instruments/{coin}")
+        return Hip3Instrument.model_validate(data["data"])
