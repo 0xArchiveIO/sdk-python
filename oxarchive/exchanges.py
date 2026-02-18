@@ -8,6 +8,7 @@ from .resources import (
     TradesResource,
     InstrumentsResource,
     LighterInstrumentsResource,
+    Hip3InstrumentsResource,
     FundingResource,
     OpenInterestResource,
     CandlesResource,
@@ -73,6 +74,9 @@ class Hip3Client:
         self._http = http
         base_path = "/v1/hyperliquid/hip3"
         coin_transform = lambda c: c  # noqa: E731 — HIP-3 coins are case-sensitive (e.g. "xyz:XYZ100")
+
+        self.instruments = Hip3InstrumentsResource(http, base_path, coin_transform=coin_transform)
+        """HIP-3 instruments with latest market data"""
 
         self.orderbook = OrderBookResource(http, base_path, coin_transform=coin_transform)
         """Order book snapshots (February 2026+)"""

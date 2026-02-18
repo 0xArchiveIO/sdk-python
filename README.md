@@ -34,9 +34,10 @@ print(f"Hyperliquid BTC mid price: {hl_orderbook.mid_price}")
 lighter_orderbook = client.lighter.orderbook.get("BTC")
 print(f"Lighter BTC mid price: {lighter_orderbook.mid_price}")
 
-# HIP-3 builder perps (Pro+ only, February 2026+)
-hip3_orderbook = client.hyperliquid.hip3.orderbook.get("xyz:XYZ100")
-hip3_trades = client.hyperliquid.hip3.trades.recent("xyz:XYZ100")
+# HIP-3 builder perps (February 2026+)
+hip3_instruments = client.hyperliquid.hip3.instruments.list()
+hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
+hip3_trades = client.hyperliquid.hip3.trades.recent("km:US500")
 hip3_funding = client.hyperliquid.hip3.funding.current("xyz:XYZ100")
 hip3_oi = client.hyperliquid.hip3.open_interest.current("xyz:XYZ100")
 
@@ -335,6 +336,31 @@ eth = await client.lighter.instruments.aget("ETH")
 | Fee info | Not available | `taker_fee`, `maker_fee`, `liquidation_fee` |
 | Market ID | Not available | `market_id` |
 | Min amounts | Not available | `min_base_amount`, `min_quote_amount` |
+
+#### HIP-3 Instruments
+
+HIP-3 instruments are derived from live market data and include mark price, open interest, and mid price:
+
+```python
+# List all HIP-3 instruments (no tier restriction)
+hip3_instruments = client.hyperliquid.hip3.instruments.list()
+for inst in hip3_instruments:
+    print(f"{inst.coin} ({inst.namespace}:{inst.ticker}): mark={inst.mark_price}, OI={inst.open_interest}")
+
+# Get specific HIP-3 instrument (case-sensitive)
+us500 = client.hyperliquid.hip3.instruments.get("km:US500")
+print(f"Mark price: {us500.mark_price}")
+
+# Async versions
+hip3_instruments = await client.hyperliquid.hip3.instruments.alist()
+us500 = await client.hyperliquid.hip3.instruments.aget("km:US500")
+```
+
+**Available HIP-3 Coins:**
+| Builder | Coins |
+|---------|-------|
+| xyz (Hyperliquid) | `xyz:XYZ100` |
+| km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
 
 ### Funding Rates
 
@@ -766,6 +792,8 @@ ws = OxArchiveWs(WsOptions(
 
 ### Available Channels
 
+#### Hyperliquid Channels
+
 | Channel | Description | Requires Coin | Historical Support |
 |---------|-------------|---------------|-------------------|
 | `orderbook` | L2 order book updates | Yes | Yes |
@@ -774,6 +802,23 @@ ws = OxArchiveWs(WsOptions(
 | `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
+
+#### HIP-3 Builder Perps Channels
+
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
+| `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
+
+> **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
+
+#### Lighter.xyz Channels
+
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | Yes |
+| `lighter_trades` | Lighter trade/fill updates | Yes | Yes |
+| `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
 
 #### Candle Replay/Stream
 
@@ -802,6 +847,26 @@ await ws.replay(
     start=...,
     speed=10,
     interval="5m"
+)
+```
+
+#### HIP-3 Replay/Stream
+
+```python
+# Replay HIP-3 orderbook at 50x speed
+await ws.replay(
+    "hip3_orderbook", "km:US500",
+    start=int(time.time() * 1000) - 3600000,
+    end=int(time.time() * 1000),
+    speed=50,
+)
+
+# Bulk stream HIP-3 trades
+await ws.stream(
+    "hip3_trades", "xyz:XYZ100",
+    start=int(time.time() * 1000) - 86400000,
+    end=int(time.time() * 1000),
+    batch_size=1000,
 )
 ```
 
