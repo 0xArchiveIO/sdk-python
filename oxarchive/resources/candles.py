@@ -26,9 +26,10 @@ class CandlesResource:
         ...     all_candles.extend(result.data)
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1"):
+    def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
         self._base_path = base_path
+        self._coin_transform = coin_transform
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -80,7 +81,7 @@ class CandlesResource:
             ...     candles.extend(result.data)
         """
         data = self._http.get(
-            f"{self._base_path}/candles/{coin.upper()}",
+            f"{self._base_path}/candles/{self._coin_transform(coin)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -106,7 +107,7 @@ class CandlesResource:
     ) -> CursorResponse[list[Candle]]:
         """Async version of history(). start and end are required."""
         data = await self._http.aget(
-            f"{self._base_path}/candles/{coin.upper()}",
+            f"{self._base_path}/candles/{self._coin_transform(coin)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),

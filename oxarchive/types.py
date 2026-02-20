@@ -388,7 +388,7 @@ class Candle(BaseModel):
 WsChannel = Literal[
     "orderbook", "trades", "candles", "liquidations", "ticker", "all_tickers",
     "lighter_orderbook", "lighter_trades", "lighter_candles",
-    "hip3_orderbook", "hip3_trades",
+    "hip3_orderbook", "hip3_trades", "hip3_candles",
 ]
 """Available WebSocket channels. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+)."""
 

@@ -809,6 +809,7 @@ ws = OxArchiveWs(WsOptions(
 |---------|-------------|---------------|-------------------|
 | `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
 | `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
+| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -867,6 +868,15 @@ await ws.stream(
     start=int(time.time() * 1000) - 86400000,
     end=int(time.time() * 1000),
     batch_size=1000,
+)
+
+# HIP-3 candles
+await ws.replay(
+    "hip3_candles", "km:US500",
+    start=int(time.time() * 1000) - 86400000,
+    end=int(time.time() * 1000),
+    speed=100,
+    interval="1h"
 )
 ```
 

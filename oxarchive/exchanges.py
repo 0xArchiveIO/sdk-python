@@ -54,7 +54,7 @@ class HyperliquidClient:
         """Liquidation events (May 2025+)"""
 
         self.hip3 = Hip3Client(http)
-        """HIP-3 builder-deployed perpetuals (Pro+ only, February 2026+)"""
+        """HIP-3 builder-deployed perpetuals (February 2026+)"""
 
 
 class Hip3Client:
@@ -62,7 +62,7 @@ class Hip3Client:
     HIP-3 builder-deployed perpetuals client.
 
     Access Hyperliquid HIP-3 builder perps data through the 0xarchive API.
-    Requires Pro tier or higher.
+    Free: km:US500 only. Build+: all coins. Orderbook: Pro+.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -89,6 +89,9 @@ class Hip3Client:
 
         self.open_interest = OpenInterestResource(http, base_path, coin_transform=coin_transform)
         """Open interest"""
+
+        self.candles = CandlesResource(http, base_path, coin_transform=coin_transform)
+        """OHLCV candle data"""
 
 
 class LighterClient:
