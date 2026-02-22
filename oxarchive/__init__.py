@@ -9,7 +9,7 @@ Historical Market Data API for multiple exchanges:
 Example:
     >>> from oxarchive import Client
     >>>
-    >>> client = Client(api_key="ox_your_api_key")
+    >>> client = Client(api_key="0xa_your_api_key")
     >>>
     >>> # Hyperliquid data
     >>> hl_orderbook = client.hyperliquid.orderbook.get("BTC")
@@ -79,7 +79,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"
 
 __all__ = [
     # Client

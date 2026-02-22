@@ -8,7 +8,7 @@ Example:
     >>> from oxarchive import Client
     >>> from oxarchive.orderbook_reconstructor import OrderBookReconstructor
     >>>
-    >>> client = Client(api_key="your_api_key")
+    >>> client = Client(api_key="0xa_your_api_key")
     >>>
     >>> # Get raw tick data
     >>> tick_data = client.lighter.orderbook.history_tick("BTC", start=start, end=end)

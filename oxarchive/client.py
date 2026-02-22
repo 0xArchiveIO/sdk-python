@@ -30,7 +30,7 @@ class Client:
     Example:
         >>> from oxarchive import Client
         >>>
-        >>> client = Client(api_key="ox_your_api_key")
+        >>> client = Client(api_key="0xa_your_api_key")
         >>>
         >>> # Hyperliquid data
         >>> hl_orderbook = client.hyperliquid.orderbook.get("BTC")
@@ -50,7 +50,7 @@ class Client:
         >>> from oxarchive import Client
         >>>
         >>> async def main():
-        ...     client = Client(api_key="ox_your_api_key")
+        ...     client = Client(api_key="0xa_your_api_key")
         ...     orderbook = await client.hyperliquid.orderbook.aget("BTC")
         ...     print(f"BTC mid price: {orderbook.mid_price}")
         ...     await client.aclose()

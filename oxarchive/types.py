@@ -142,24 +142,22 @@ class Trade(BaseModel):
 class Instrument(BaseModel):
     """Trading instrument specification (Hyperliquid)."""
 
-    model_config = {"populate_by_name": True}
-
     name: str
     """Instrument symbol (e.g., BTC)."""
 
-    sz_decimals: int = Field(alias="szDecimals")
+    sz_decimals: int
     """Size decimal precision."""
 
-    max_leverage: Optional[int] = Field(default=None, alias="maxLeverage")
+    max_leverage: Optional[int] = None
     """Maximum leverage allowed."""
 
-    only_isolated: Optional[bool] = Field(default=None, alias="onlyIsolated")
+    only_isolated: Optional[bool] = None
     """If true, only isolated margin mode is allowed."""
 
-    instrument_type: Optional[Literal["perp", "spot"]] = Field(default=None, alias="instrumentType")
+    instrument_type: Optional[Literal["perp", "spot"]] = None
     """Type of instrument."""
 
-    is_active: bool = Field(default=True, alias="isActive")
+    is_active: bool = True
     """Whether the instrument is currently tradeable."""
 
 

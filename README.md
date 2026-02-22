@@ -24,7 +24,7 @@ pip install oxarchive[websocket]
 ```python
 from oxarchive import Client
 
-client = Client(api_key="ox_your_api_key")
+client = Client(api_key="0xa_your_api_key")
 
 # Hyperliquid data
 hl_orderbook = client.hyperliquid.orderbook.get("BTC")
@@ -59,7 +59,7 @@ import asyncio
 from oxarchive import Client
 
 async def main():
-    client = Client(api_key="ox_your_api_key")
+    client = Client(api_key="0xa_your_api_key")
 
     # Async get (Hyperliquid)
     orderbook = await client.hyperliquid.orderbook.aget("BTC")
@@ -77,7 +77,7 @@ asyncio.run(main())
 Or use as async context manager:
 
 ```python
-async with Client(api_key="ox_your_api_key") as client:
+async with Client(api_key="0xa_your_api_key") as client:
     orderbook = await client.hyperliquid.orderbook.aget("BTC")
 ```
 
@@ -85,7 +85,7 @@ async with Client(api_key="ox_your_api_key") as client:
 
 ```python
 client = Client(
-    api_key="ox_your_api_key",           # Required
+    api_key="0xa_your_api_key",           # Required
     base_url="https://api.0xarchive.io", # Optional
     timeout=30.0,                         # Optional, request timeout in seconds (default: 30.0)
 )
@@ -562,7 +562,7 @@ coverage = await client.data_quality.acoverage()
 
 ```python
 client = Client(
-    api_key="ox_your_api_key",
+    api_key="0xa_your_api_key",
     timeout=60.0  # 60 seconds for data quality endpoints
 )
 ```
@@ -587,7 +587,7 @@ The WebSocket client supports three modes: real-time streaming, historical repla
 import asyncio
 from oxarchive import OxArchiveWs, WsOptions
 
-ws = OxArchiveWs(WsOptions(api_key="ox_your_api_key"))
+ws = OxArchiveWs(WsOptions(api_key="0xa_your_api_key"))
 ```
 
 ### Real-time Streaming
@@ -599,7 +599,7 @@ import asyncio
 from oxarchive import OxArchiveWs, WsOptions
 
 async def main():
-    ws = OxArchiveWs(WsOptions(api_key="ox_your_api_key"))
+    ws = OxArchiveWs(WsOptions(api_key="0xa_your_api_key"))
 
     # Set up handlers
     ws.on_open(lambda: print("Connected"))
@@ -781,7 +781,7 @@ Gap thresholds vary by channel:
 
 ```python
 ws = OxArchiveWs(WsOptions(
-    api_key="ox_your_api_key",
+    api_key="0xa_your_api_key",
     ws_url="wss://api.0xarchive.io/ws",  # Optional
     auto_reconnect=True,                  # Auto-reconnect on disconnect (default: True)
     reconnect_delay=1.0,                  # Initial reconnect delay in seconds (default: 1.0)
@@ -906,7 +906,7 @@ client.orderbook.history(
 ```python
 from oxarchive import Client, OxArchiveError
 
-client = Client(api_key="ox_your_api_key")
+client = Client(api_key="0xa_your_api_key")
 
 try:
     orderbook = client.orderbook.get("INVALID")
@@ -934,7 +934,7 @@ from oxarchive import (
     ReconstructOptions,
 )
 
-client = Client(api_key="ox_your_api_key")
+client = Client(api_key="0xa_your_api_key")
 
 orderbook: OrderBook = client.hyperliquid.orderbook.get("BTC")
 result: CursorResponse = client.hyperliquid.trades.list("BTC", start=..., end=...)
