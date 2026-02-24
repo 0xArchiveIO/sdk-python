@@ -301,6 +301,125 @@ class Hip3Client:
         self.candles = CandlesResource(http, base_path, coin_transform=coin_transform)
         """OHLCV candle data"""
 
+    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
+        """Convert timestamp to Unix milliseconds."""
+        if ts is None:
+            return None
+        if isinstance(ts, int):
+            return ts
+        if isinstance(ts, datetime):
+            return int(ts.timestamp() * 1000)
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                return int(dt.timestamp() * 1000)
+            except ValueError:
+                return int(ts)
+        return None
+
+    def get_freshness(self, coin: str) -> CoinFreshness:
+        """
+        Get data freshness for a coin across all data types.
+
+        Args:
+            coin: Coin symbol (case-sensitive, e.g. 'km:US500')
+
+        Returns:
+            CoinFreshness with per-data-type lag information
+        """
+        data = self._http.get(f"/v1/hyperliquid/hip3/freshness/{coin}")
+        return CoinFreshness.model_validate(data["data"])
+
+    async def aget_freshness(self, coin: str) -> CoinFreshness:
+        """Async version of get_freshness()."""
+        data = await self._http.aget(f"/v1/hyperliquid/hip3/freshness/{coin}")
+        return CoinFreshness.model_validate(data["data"])
+
+    def get_summary(self, coin: str) -> CoinSummary:
+        """
+        Get combined market summary for a coin.
+
+        Args:
+            coin: Coin symbol (case-sensitive, e.g. 'km:US500')
+
+        Returns:
+            CoinSummary with all market metrics
+        """
+        data = self._http.get(f"/v1/hyperliquid/hip3/summary/{coin}")
+        return CoinSummary.model_validate(data["data"])
+
+    async def aget_summary(self, coin: str) -> CoinSummary:
+        """Async version of get_summary()."""
+        data = await self._http.aget(f"/v1/hyperliquid/hip3/summary/{coin}")
+        return CoinSummary.model_validate(data["data"])
+
+    def get_price_history(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[PriceSnapshot]]:
+        """
+        Get mark/oracle price history for a coin.
+
+        Args:
+            coin: Coin symbol (case-sensitive, e.g. 'km:US500')
+            start: Start timestamp (ISO or Unix ms)
+            end: End timestamp (ISO or Unix ms)
+            interval: Aggregation interval (e.g. '1h', '4h', '1d')
+            limit: Max records to return
+            cursor: Pagination cursor
+
+        Returns:
+            CursorResponse with price snapshots and next_cursor
+        """
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = self._http.get(
+            f"/v1/hyperliquid/hip3/prices/{coin}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[PriceSnapshot.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def aget_price_history(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[PriceSnapshot]]:
+        """Async version of get_price_history()."""
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = await self._http.aget(
+            f"/v1/hyperliquid/hip3/prices/{coin}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[PriceSnapshot.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
 
 class LighterClient:
     """
@@ -337,3 +456,122 @@ class LighterClient:
 
         self.candles = CandlesResource(http, base_path)
         """OHLCV candle data"""
+
+    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
+        """Convert timestamp to Unix milliseconds."""
+        if ts is None:
+            return None
+        if isinstance(ts, int):
+            return ts
+        if isinstance(ts, datetime):
+            return int(ts.timestamp() * 1000)
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                return int(dt.timestamp() * 1000)
+            except ValueError:
+                return int(ts)
+        return None
+
+    def get_freshness(self, coin: str) -> CoinFreshness:
+        """
+        Get data freshness for a coin across all data types.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+
+        Returns:
+            CoinFreshness with per-data-type lag information
+        """
+        data = self._http.get(f"/v1/lighter/freshness/{coin.upper()}")
+        return CoinFreshness.model_validate(data["data"])
+
+    async def aget_freshness(self, coin: str) -> CoinFreshness:
+        """Async version of get_freshness()."""
+        data = await self._http.aget(f"/v1/lighter/freshness/{coin.upper()}")
+        return CoinFreshness.model_validate(data["data"])
+
+    def get_summary(self, coin: str) -> CoinSummary:
+        """
+        Get combined market summary for a coin.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+
+        Returns:
+            CoinSummary with all market metrics
+        """
+        data = self._http.get(f"/v1/lighter/summary/{coin.upper()}")
+        return CoinSummary.model_validate(data["data"])
+
+    async def aget_summary(self, coin: str) -> CoinSummary:
+        """Async version of get_summary()."""
+        data = await self._http.aget(f"/v1/lighter/summary/{coin.upper()}")
+        return CoinSummary.model_validate(data["data"])
+
+    def get_price_history(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[PriceSnapshot]]:
+        """
+        Get mark/oracle price history for a coin.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+            start: Start timestamp (ISO or Unix ms)
+            end: End timestamp (ISO or Unix ms)
+            interval: Aggregation interval (e.g. '1h', '4h', '1d')
+            limit: Max records to return
+            cursor: Pagination cursor
+
+        Returns:
+            CursorResponse with price snapshots and next_cursor
+        """
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = self._http.get(
+            f"/v1/lighter/prices/{coin.upper()}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[PriceSnapshot.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def aget_price_history(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[PriceSnapshot]]:
+        """Async version of get_price_history()."""
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = await self._http.aget(
+            f"/v1/lighter/prices/{coin.upper()}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[PriceSnapshot.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )

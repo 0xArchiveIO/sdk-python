@@ -494,26 +494,36 @@ for bucket in volume.data:
 volume = await client.hyperliquid.liquidations.avolume("BTC", start=..., end=..., interval="1h")
 ```
 
-### Freshness (Hyperliquid only)
+### Freshness
 
 Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it.
 
 ```python
+# Hyperliquid
 freshness = client.hyperliquid.get_freshness("BTC")
 print(f"Orderbook last updated: {freshness.orderbook.last_updated}, lag: {freshness.orderbook.lag_ms}ms")
 print(f"Trades last updated: {freshness.trades.last_updated}, lag: {freshness.trades.lag_ms}ms")
 print(f"Funding last updated: {freshness.funding.last_updated}")
 print(f"OI last updated: {freshness.open_interest.last_updated}")
 
-# Async version
+# Lighter.xyz
+lighter_freshness = client.lighter.get_freshness("BTC")
+
+# HIP-3 (case-sensitive coins)
+hip3_freshness = client.hyperliquid.hip3.get_freshness("km:US500")
+
+# Async versions
 freshness = await client.hyperliquid.aget_freshness("BTC")
+lighter_freshness = await client.lighter.aget_freshness("BTC")
+hip3_freshness = await client.hyperliquid.hip3.aget_freshness("km:US500")
 ```
 
-### Summary (Hyperliquid only)
+### Summary
 
 Get a combined market snapshot in a single call -- mark/oracle price, funding rate, open interest, 24h volume, and 24h liquidation volumes.
 
 ```python
+# Hyperliquid (includes volume + liquidation data)
 summary = client.hyperliquid.get_summary("BTC")
 print(f"Mark price: {summary.mark_price}")
 print(f"Oracle price: {summary.oracle_price}")
@@ -524,16 +534,25 @@ print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
 print(f"  Long: ${summary.long_liquidation_volume_24h}")
 print(f"  Short: ${summary.short_liquidation_volume_24h}")
 
-# Async version
+# Lighter.xyz (price, funding, OI — no volume/liquidation data)
+lighter_summary = client.lighter.get_summary("BTC")
+
+# HIP-3 (includes mid_price — case-sensitive coins)
+hip3_summary = client.hyperliquid.hip3.get_summary("km:US500")
+print(f"Mid price: {hip3_summary.mid_price}")
+
+# Async versions
 summary = await client.hyperliquid.aget_summary("BTC")
+lighter_summary = await client.lighter.aget_summary("BTC")
+hip3_summary = await client.hyperliquid.hip3.aget_summary("km:US500")
 ```
 
-### Price History (Hyperliquid only)
+### Price History
 
-Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records (available from May 2023).
+Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records.
 
 ```python
-# Get hourly price history for the last 24 hours
+# Hyperliquid — available from May 2023
 prices = client.hyperliquid.get_price_history(
     "BTC",
     start="2026-01-01",
@@ -544,6 +563,12 @@ prices = client.hyperliquid.get_price_history(
 for snapshot in prices.data:
     print(f"{snapshot.timestamp}: mark={snapshot.mark_price}, oracle={snapshot.oracle_price}, mid={snapshot.mid_price}")
 
+# Lighter.xyz
+lighter_prices = client.lighter.get_price_history("BTC", start="2026-01-01", end="2026-01-02", interval="1h")
+
+# HIP-3 (case-sensitive coins)
+hip3_prices = client.hyperliquid.hip3.get_price_history("km:US500", start="2026-02-01", end="2026-02-02", interval="1d")
+
 # Paginate for larger ranges
 result = client.hyperliquid.get_price_history("BTC", start=..., end=..., interval="4h", limit=1000)
 while result.next_cursor:
@@ -552,8 +577,10 @@ while result.next_cursor:
         cursor=result.next_cursor, limit=1000
     )
 
-# Async version
+# Async versions
 prices = await client.hyperliquid.aget_price_history("BTC", start=..., end=..., interval="1h")
+lighter_prices = await client.lighter.aget_price_history("BTC", start=..., end=..., interval="1h")
+hip3_prices = await client.hyperliquid.hip3.aget_price_history("km:US500", start=..., end=..., interval="1d")
 ```
 
 ### Candles (OHLCV)

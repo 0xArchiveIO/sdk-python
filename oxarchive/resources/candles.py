@@ -66,17 +66,17 @@ class CandlesResource:
             end: End timestamp (required)
             interval: Candle interval (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w). Default: 1h
             cursor: Cursor from previous response's next_cursor
-            limit: Maximum number of results (default: 100, max: 1000)
+            limit: Maximum number of results (default: 100, max: 10000 for candles)
 
         Returns:
             CursorResponse with candle records and next_cursor for pagination
 
         Example:
-            >>> result = client.candles.history("BTC", start=start, end=end, interval="1h", limit=1000)
+            >>> result = client.candles.history("BTC", start=start, end=end, interval="1h", limit=10000)
             >>> candles = result.data
             >>> while result.next_cursor:
             ...     result = client.candles.history(
-            ...         "BTC", start=start, end=end, interval="1h", cursor=result.next_cursor, limit=1000
+            ...         "BTC", start=start, end=end, interval="1h", cursor=result.next_cursor, limit=10000
             ...     )
             ...     candles.extend(result.data)
         """
