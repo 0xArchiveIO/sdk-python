@@ -343,6 +343,143 @@ class Liquidation(BaseModel):
 
 
 # =============================================================================
+# Liquidation Volume Types
+# =============================================================================
+
+
+class LiquidationVolume(BaseModel):
+    """Pre-aggregated liquidation volume bucket."""
+
+    coin: str
+    """Trading pair symbol."""
+
+    timestamp: datetime
+    """Bucket timestamp (UTC)."""
+
+    total_usd: float
+    """Total liquidation volume in USD."""
+
+    long_usd: float
+    """Long liquidation volume in USD."""
+
+    short_usd: float
+    """Short liquidation volume in USD."""
+
+    count: int
+    """Total number of liquidations."""
+
+    long_count: int
+    """Number of long liquidations."""
+
+    short_count: int
+    """Number of short liquidations."""
+
+
+# =============================================================================
+# Freshness Types
+# =============================================================================
+
+
+class DataTypeFreshness(BaseModel):
+    """Freshness data for a single data type."""
+
+    last_updated: Optional[datetime] = None
+    """Timestamp of last data point."""
+
+    lag_ms: Optional[int] = None
+    """Lag in milliseconds from real-time."""
+
+
+class CoinFreshness(BaseModel):
+    """Per-coin freshness across all data types."""
+
+    coin: str
+    """Trading pair symbol."""
+
+    exchange: str
+    """Exchange name."""
+
+    measured_at: datetime
+    """When this freshness was measured."""
+
+    orderbook: DataTypeFreshness
+    """Orderbook data freshness."""
+
+    trades: DataTypeFreshness
+    """Trades data freshness."""
+
+    funding: DataTypeFreshness
+    """Funding rate data freshness."""
+
+    open_interest: DataTypeFreshness
+    """Open interest data freshness."""
+
+    liquidations: Optional[DataTypeFreshness] = None
+    """Liquidations data freshness."""
+
+
+# =============================================================================
+# Market Summary Types
+# =============================================================================
+
+
+class CoinSummary(BaseModel):
+    """Combined market summary for a coin."""
+
+    coin: str
+    """Trading pair symbol."""
+
+    timestamp: datetime
+    """Summary timestamp."""
+
+    mark_price: Optional[str] = None
+    """Current mark price."""
+
+    oracle_price: Optional[str] = None
+    """Current oracle price."""
+
+    mid_price: Optional[str] = None
+    """Current mid price."""
+
+    funding_rate: Optional[str] = None
+    """Current funding rate."""
+
+    premium: Optional[str] = None
+    """Current premium."""
+
+    open_interest: Optional[str] = None
+    """Current open interest."""
+
+    volume_24h: Optional[str] = None
+    """24-hour trading volume."""
+
+    liquidation_volume_24h: Optional[float] = None
+    """24-hour total liquidation volume in USD."""
+
+    long_liquidation_volume_24h: Optional[float] = None
+    """24-hour long liquidation volume in USD."""
+
+    short_liquidation_volume_24h: Optional[float] = None
+    """24-hour short liquidation volume in USD."""
+
+
+class PriceSnapshot(BaseModel):
+    """Mark/oracle price at a point in time."""
+
+    timestamp: datetime
+    """Snapshot timestamp."""
+
+    mark_price: Optional[str] = None
+    """Mark price."""
+
+    oracle_price: Optional[str] = None
+    """Oracle price."""
+
+    mid_price: Optional[str] = None
+    """Mid price."""
+
+
+# =============================================================================
 # Candle Types
 # =============================================================================
 
@@ -385,10 +522,20 @@ class Candle(BaseModel):
 
 WsChannel = Literal[
     "orderbook", "trades", "candles", "liquidations", "ticker", "all_tickers",
+    "open_interest", "funding",
     "lighter_orderbook", "lighter_trades", "lighter_candles",
+    "lighter_open_interest", "lighter_funding",
     "hip3_orderbook", "hip3_trades", "hip3_candles",
+    "hip3_open_interest", "hip3_funding",
 ]
-"""Available WebSocket channels. Note: ticker/all_tickers are real-time only. Liquidations is historical only (May 2025+)."""
+"""Available WebSocket channels.
+
+Notes:
+- ticker/all_tickers are real-time only.
+- liquidations is historical only (May 2025+).
+- open_interest, funding, lighter_open_interest, lighter_funding,
+  hip3_open_interest, hip3_funding are historical only (replay/stream).
+"""
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]
 """WebSocket connection state."""
@@ -443,10 +590,18 @@ class WsData(BaseModel):
 
 
 class WsReplayStarted(BaseModel):
-    """Replay started response."""
+    """Replay started response.
+
+    In single-channel mode, ``channel`` is set to the replayed channel.
+    In multi-channel mode, ``channels`` lists all channels being replayed
+    and ``channel`` may be absent or set to the first channel.
+    """
 
     type: Literal["replay_started"]
-    channel: WsChannel
+    channel: Optional[WsChannel] = None
+    """Channel (single-channel mode)."""
+    channels: Optional[list[WsChannel]] = None
+    """Channels (multi-channel mode)."""
     coin: str
     start: int
     """Start timestamp in milliseconds."""
@@ -471,10 +626,16 @@ class WsReplayResumed(BaseModel):
 
 
 class WsReplayCompleted(BaseModel):
-    """Replay completed response."""
+    """Replay completed response.
+
+    In multi-channel mode, ``channels`` lists all channels that were replayed.
+    """
 
     type: Literal["replay_completed"]
-    channel: WsChannel
+    channel: Optional[WsChannel] = None
+    """Channel (single-channel mode)."""
+    channels: Optional[list[WsChannel]] = None
+    """Channels (multi-channel mode)."""
     coin: str
     snapshots_sent: int
 
@@ -493,6 +654,24 @@ class WsHistoricalData(BaseModel):
     coin: str
     timestamp: int
     data: dict[str, Any]
+
+
+class WsReplaySnapshot(BaseModel):
+    """Initial state snapshot for a channel in multi-channel replay.
+
+    Before the timeline starts, the server sends a replay_snapshot for each
+    channel to provide the initial state. For example, the latest orderbook
+    state, most recent funding rate, and current open interest at the replay
+    start time.
+    """
+
+    type: Literal["replay_snapshot"]
+    channel: WsChannel
+    coin: str
+    timestamp: int
+    """Timestamp of the snapshot (ms)."""
+    data: dict[str, Any]
+    """Initial state data for this channel."""
 
 
 class OrderbookDelta(BaseModel):
@@ -536,10 +715,16 @@ class WsHistoricalTickData(BaseModel):
 
 
 class WsStreamStarted(BaseModel):
-    """Stream started response."""
+    """Stream started response.
+
+    In multi-channel mode, ``channels`` lists all channels being streamed.
+    """
 
     type: Literal["stream_started"]
-    channel: WsChannel
+    channel: Optional[WsChannel] = None
+    """Channel (single-channel mode)."""
+    channels: Optional[list[WsChannel]] = None
+    """Channels (multi-channel mode)."""
     coin: str
     start: int
     """Start timestamp in milliseconds."""
@@ -571,10 +756,16 @@ class WsHistoricalBatch(BaseModel):
 
 
 class WsStreamCompleted(BaseModel):
-    """Stream completed response."""
+    """Stream completed response.
+
+    In multi-channel mode, ``channels`` lists all channels that were streamed.
+    """
 
     type: Literal["stream_completed"]
-    channel: WsChannel
+    channel: Optional[WsChannel] = None
+    """Channel (single-channel mode)."""
+    channels: Optional[list[WsChannel]] = None
+    """Channels (multi-channel mode)."""
     coin: str
     snapshots_sent: int
 

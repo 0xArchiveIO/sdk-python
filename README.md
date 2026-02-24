@@ -375,10 +375,29 @@ history = client.hyperliquid.funding.history(
     end="2024-01-07"
 )
 
+# Get funding rate history with aggregation interval
+history = client.hyperliquid.funding.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-07",
+    interval="1h"
+)
+
 # Async versions
 current = await client.hyperliquid.funding.acurrent("BTC")
 history = await client.hyperliquid.funding.ahistory("ETH", start=..., end=...)
 ```
+
+#### Funding History Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `coin` | `str` | Yes | Coin symbol (e.g., `'BTC'`, `'ETH'`) |
+| `start` | `Timestamp` | Yes | Start timestamp |
+| `end` | `Timestamp` | Yes | End timestamp |
+| `cursor` | `Timestamp` | No | Cursor from previous response for pagination |
+| `limit` | `int` | No | Max results (default: 100, max: 1000) |
+| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
 
 ### Open Interest
 
@@ -393,10 +412,29 @@ history = client.hyperliquid.open_interest.history(
     end="2024-01-07"
 )
 
+# Get open interest history with aggregation interval
+oi = client.hyperliquid.open_interest.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-07",
+    interval="1h"
+)
+
 # Async versions
 current = await client.hyperliquid.open_interest.acurrent("BTC")
 history = await client.hyperliquid.open_interest.ahistory("ETH", start=..., end=...)
 ```
+
+#### Open Interest History Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `coin` | `str` | Yes | Coin symbol (e.g., `'BTC'`, `'ETH'`) |
+| `start` | `Timestamp` | Yes | Start timestamp |
+| `end` | `Timestamp` | Yes | End timestamp |
+| `cursor` | `Timestamp` | No | Cursor from previous response for pagination |
+| `limit` | `int` | No | Max results (default: 100, max: 1000) |
+| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
 
 ### Liquidations (Hyperliquid only)
 
@@ -800,6 +838,8 @@ ws = OxArchiveWs(WsOptions(
 | `trades` | Trade/fill updates | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
 | `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
+| `open_interest` | Open interest snapshots | Yes | Yes (replay/stream only) |
+| `funding` | Funding rate records | Yes | Yes (replay/stream only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
 
@@ -810,6 +850,8 @@ ws = OxArchiveWs(WsOptions(
 | `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
 | `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
+| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes (replay/stream only) |
+| `hip3_funding` | HIP-3 funding rate records | Yes | Yes (replay/stream only) |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -820,6 +862,8 @@ ws = OxArchiveWs(WsOptions(
 | `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | Yes |
 | `lighter_trades` | Lighter trade/fill updates | Yes | Yes |
 | `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
+| `lighter_open_interest` | Lighter open interest snapshots | Yes | Yes (replay/stream only) |
+| `lighter_funding` | Lighter funding rate records | Yes | Yes (replay/stream only) |
 
 #### Candle Replay/Stream
 
@@ -880,6 +924,175 @@ await ws.replay(
 )
 ```
 
+#### Open Interest / Funding Replay & Stream
+
+The `open_interest`, `funding`, `lighter_open_interest`, `lighter_funding`, `hip3_open_interest`, and `hip3_funding` channels are **historical only** (replay/stream). They do not support real-time subscriptions.
+
+```python
+# Replay open interest at 50x speed
+await ws.replay(
+    "open_interest", "BTC",
+    start=int(time.time() * 1000) - 86400000,
+    end=int(time.time() * 1000),
+    speed=50,
+)
+
+# Replay funding rates
+await ws.replay(
+    "funding", "ETH",
+    start=int(time.time() * 1000) - 86400000,
+    speed=50,
+)
+
+# Bulk stream Lighter open interest
+await ws.stream(
+    "lighter_open_interest", "BTC",
+    start=int(time.time() * 1000) - 86400000,
+    end=int(time.time() * 1000),
+    batch_size=1000,
+)
+
+# HIP-3 funding replay
+await ws.replay(
+    "hip3_funding", "km:US500",
+    start=int(time.time() * 1000) - 86400000,
+    speed=100,
+)
+```
+
+### Multi-Channel Replay
+
+Replay multiple channels in a single synchronized timeline. All data is interleaved by timestamp, preserving the original timing relationships between orderbook updates, trades, funding rates, and open interest. Before the timeline begins, `replay_snapshot` messages provide the initial state for each channel.
+
+```python
+import asyncio
+import time
+from oxarchive import OxArchiveWs, WsOptions
+
+async def main():
+    ws = OxArchiveWs(WsOptions(api_key="ox_..."))
+
+    # Handle initial state snapshots (sent before timeline starts)
+    def on_snapshot(channel, coin, timestamp, data):
+        print(f"Initial {channel} state at {timestamp}:")
+        if channel == "orderbook":
+            print(f"  Mid price: {data.get('mid_price')}")
+        elif channel == "funding":
+            print(f"  Rate: {data.get('funding_rate')}")
+        elif channel == "open_interest":
+            print(f"  OI: {data.get('open_interest')}")
+
+    # Handle interleaved timeline data
+    def on_data(coin, timestamp, data):
+        # The 'channel' field on the raw message tells you which channel
+        # this record belongs to. Use on_message() for full access.
+        print(f"  {timestamp}: {data}")
+
+    # Full message handler to see the channel field
+    def on_message(msg):
+        if hasattr(msg, 'type') and msg.type == "historical_data":
+            channel = msg.channel
+            print(f"[{channel}] {msg.coin} @ {msg.timestamp}")
+
+    ws.on_replay_snapshot(on_snapshot)
+    ws.on_historical_data(on_data)
+    ws.on_message(on_message)
+
+    ws.on_replay_start(lambda ch, coin, start, end, speed:
+        print(f"Multi-channel replay started at {speed}x")
+    )
+    ws.on_replay_complete(lambda ch, coin, sent:
+        print(f"Replay complete: {sent} total records")
+    )
+
+    await ws.connect()
+
+    # Replay orderbook + trades + funding together at 10x speed
+    await ws.multi_replay(
+        ["orderbook", "trades", "funding"],
+        "BTC",
+        start=int(time.time() * 1000) - 86400000,
+        end=int(time.time() * 1000),
+        speed=10,
+    )
+
+    await asyncio.sleep(60)
+    await ws.disconnect()
+
+asyncio.run(main())
+```
+
+**Multi-channel replay examples by exchange:**
+
+```python
+# Hyperliquid: orderbook + trades + OI + funding
+await ws.multi_replay(
+    ["orderbook", "trades", "open_interest", "funding"],
+    "BTC",
+    start=start_ms, speed=10,
+)
+
+# Lighter.xyz: orderbook + trades + OI + funding
+await ws.multi_replay(
+    ["lighter_orderbook", "lighter_trades", "lighter_open_interest", "lighter_funding"],
+    "BTC",
+    start=start_ms, speed=10,
+)
+
+# HIP-3: orderbook + trades + OI + funding
+await ws.multi_replay(
+    ["hip3_orderbook", "hip3_trades", "hip3_open_interest", "hip3_funding"],
+    "km:US500",
+    start=start_ms, speed=10,
+)
+```
+
+### Multi-Channel Bulk Streaming
+
+Stream multiple channels together as fast as possible for bulk data download. Data arrives in batches with interleaved channels.
+
+```python
+import asyncio
+import time
+from oxarchive import OxArchiveWs, WsOptions
+
+async def main():
+    ws = OxArchiveWs(WsOptions(api_key="ox_..."))
+    data_by_channel = {}
+
+    def on_batch(coin, records):
+        for r in records:
+            print(f"Batch record: {r.timestamp} -> {r.data}")
+
+    def on_message(msg):
+        if hasattr(msg, 'type') and msg.type == "historical_batch":
+            channel = msg.channel
+            data_by_channel.setdefault(channel, []).extend(msg.data)
+
+    ws.on_batch(on_batch)
+    ws.on_message(on_message)
+
+    ws.on_stream_complete(lambda ch, coin, sent:
+        print(f"Done: {sent} total records across all channels")
+    )
+
+    await ws.connect()
+
+    # Stream orderbook + trades + funding together
+    await ws.multi_stream(
+        ["orderbook", "trades", "funding"],
+        "ETH",
+        start=int(time.time() * 1000) - 3600000,
+        end=int(time.time() * 1000),
+        batch_size=1000,
+    )
+
+    await asyncio.sleep(30)
+    await ws.disconnect()
+
+asyncio.run(main())
+```
+
 ## Timestamp Formats
 
 The SDK accepts timestamps in multiple formats:
@@ -922,7 +1135,10 @@ Full type hint support with Pydantic models:
 
 ```python
 from oxarchive import Client, LighterGranularity
-from oxarchive.types import OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest, Candle, Liquidation
+from oxarchive.types import (
+    OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest, Candle, Liquidation,
+    WsReplaySnapshot,
+)
 from oxarchive.resources.trades import CursorResponse
 
 # Orderbook reconstruction types (Enterprise)

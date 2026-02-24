@@ -14,6 +14,16 @@ Examples:
         >>> ws.on_historical_data(lambda coin, ts, data: print(f"{ts}: {data}"))
         >>> await ws.replay("orderbook", "BTC", start=time.time()*1000 - 86400000, speed=10)
 
+    Multi-channel replay (synchronized timeline):
+        >>> ws = OxArchiveWs(WsOptions(api_key="ox_..."))
+        >>> await ws.connect()
+        >>> ws.on_replay_snapshot(lambda ch, coin, ts, data: print(f"Initial {ch}: {data}"))
+        >>> ws.on_historical_data(lambda coin, ts, data: print(f"{ts}: {data}"))
+        >>> await ws.multi_replay(
+        ...     ["orderbook", "trades", "funding"], "BTC",
+        ...     start=time.time()*1000 - 86400000, speed=10
+        ... )
+
     Bulk streaming (like Databento):
         >>> ws = OxArchiveWs(WsOptions(api_key="ox_..."))
         >>> await ws.connect()
@@ -59,6 +69,7 @@ from .types import (
     WsReplayStopped,
     WsHistoricalData,
     WsHistoricalTickData,
+    WsReplaySnapshot,
     WsStreamStarted,
     WsStreamProgress,
     WsHistoricalBatch,
@@ -114,6 +125,7 @@ ErrorHandler = Callable[[Exception], None]
 # Replay handlers
 HistoricalDataHandler = Callable[[str, int, dict], None]
 HistoricalTickDataHandler = Callable[[str, dict, list[OrderbookDelta]], None]  # coin, checkpoint, deltas
+ReplaySnapshotHandler = Callable[[WsChannel, str, int, dict], None]  # channel, coin, timestamp, data
 ReplayStartHandler = Callable[[WsChannel, str, int, int, float], None]  # channel, coin, start, end, speed
 ReplayCompleteHandler = Callable[[WsChannel, str, int], None]  # channel, coin, snapshots_sent
 
@@ -284,6 +296,7 @@ class OxArchiveWs:
         # Replay handlers (Option B)
         self._on_historical_data: Optional[HistoricalDataHandler] = None
         self._on_historical_tick_data: Optional[HistoricalTickDataHandler] = None
+        self._on_replay_snapshot: Optional[ReplaySnapshotHandler] = None
         self._on_replay_start: Optional[ReplayStartHandler] = None
         self._on_replay_complete: Optional[ReplayCompleteHandler] = None
 
@@ -493,6 +506,53 @@ class OxArchiveWs:
         """Stop the current replay."""
         await self._send({"op": "replay.stop"})
 
+    async def multi_replay(
+        self,
+        channels: list[WsChannel],
+        coin: str,
+        start: int,
+        end: Optional[int] = None,
+        speed: float = 1.0,
+    ) -> None:
+        """Start a multi-channel historical replay with synchronized timing.
+
+        All channels are replayed in a single interleaved timeline, preserving
+        the original timing relationships between different data types. Before
+        the timeline begins, the server sends ``replay_snapshot`` messages with
+        the initial state for each channel.
+
+        Use ``on_replay_snapshot()`` to receive the initial state snapshots and
+        ``on_historical_data()`` to receive the interleaved timeline data. The
+        ``channel`` field on each ``historical_data`` message indicates which
+        channel the record belongs to.
+
+        Args:
+            channels: List of channels to replay together (e.g.,
+                ``["orderbook", "trades", "funding"]``).
+            coin: Trading pair (e.g., ``'BTC'``, ``'ETH'``, ``'km:US500'``).
+            start: Start timestamp (Unix ms).
+            end: End timestamp (Unix ms, defaults to now).
+            speed: Playback speed multiplier (1 = real-time, 10 = 10x faster).
+
+        Example:
+            >>> await ws.multi_replay(
+            ...     ["orderbook", "trades", "funding"],
+            ...     "BTC",
+            ...     start=int(time.time() * 1000) - 86400000,
+            ...     speed=10,
+            ... )
+        """
+        msg: dict[str, Any] = {
+            "op": "replay",
+            "channels": channels,
+            "coin": coin,
+            "start": start,
+            "speed": speed,
+        }
+        if end is not None:
+            msg["end"] = end
+        await self._send(msg)
+
     # =========================================================================
     # Bulk Streaming (Option D) - Like Databento
     # =========================================================================
@@ -539,6 +599,48 @@ class OxArchiveWs:
     async def stream_stop(self) -> None:
         """Stop the current bulk stream."""
         await self._send({"op": "stream.stop"})
+
+    async def multi_stream(
+        self,
+        channels: list[WsChannel],
+        coin: str,
+        start: int,
+        end: int,
+        batch_size: int = 1000,
+    ) -> None:
+        """Start a multi-channel bulk stream for fast data download.
+
+        All channels are streamed together in a single interleaved timeline.
+        Data arrives in batches without timing delays. The ``channel`` field on
+        each ``historical_batch`` message indicates which channel the batch
+        belongs to.
+
+        Args:
+            channels: List of channels to stream together (e.g.,
+                ``["orderbook", "trades", "open_interest"]``).
+            coin: Trading pair (e.g., ``'BTC'``, ``'ETH'``).
+            start: Start timestamp (Unix ms).
+            end: End timestamp (Unix ms).
+            batch_size: Records per batch message.
+
+        Example:
+            >>> await ws.multi_stream(
+            ...     ["orderbook", "trades", "funding"],
+            ...     "BTC",
+            ...     start=int(time.time() * 1000) - 3600000,
+            ...     end=int(time.time() * 1000),
+            ...     batch_size=1000,
+            ... )
+        """
+        msg: dict[str, Any] = {
+            "op": "stream",
+            "channels": channels,
+            "coin": coin,
+            "start": start,
+            "end": end,
+            "batch_size": batch_size,
+        }
+        await self._send(msg)
 
     # Event handler setters
 
@@ -588,6 +690,27 @@ class OxArchiveWs:
         Handler receives: (coin, checkpoint, deltas)
         """
         self._on_historical_tick_data = handler
+
+    def on_replay_snapshot(self, handler: ReplaySnapshotHandler) -> None:
+        """Set handler for replay snapshot messages (multi-channel replay).
+
+        In multi-channel replay mode, the server sends a ``replay_snapshot``
+        for each channel before the interleaved timeline begins. This provides
+        the initial state (e.g., latest orderbook, most recent funding rate,
+        current open interest) at the replay start time.
+
+        Handler receives: (channel, coin, timestamp, data)
+
+        Example:
+            >>> def handle_snapshot(channel, coin, timestamp, data):
+            ...     print(f"Initial {channel} state for {coin} at {timestamp}")
+            ...     if channel == "orderbook":
+            ...         print(f"  Mid price: {data.get('mid_price')}")
+            ...     elif channel == "funding":
+            ...         print(f"  Rate: {data.get('funding_rate')}")
+            >>> ws.on_replay_snapshot(handle_snapshot)
+        """
+        self._on_replay_snapshot = handler
 
     def on_replay_start(self, handler: ReplayStartHandler) -> None:
         """Set handler for replay started event.
@@ -774,8 +897,15 @@ class OxArchiveWs:
 
             # Replay messages (Option B)
             elif msg_type == "replay_started" and self._on_replay_start:
+                # Support both single-channel (channel) and multi-channel (channels)
+                channel = data.get("channel") or (data.get("channels", [None])[0])
                 self._on_replay_start(
-                    data["channel"], data["coin"], data["start"], data["end"], data["speed"]
+                    channel, data["coin"], data["start"], data["end"], data["speed"]
+                )
+
+            elif msg_type == "replay_snapshot" and self._on_replay_snapshot:
+                self._on_replay_snapshot(
+                    data["channel"], data["coin"], data["timestamp"], data["data"]
                 )
 
             elif msg_type == "historical_data" and self._on_historical_data:
@@ -786,11 +916,13 @@ class OxArchiveWs:
                 self._on_historical_tick_data(msg.coin, msg.checkpoint, msg.deltas)
 
             elif msg_type == "replay_completed" and self._on_replay_complete:
-                self._on_replay_complete(data["channel"], data["coin"], data["snapshots_sent"])
+                channel = data.get("channel") or (data.get("channels", [None])[0])
+                self._on_replay_complete(channel, data["coin"], data["snapshots_sent"])
 
             # Stream messages (Option D)
             elif msg_type == "stream_started" and self._on_stream_start:
-                self._on_stream_start(data["channel"], data["coin"], data["start"], data["end"])
+                channel = data.get("channel") or (data.get("channels", [None])[0])
+                self._on_stream_start(channel, data["coin"], data["start"], data["end"])
 
             elif msg_type == "stream_progress" and self._on_stream_progress:
                 self._on_stream_progress(data["snapshots_sent"])
@@ -800,7 +932,8 @@ class OxArchiveWs:
                 self._on_batch(data["coin"], records)
 
             elif msg_type == "stream_completed" and self._on_stream_complete:
-                self._on_stream_complete(data["channel"], data["coin"], data["snapshots_sent"])
+                channel = data.get("channel") or (data.get("channels", [None])[0])
+                self._on_stream_complete(channel, data["coin"], data["snapshots_sent"])
 
             # Gap detection
             elif msg_type == "gap_detected" and self._on_gap:
