@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from ..http import HttpClient
-from ..types import CursorResponse, Liquidation, Timestamp
+from ..types import CursorResponse, Liquidation, LiquidationVolume, Timestamp
 
 
 class LiquidationsResource:
@@ -194,5 +194,75 @@ class LiquidationsResource:
         )
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    def volume(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[LiquidationVolume]]:
+        """
+        Get pre-aggregated liquidation volume for a coin.
+
+        Args:
+            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            start: Start timestamp
+            end: End timestamp
+            interval: Aggregation interval (e.g., '1h', '1d')
+            limit: Maximum number of results (default: 100, max: 1000)
+            cursor: Cursor from previous response's next_cursor
+
+        Returns:
+            CursorResponse with liquidation volume buckets and next_cursor for pagination
+
+        Example:
+            >>> result = client.hyperliquid.liquidations.volume("BTC", start="2025-06-01", end="2025-06-02")
+            >>> for bucket in result.data:
+            ...     print(f"{bucket.timestamp}: ${bucket.total_usd:.0f} ({bucket.count} liquidations)")
+        """
+        data = self._http.get(
+            f"{self._base_path}/liquidations/{coin.upper()}/volume",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "interval": interval,
+                "limit": limit,
+                "cursor": cursor,
+            },
+        )
+        return CursorResponse(
+            data=[LiquidationVolume.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def avolume(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[LiquidationVolume]]:
+        """Async version of volume()."""
+        data = await self._http.aget(
+            f"{self._base_path}/liquidations/{coin.upper()}/volume",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "interval": interval,
+                "limit": limit,
+                "cursor": cursor,
+            },
+        )
+        return CursorResponse(
+            data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )

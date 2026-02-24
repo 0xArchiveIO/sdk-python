@@ -50,6 +50,7 @@ class FundingResource:
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
+        interval: Optional[str] = None,
     ) -> CursorResponse[list[FundingRate]]:
         """
         Get funding rate history for a coin with cursor-based pagination.
@@ -60,6 +61,8 @@ class FundingResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor (timestamp)
             limit: Maximum number of results (default: 100, max: 1000)
+            interval: Aggregation interval (e.g., '5m', '15m', '30m', '1h', '4h', '1d').
+                When omitted, raw ~1 min data is returned.
 
         Returns:
             CursorResponse with funding rate records and next_cursor for pagination
@@ -73,14 +76,17 @@ class FundingResource:
             ...     )
             ...     rates.extend(result.data)
         """
+        params = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "cursor": self._convert_timestamp(cursor),
+            "limit": limit,
+        }
+        if interval:
+            params["interval"] = interval
         data = self._http.get(
             f"{self._base_path}/funding/{self._coin_transform(coin)}",
-            params={
-                "start": self._convert_timestamp(start),
-                "end": self._convert_timestamp(end),
-                "cursor": self._convert_timestamp(cursor),
-                "limit": limit,
-            },
+            params=params,
         )
         return CursorResponse(
             data=[FundingRate.model_validate(item) for item in data["data"]],
@@ -95,16 +101,20 @@ class FundingResource:
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
+        interval: Optional[str] = None,
     ) -> CursorResponse[list[FundingRate]]:
         """Async version of history(). start and end are required."""
+        params = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "cursor": self._convert_timestamp(cursor),
+            "limit": limit,
+        }
+        if interval:
+            params["interval"] = interval
         data = await self._http.aget(
             f"{self._base_path}/funding/{self._coin_transform(coin)}",
-            params={
-                "start": self._convert_timestamp(start),
-                "end": self._convert_timestamp(end),
-                "cursor": self._convert_timestamp(cursor),
-                "limit": limit,
-            },
+            params=params,
         )
         return CursorResponse(
             data=[FundingRate.model_validate(item) for item in data["data"]],

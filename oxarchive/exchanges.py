@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Optional
+
 from .http import HttpClient
 from .resources import (
     OrderBookResource,
@@ -13,6 +16,15 @@ from .resources import (
     OpenInterestResource,
     CandlesResource,
     LiquidationsResource,
+)
+from .types import (
+    CoinFreshness,
+    CoinSummary,
+    CursorResponse,
+    DataTypeFreshness,
+    LiquidationVolume,
+    PriceSnapshot,
+    Timestamp,
 )
 
 
@@ -55,6 +67,202 @@ class HyperliquidClient:
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (February 2026+)"""
+
+    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
+        """Convert timestamp to Unix milliseconds."""
+        if ts is None:
+            return None
+        if isinstance(ts, int):
+            return ts
+        if isinstance(ts, datetime):
+            return int(ts.timestamp() * 1000)
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                return int(dt.timestamp() * 1000)
+            except ValueError:
+                return int(ts)
+        return None
+
+    # -----------------------------------------------------------------
+    # Convenience methods (not tied to a specific resource)
+    # -----------------------------------------------------------------
+
+    def get_liquidation_volume(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[LiquidationVolume]]:
+        """
+        Get aggregated liquidation volume for a coin.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+            start: Start timestamp (ISO or Unix ms)
+            end: End timestamp (ISO or Unix ms)
+            interval: Aggregation interval (e.g. '1h', '4h', '1d')
+            limit: Max records to return
+            cursor: Pagination cursor
+
+        Returns:
+            CursorResponse with liquidation volume buckets and next_cursor
+        """
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = self._http.get(
+            f"/v1/hyperliquid/liquidations/{coin.upper()}/volume",
+            params=params,
+        )
+        return CursorResponse(
+            data=[LiquidationVolume.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def aget_liquidation_volume(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[LiquidationVolume]]:
+        """Async version of get_liquidation_volume()."""
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = await self._http.aget(
+            f"/v1/hyperliquid/liquidations/{coin.upper()}/volume",
+            params=params,
+        )
+        return CursorResponse(
+            data=[LiquidationVolume.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    def get_freshness(self, coin: str) -> CoinFreshness:
+        """
+        Get data freshness for a coin across all data types.
+
+        Returns how recently each data type (orderbook, trades, funding,
+        open interest, liquidations) was updated for the given coin.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+
+        Returns:
+            CoinFreshness with per-data-type lag information
+        """
+        data = self._http.get(f"/v1/hyperliquid/freshness/{coin.upper()}")
+        return CoinFreshness.model_validate(data["data"])
+
+    async def aget_freshness(self, coin: str) -> CoinFreshness:
+        """Async version of get_freshness()."""
+        data = await self._http.aget(f"/v1/hyperliquid/freshness/{coin.upper()}")
+        return CoinFreshness.model_validate(data["data"])
+
+    def get_summary(self, coin: str) -> CoinSummary:
+        """
+        Get combined market summary for a coin.
+
+        Returns a single snapshot with price, funding, open interest,
+        volume, and liquidation metrics.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+
+        Returns:
+            CoinSummary with all market metrics
+        """
+        data = self._http.get(f"/v1/hyperliquid/summary/{coin.upper()}")
+        return CoinSummary.model_validate(data["data"])
+
+    async def aget_summary(self, coin: str) -> CoinSummary:
+        """Async version of get_summary()."""
+        data = await self._http.aget(f"/v1/hyperliquid/summary/{coin.upper()}")
+        return CoinSummary.model_validate(data["data"])
+
+    def get_price_history(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[PriceSnapshot]]:
+        """
+        Get mark/oracle price history for a coin.
+
+        Args:
+            coin: Coin symbol (e.g. 'BTC')
+            start: Start timestamp (ISO or Unix ms)
+            end: End timestamp (ISO or Unix ms)
+            interval: Aggregation interval (e.g. '1h', '4h', '1d')
+            limit: Max records to return
+            cursor: Pagination cursor
+
+        Returns:
+            CursorResponse with price snapshots and next_cursor
+        """
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = self._http.get(
+            f"/v1/hyperliquid/prices/{coin.upper()}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[PriceSnapshot.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def aget_price_history(
+        self,
+        coin: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
+        cursor: Optional[str] = None,
+    ) -> CursorResponse[list[PriceSnapshot]]:
+        """Async version of get_price_history()."""
+        params: dict = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "interval": interval,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        data = await self._http.aget(
+            f"/v1/hyperliquid/prices/{coin.upper()}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[PriceSnapshot.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
 
 
 class Hip3Client:

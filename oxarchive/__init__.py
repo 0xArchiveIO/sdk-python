@@ -43,6 +43,11 @@ from .types import (
     FundingRate,
     OpenInterest,
     Liquidation,
+    LiquidationVolume,
+    DataTypeFreshness,
+    CoinFreshness,
+    CoinSummary,
+    PriceSnapshot,
     Candle,
     CandleInterval,
     OxArchiveError,
@@ -61,6 +66,7 @@ from .types import (
     WsReplayCompleted,
     WsReplayStopped,
     WsHistoricalData,
+    WsReplaySnapshot,
     # Stream types (Option D)
     WsStreamStarted,
     WsStreamProgress,
@@ -79,7 +85,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.8.3"
+__version__ = "0.9.0"
 
 __all__ = [
     # Client
@@ -109,6 +115,11 @@ __all__ = [
     "FundingRate",
     "OpenInterest",
     "Liquidation",
+    "LiquidationVolume",
+    "DataTypeFreshness",
+    "CoinFreshness",
+    "CoinSummary",
+    "PriceSnapshot",
     "Candle",
     "CandleInterval",
     "OxArchiveError",
@@ -127,6 +138,7 @@ __all__ = [
     "WsReplayCompleted",
     "WsReplayStopped",
     "WsHistoricalData",
+    "WsReplaySnapshot",
     # Stream Types (Option D)
     "WsStreamStarted",
     "WsStreamProgress",
