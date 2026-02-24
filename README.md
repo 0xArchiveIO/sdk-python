@@ -474,6 +474,88 @@ liquidations = await client.hyperliquid.liquidations.ahistory("BTC", start=..., 
 user_liquidations = await client.hyperliquid.liquidations.aby_user("0x...", start=..., end=...)
 ```
 
+### Liquidation Volume (Hyperliquid only)
+
+Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records.
+
+```python
+# Get hourly liquidation volume for the last week
+volume = client.hyperliquid.liquidations.volume(
+    "BTC",
+    start="2026-01-01",
+    end="2026-01-08",
+    interval="1h"  # 5m, 15m, 30m, 1h, 4h, 1d
+)
+
+for bucket in volume.data:
+    print(f"{bucket.timestamp}: total=${bucket.total_usd}, long=${bucket.long_usd}, short=${bucket.short_usd}")
+
+# Async version
+volume = await client.hyperliquid.liquidations.avolume("BTC", start=..., end=..., interval="1h")
+```
+
+### Freshness (Hyperliquid only)
+
+Check when each data type was last updated for a specific coin. Useful for verifying data recency before pulling it.
+
+```python
+freshness = client.hyperliquid.get_freshness("BTC")
+print(f"Orderbook last updated: {freshness.orderbook.last_updated}, lag: {freshness.orderbook.lag_ms}ms")
+print(f"Trades last updated: {freshness.trades.last_updated}, lag: {freshness.trades.lag_ms}ms")
+print(f"Funding last updated: {freshness.funding.last_updated}")
+print(f"OI last updated: {freshness.open_interest.last_updated}")
+
+# Async version
+freshness = await client.hyperliquid.aget_freshness("BTC")
+```
+
+### Summary (Hyperliquid only)
+
+Get a combined market snapshot in a single call -- mark/oracle price, funding rate, open interest, 24h volume, and 24h liquidation volumes.
+
+```python
+summary = client.hyperliquid.get_summary("BTC")
+print(f"Mark price: {summary.mark_price}")
+print(f"Oracle price: {summary.oracle_price}")
+print(f"Funding rate: {summary.funding_rate}")
+print(f"Open interest: {summary.open_interest}")
+print(f"24h volume: {summary.volume_24h}")
+print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
+print(f"  Long: ${summary.long_liquidation_volume_24h}")
+print(f"  Short: ${summary.short_liquidation_volume_24h}")
+
+# Async version
+summary = await client.hyperliquid.aget_summary("BTC")
+```
+
+### Price History (Hyperliquid only)
+
+Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records (available from May 2023).
+
+```python
+# Get hourly price history for the last 24 hours
+prices = client.hyperliquid.get_price_history(
+    "BTC",
+    start="2026-01-01",
+    end="2026-01-02",
+    interval="1h"  # 5m, 15m, 30m, 1h, 4h, 1d
+)
+
+for snapshot in prices.data:
+    print(f"{snapshot.timestamp}: mark={snapshot.mark_price}, oracle={snapshot.oracle_price}, mid={snapshot.mid_price}")
+
+# Paginate for larger ranges
+result = client.hyperliquid.get_price_history("BTC", start=..., end=..., interval="4h", limit=1000)
+while result.next_cursor:
+    result = client.hyperliquid.get_price_history(
+        "BTC", start=..., end=..., interval="4h",
+        cursor=result.next_cursor, limit=1000
+    )
+
+# Async version
+prices = await client.hyperliquid.aget_price_history("BTC", start=..., end=..., interval="1h")
+```
+
 ### Candles (OHLCV)
 
 Get historical OHLCV candle data aggregated from trades.
@@ -1137,6 +1219,7 @@ Full type hint support with Pydantic models:
 from oxarchive import Client, LighterGranularity
 from oxarchive.types import (
     OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest, Candle, Liquidation,
+    LiquidationVolume, CoinFreshness, CoinSummary, PriceSnapshot,
     WsReplaySnapshot,
 )
 from oxarchive.resources.trades import CursorResponse
