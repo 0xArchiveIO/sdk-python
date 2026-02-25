@@ -714,6 +714,118 @@ client = Client(
 )
 ```
 
+### Web3 Authentication
+
+Get API keys programmatically using an Ethereum wallet — no browser or email required.
+
+#### Free Tier (SIWE)
+
+```python
+# pip install eth-account
+from eth_account import Account
+from eth_account.messages import encode_defunct
+
+acct = Account.from_key("0xYOUR_PRIVATE_KEY")
+
+# 1. Get SIWE challenge
+challenge = client.web3.challenge(acct.address)
+
+# 2. Sign with personal_sign (EIP-191)
+signable = encode_defunct(text=challenge.message)
+signed = acct.sign_message(signable)
+signature = signed.signature.hex()
+if not signature.startswith("0x"):
+    signature = "0x" + signature
+
+# 3. Submit → receive API key
+result = client.web3.signup(message=challenge.message, signature=signature)
+print(result.api_key)  # "0xa_..."
+```
+
+#### Paid Tier (x402 USDC on Base)
+
+```python
+# pip install eth-account
+import json
+import time
+import base64
+import secrets
+from eth_account import Account
+from eth_account.messages import encode_typed_data
+
+acct = Account.from_key("0xYOUR_PRIVATE_KEY")
+
+USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
+# 1. Get pricing
+quote = client.web3.subscribe_quote("build")
+# quote.amount = "49000000" ($49 USDC), quote.pay_to = "0x..."
+
+# 2. Build & sign EIP-3009 transferWithAuthorization
+nonce_bytes = secrets.token_bytes(32)
+valid_after = 0
+valid_before = int(time.time()) + 3600
+
+domain = {
+    "name": "USD Coin",
+    "version": "2",
+    "chainId": 8453,
+    "verifyingContract": USDC_ADDRESS,
+}
+types = {
+    "TransferWithAuthorization": [
+        {"name": "from", "type": "address"},
+        {"name": "to", "type": "address"},
+        {"name": "value", "type": "uint256"},
+        {"name": "validAfter", "type": "uint256"},
+        {"name": "validBefore", "type": "uint256"},
+        {"name": "nonce", "type": "bytes32"},
+    ],
+}
+message = {
+    "from": acct.address,
+    "to": quote.pay_to,
+    "value": int(quote.amount),
+    "validAfter": valid_after,
+    "validBefore": valid_before,
+    "nonce": "0x" + nonce_bytes.hex(),
+}
+
+signable = encode_typed_data(domain, types, message)
+signed = acct.sign_message(signable)
+signature = signed.signature.hex()
+if not signature.startswith("0x"):
+    signature = "0x" + signature
+
+# 3. Build x402 payment envelope and base64-encode
+payment_payload = base64.b64encode(json.dumps({
+    "x402Version": 2,
+    "payload": {
+        "signature": signature,
+        "authorization": {
+            "from": acct.address,
+            "to": quote.pay_to,
+            "value": quote.amount,
+            "validAfter": str(valid_after),
+            "validBefore": str(valid_before),
+            "nonce": "0x" + nonce_bytes.hex(),
+        },
+    },
+}).encode()).decode()
+
+# 4. Submit payment → receive API key + subscription
+sub = client.web3.subscribe("build", payment_signature=payment_payload)
+print(sub.api_key, sub.tier, sub.expires_at)
+```
+
+#### Key Management
+
+```python
+# List and revoke keys (requires a fresh SIWE signature)
+keys = client.web3.list_keys(message=challenge.message, signature=signature)
+client.web3.revoke_key(message=challenge.message, signature=signature, key_id=keys.keys[0].id)
+```
+
 ### Legacy API (Deprecated)
 
 The following legacy methods are deprecated and will be removed in v2.0. They default to Hyperliquid data:

@@ -796,6 +796,114 @@ class WsGapDetected(BaseModel):
 
 
 # =============================================================================
+# Web3 Authentication Types
+# =============================================================================
+
+
+class SiweChallenge(BaseModel):
+    """SIWE challenge message returned by the challenge endpoint."""
+
+    message: str
+    """The SIWE message to sign with personal_sign (EIP-191)."""
+
+    nonce: str
+    """Single-use nonce (expires after 10 minutes)."""
+
+
+class Web3SignupResult(BaseModel):
+    """Result of creating a free-tier account via wallet signature."""
+
+    api_key: str
+    """The generated API key."""
+
+    tier: str
+    """Account tier (e.g., 'free')."""
+
+    wallet_address: str
+    """The wallet address that owns this key."""
+
+
+class Web3ApiKey(BaseModel):
+    """An API key record returned by the keys endpoint."""
+
+    id: str
+    """Unique key ID (UUID)."""
+
+    name: str
+    """Key name."""
+
+    key_prefix: str
+    """First characters of the key for identification."""
+
+    is_active: bool
+    """Whether the key is currently active."""
+
+    last_used_at: Optional[str] = None
+    """Last usage timestamp (ISO 8601)."""
+
+    created_at: str
+    """Creation timestamp (ISO 8601)."""
+
+
+class Web3KeysList(BaseModel):
+    """List of API keys for a wallet."""
+
+    keys: list[Web3ApiKey]
+    """All API keys belonging to this wallet."""
+
+    wallet_address: str
+    """The wallet address."""
+
+
+class Web3RevokeResult(BaseModel):
+    """Result of revoking an API key."""
+
+    message: str
+    """Confirmation message."""
+
+    wallet_address: str
+    """The wallet address that owned the key."""
+
+
+class Web3PaymentRequired(BaseModel):
+    """x402 payment details returned by subscribe (402 response)."""
+
+    amount: str
+    """Amount in smallest unit (e.g., '49000000' for $49 USDC)."""
+
+    asset: str
+    """Payment asset (e.g., 'USDC')."""
+
+    network: str
+    """Blockchain network (e.g., 'base')."""
+
+    pay_to: str
+    """Address to send payment to."""
+
+    asset_address: str
+    """Token contract address."""
+
+
+class Web3SubscribeResult(BaseModel):
+    """Result of a successful x402 subscription."""
+
+    api_key: str
+    """The generated API key."""
+
+    tier: str
+    """Subscription tier."""
+
+    expires_at: str
+    """Expiration timestamp (ISO 8601)."""
+
+    wallet_address: str
+    """The wallet address that owns the subscription."""
+
+    tx_hash: Optional[str] = None
+    """On-chain transaction hash."""
+
+
+# =============================================================================
 # Error Types
 # =============================================================================
 

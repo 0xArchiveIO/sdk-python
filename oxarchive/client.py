@@ -13,6 +13,7 @@ from .resources import (
     FundingResource,
     OpenInterestResource,
     DataQualityResource,
+    Web3Resource,
 )
 
 DEFAULT_BASE_URL = "https://api.0xarchive.io"
@@ -96,6 +97,10 @@ class Client:
         # Data quality monitoring (cross-exchange)
         self.data_quality = DataQualityResource(self._http)
         """Data quality metrics: status, coverage, incidents, latency, SLA"""
+
+        # Web3 wallet-based authentication
+        self.web3 = Web3Resource(self._http)
+        """Wallet-based auth: get API keys via SIWE signature"""
 
         # Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
         # These will be removed in v2.0

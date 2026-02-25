@@ -51,6 +51,14 @@ from .types import (
     Candle,
     CandleInterval,
     OxArchiveError,
+    # Web3 Auth types
+    SiweChallenge,
+    Web3SignupResult,
+    Web3ApiKey,
+    Web3KeysList,
+    Web3RevokeResult,
+    Web3PaymentRequired,
+    Web3SubscribeResult,
     # WebSocket types
     WsChannel,
     WsConnectionState,
@@ -85,7 +93,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 __all__ = [
     # Client
@@ -123,6 +131,14 @@ __all__ = [
     "Candle",
     "CandleInterval",
     "OxArchiveError",
+    # Web3 Auth Types
+    "SiweChallenge",
+    "Web3SignupResult",
+    "Web3ApiKey",
+    "Web3KeysList",
+    "Web3RevokeResult",
+    "Web3PaymentRequired",
+    "Web3SubscribeResult",
     # WebSocket Types
     "WsChannel",
     "WsConnectionState",

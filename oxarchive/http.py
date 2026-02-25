@@ -119,3 +119,21 @@ class HttpClient:
 
         response = await self.async_client.get(path, params=params)
         return self._handle_response(response)
+
+    def post(
+        self,
+        path: str,
+        json: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Make a synchronous POST request."""
+        response = self.client.post(path, json=json)
+        return self._handle_response(response)
+
+    async def apost(
+        self,
+        path: str,
+        json: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Make an asynchronous POST request."""
+        response = await self.async_client.post(path, json=json)
+        return self._handle_response(response)
