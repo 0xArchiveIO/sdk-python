@@ -524,17 +524,22 @@ WsChannel = Literal[
     "orderbook", "trades", "candles", "liquidations", "ticker", "all_tickers",
     "open_interest", "funding",
     "lighter_orderbook", "lighter_trades", "lighter_candles",
-    "lighter_open_interest", "lighter_funding",
+    "lighter_open_interest", "lighter_funding", "lighter_l3_orderbook",
     "hip3_orderbook", "hip3_trades", "hip3_candles",
-    "hip3_open_interest", "hip3_funding",
+    "hip3_open_interest", "hip3_funding", "hip3_liquidations",
+    "l4_diffs", "l4_orders",
+    "hip3_l4_diffs", "hip3_l4_orders",
 ]
 """Available WebSocket channels.
 
 Notes:
 - ticker/all_tickers are real-time only.
 - liquidations is historical only (May 2025+).
+- hip3_liquidations is historical only (Feb 2026+).
 - open_interest, funding, lighter_open_interest, lighter_funding,
   hip3_open_interest, hip3_funding are historical only (replay/stream).
+- l4_diffs, l4_orders: L4 order-level data channels.
+- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data channels.
 """
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]

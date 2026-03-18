@@ -63,24 +63,26 @@ class OrderBookResource:
 
     def get(
         self,
-        coin: str,
+        symbol: str,
         *,
         timestamp: Optional[Timestamp] = None,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> OrderBook:
         """
-        Get order book snapshot for a coin.
+        Get order book snapshot for a symbol.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             timestamp: Optional timestamp to get historical snapshot
             depth: Number of price levels to return per side
 
         Returns:
             Order book snapshot
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/orderbook/{self._coin_transform(coin)}",
+            f"{self._base_path}/orderbook/{self._coin_transform(symbol)}",
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
@@ -90,14 +92,16 @@ class OrderBookResource:
 
     async def aget(
         self,
-        coin: str,
+        symbol: str,
         *,
         timestamp: Optional[Timestamp] = None,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> OrderBook:
         """Async version of get()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/orderbook/{self._coin_transform(coin)}",
+            f"{self._base_path}/orderbook/{self._coin_transform(symbol)}",
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
@@ -107,7 +111,7 @@ class OrderBookResource:
 
     def history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
@@ -115,12 +119,13 @@ class OrderBookResource:
         limit: Optional[int] = None,
         depth: Optional[int] = None,
         granularity: Optional[LighterGranularity] = None,
+        **kwargs,
     ) -> CursorResponse[list[OrderBook]]:
         """
         Get historical order book snapshots with cursor-based pagination.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor (timestamp)
@@ -147,8 +152,9 @@ class OrderBookResource:
             ...     "BTC", start=start, end=end, granularity="10s"
             ... )
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -165,7 +171,7 @@ class OrderBookResource:
 
     async def ahistory(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
@@ -173,10 +179,12 @@ class OrderBookResource:
         limit: Optional[int] = None,
         depth: Optional[int] = None,
         granularity: Optional[LighterGranularity] = None,
+        **kwargs,
     ) -> CursorResponse[list[OrderBook]]:
         """Async version of history(). start and end are required. See history() for granularity details."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -193,11 +201,12 @@ class OrderBookResource:
 
     def history_tick(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> TickData:
         """
         Get raw tick-level orderbook data (Enterprise tier only).
@@ -209,7 +218,7 @@ class OrderBookResource:
         For automatic reconstruction, use `history_reconstructed()` instead.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             depth: Number of price levels in checkpoint (default: all)
@@ -231,8 +240,9 @@ class OrderBookResource:
             ...     # delta: OrderbookDelta with timestamp, side, price, size, sequence
             ...     pass
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         response = self._http.get(
-            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -266,15 +276,17 @@ class OrderBookResource:
 
     async def ahistory_tick(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> TickData:
         """Async version of history_tick(). See history_tick() for details."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         response = await self._http.aget(
-            f"{self._base_path}/orderbook/{self._coin_transform(coin)}/history",
+            f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -308,12 +320,13 @@ class OrderBookResource:
 
     def history_reconstructed(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
         emit_all: bool = True,
+        **kwargs,
     ) -> list[ReconstructedOrderBook]:
         """
         Get reconstructed tick-level orderbook history (Enterprise tier only).
@@ -325,7 +338,7 @@ class OrderBookResource:
         `OrderBookReconstructor.iterate()` method for memory efficiency.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             depth: Maximum price levels to include in output
@@ -350,33 +363,37 @@ class OrderBookResource:
             ...     "BTC", start=start, end=end, emit_all=False
             ... )
         """
-        tick_data = self.history_tick(coin, start=start, end=end, depth=depth)
+        symbol = self._resolve_symbol(symbol, kwargs)
+        tick_data = self.history_tick(symbol, start=start, end=end, depth=depth)
         reconstructor = OrderBookReconstructor()
         options = ReconstructOptions(depth=depth, emit_all=emit_all)
         return reconstructor.reconstruct_all(tick_data.checkpoint, tick_data.deltas, options)
 
     async def ahistory_reconstructed(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
         emit_all: bool = True,
+        **kwargs,
     ) -> list[ReconstructedOrderBook]:
         """Async version of history_reconstructed(). See history_reconstructed() for details."""
-        tick_data = await self.ahistory_tick(coin, start=start, end=end, depth=depth)
+        symbol = self._resolve_symbol(symbol, kwargs)
+        tick_data = await self.ahistory_tick(symbol, start=start, end=end, depth=depth)
         reconstructor = OrderBookReconstructor()
         options = ReconstructOptions(depth=depth, emit_all=emit_all)
         return reconstructor.reconstruct_all(tick_data.checkpoint, tick_data.deltas, options)
 
     def iterate_reconstructed(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> Iterator[ReconstructedOrderBook]:
         """
         Iterate over reconstructed orderbook states (memory-efficient).
@@ -385,7 +402,7 @@ class OrderBookResource:
         Use this for large time ranges to avoid loading all snapshots into memory.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             depth: Maximum price levels to include
@@ -401,7 +418,8 @@ class OrderBookResource:
             ...     if some_condition:
             ...         break  # Early exit if needed
         """
-        tick_data = self.history_tick(coin, start=start, end=end, depth=depth)
+        symbol = self._resolve_symbol(symbol, kwargs)
+        tick_data = self.history_tick(symbol, start=start, end=end, depth=depth)
         reconstructor = OrderBookReconstructor()
         yield from reconstructor.iterate(tick_data.checkpoint, tick_data.deltas, depth)
 
@@ -434,11 +452,12 @@ class OrderBookResource:
 
     def iterate_tick_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> Iterator[ReconstructedOrderBook]:
         """
         Iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
@@ -448,7 +467,7 @@ class OrderBookResource:
         Memory-efficient for processing large time ranges.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             depth: Maximum price levels to include in output snapshots
@@ -472,6 +491,7 @@ class OrderBookResource:
             ...     "BTC", start=start, end=end
             ... ))
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         start_ts = self._convert_timestamp(start)
         end_ts = self._convert_timestamp(end)
         if start_ts is None or end_ts is None:
@@ -483,7 +503,7 @@ class OrderBookResource:
         is_first_page = True
 
         while cursor < end_ts:
-            tick_data = self.history_tick(coin, start=cursor, end=end_ts, depth=depth)
+            tick_data = self.history_tick(symbol, start=cursor, end=end_ts, depth=depth)
 
             if len(tick_data.deltas) == 0:
                 # No deltas - yield checkpoint only on first page if no data
@@ -513,11 +533,12 @@ class OrderBookResource:
 
     async def aiterate_tick_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         depth: Optional[int] = None,
+        **kwargs,
     ) -> AsyncIterator[ReconstructedOrderBook]:
         """
         Async iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
@@ -527,7 +548,7 @@ class OrderBookResource:
         Memory-efficient for processing large time ranges.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             depth: Maximum price levels to include in output snapshots
@@ -546,6 +567,7 @@ class OrderBookResource:
             ...     if some_condition:
             ...         break  # Early exit supported
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         start_ts = self._convert_timestamp(start)
         end_ts = self._convert_timestamp(end)
         if start_ts is None or end_ts is None:
@@ -557,7 +579,7 @@ class OrderBookResource:
         is_first_page = True
 
         while cursor < end_ts:
-            tick_data = await self.ahistory_tick(coin, start=cursor, end=end_ts, depth=depth)
+            tick_data = await self.ahistory_tick(symbol, start=cursor, end=end_ts, depth=depth)
 
             if len(tick_data.deltas) == 0:
                 # No deltas - yield checkpoint only on first page if no data
@@ -584,3 +606,19 @@ class OrderBookResource:
             # If we got fewer than max deltas, we've reached the end
             if len(tick_data.deltas) < max_deltas_per_page:
                 break
+
+    @staticmethod
+    def _resolve_symbol(symbol, kwargs):
+        import warnings
+
+        if "coin" in kwargs:
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+        return symbol

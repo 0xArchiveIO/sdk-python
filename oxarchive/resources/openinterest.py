@@ -44,19 +44,20 @@ class OpenInterestResource:
 
     def history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
         interval: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[OpenInterest]]:
         """
-        Get open interest history for a coin with cursor-based pagination.
+        Get open interest history for a symbol with cursor-based pagination.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor (timestamp)
@@ -76,6 +77,7 @@ class OpenInterestResource:
             ...     )
             ...     records.extend(result.data)
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         params = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -85,7 +87,7 @@ class OpenInterestResource:
         if interval:
             params["interval"] = interval
         data = self._http.get(
-            f"{self._base_path}/openinterest/{self._coin_transform(coin)}",
+            f"{self._base_path}/openinterest/{self._coin_transform(symbol)}",
             params=params,
         )
         return CursorResponse(
@@ -95,15 +97,17 @@ class OpenInterestResource:
 
     async def ahistory(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
         interval: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[OpenInterest]]:
         """Async version of history(). start and end are required."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         params = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -113,7 +117,7 @@ class OpenInterestResource:
         if interval:
             params["interval"] = interval
         data = await self._http.aget(
-            f"{self._base_path}/openinterest/{self._coin_transform(coin)}",
+            f"{self._base_path}/openinterest/{self._coin_transform(symbol)}",
             params=params,
         )
         return CursorResponse(
@@ -121,20 +125,38 @@ class OpenInterestResource:
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 
-    def current(self, coin: str) -> OpenInterest:
+    def current(self, symbol: str, **kwargs) -> OpenInterest:
         """
-        Get current open interest for a coin.
+        Get current open interest for a symbol.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
 
         Returns:
             Current open interest
         """
-        data = self._http.get(f"{self._base_path}/openinterest/{self._coin_transform(coin)}/current")
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"{self._base_path}/openinterest/{self._coin_transform(symbol)}/current")
         return OpenInterest.model_validate(data["data"])
 
-    async def acurrent(self, coin: str) -> OpenInterest:
+    async def acurrent(self, symbol: str, **kwargs) -> OpenInterest:
         """Async version of current()."""
-        data = await self._http.aget(f"{self._base_path}/openinterest/{self._coin_transform(coin)}/current")
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"{self._base_path}/openinterest/{self._coin_transform(symbol)}/current")
         return OpenInterest.model_validate(data["data"])
+
+    @staticmethod
+    def _resolve_symbol(symbol, kwargs):
+        import warnings
+
+        if "coin" in kwargs:
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+        return symbol
