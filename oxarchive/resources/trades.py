@@ -50,22 +50,23 @@ class TradesResource:
 
     def list(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
         side: Optional[Literal["buy", "sell"]] = None,
+        **kwargs,
     ) -> CursorResponse[list[Trade]]:
         """
-        Get trade history for a coin using cursor-based pagination.
+        Get trade history for a symbol using cursor-based pagination.
 
         Uses cursor-based pagination by default, which is more efficient for large datasets.
         Use the next_cursor from the response as the cursor parameter to get the next page.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor (timestamp)
@@ -87,8 +88,9 @@ class TradesResource:
             ...     )
             ...     trades.extend(result.data)
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/trades/{self._coin_transform(coin)}",
+            f"{self._base_path}/trades/{self._coin_transform(symbol)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -104,21 +106,23 @@ class TradesResource:
 
     async def alist(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
         side: Optional[Literal["buy", "sell"]] = None,
+        **kwargs,
     ) -> CursorResponse[list[Trade]]:
         """
         Async version of list().
 
         Uses cursor-based pagination by default.
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/trades/{self._coin_transform(coin)}",
+            f"{self._base_path}/trades/{self._coin_transform(symbol)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -132,9 +136,9 @@ class TradesResource:
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 
-    def recent(self, coin: str, limit: Optional[int] = None) -> list[Trade]:
+    def recent(self, symbol: str, limit: Optional[int] = None, **kwargs) -> list[Trade]:
         """
-        Get most recent trades for a coin.
+        Get most recent trades for a symbol.
 
         Note: This method is available for Lighter (client.lighter.trades.recent())
         and HIP-3 (client.hyperliquid.hip3.trades.recent()), both of which have
@@ -142,22 +146,40 @@ class TradesResource:
         endpoint is not available for Hyperliquid.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             limit: Number of trades to return (default: 100)
 
         Returns:
             List of recent trades
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/trades/{self._coin_transform(coin)}/recent",
+            f"{self._base_path}/trades/{self._coin_transform(symbol)}/recent",
             params={"limit": limit},
         )
         return [Trade.model_validate(item) for item in data["data"]]
 
-    async def arecent(self, coin: str, limit: Optional[int] = None) -> list[Trade]:
+    async def arecent(self, symbol: str, limit: Optional[int] = None, **kwargs) -> list[Trade]:
         """Async version of recent()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/trades/{self._coin_transform(coin)}/recent",
+            f"{self._base_path}/trades/{self._coin_transform(symbol)}/recent",
             params={"limit": limit},
         )
         return [Trade.model_validate(item) for item in data["data"]]
+
+    @staticmethod
+    def _resolve_symbol(symbol, kwargs):
+        import warnings
+
+        if "coin" in kwargs:
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+        return symbol

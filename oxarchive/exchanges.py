@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from datetime import datetime
 from typing import Optional
 
@@ -16,6 +17,9 @@ from .resources import (
     OpenInterestResource,
     CandlesResource,
     LiquidationsResource,
+    OrdersResource,
+    L4OrderBookResource,
+    L3OrderBookResource,
 )
 from .types import (
     CoinFreshness,
@@ -26,6 +30,21 @@ from .types import (
     PriceSnapshot,
     Timestamp,
 )
+
+
+def _resolve_symbol(symbol, kwargs):
+    """Shared helper for coin->symbol deprecation in convenience methods."""
+    if "coin" in kwargs:
+        warnings.warn(
+            "'coin' is deprecated, use 'symbol' instead",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        if symbol is None:
+            symbol = kwargs.pop("coin")
+        else:
+            kwargs.pop("coin")
+    return symbol
 
 
 class HyperliquidClient:
@@ -65,6 +84,12 @@ class HyperliquidClient:
         self.liquidations = LiquidationsResource(http, base_path)
         """Liquidation events (May 2025+)"""
 
+        self.orders = OrdersResource(http, base_path)
+        """L4 order history, flow, and TP/SL"""
+
+        self.l4_orderbook = L4OrderBookResource(http, base_path)
+        """L4 order-level orderbook data"""
+
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (February 2026+)"""
 
@@ -90,19 +115,20 @@ class HyperliquidClient:
 
     def get_liquidation_volume(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[LiquidationVolume]]:
         """
-        Get aggregated liquidation volume for a coin.
+        Get aggregated liquidation volume for a symbol.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
             start: Start timestamp (ISO or Unix ms)
             end: End timestamp (ISO or Unix ms)
             interval: Aggregation interval (e.g. '1h', '4h', '1d')
@@ -112,6 +138,7 @@ class HyperliquidClient:
         Returns:
             CursorResponse with liquidation volume buckets and next_cursor
         """
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -120,7 +147,7 @@ class HyperliquidClient:
             "cursor": cursor,
         }
         data = self._http.get(
-            f"/v1/hyperliquid/liquidations/{coin.upper()}/volume",
+            f"/v1/hyperliquid/liquidations/{symbol.upper()}/volume",
             params=params,
         )
         return CursorResponse(
@@ -130,15 +157,17 @@ class HyperliquidClient:
 
     async def aget_liquidation_volume(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[LiquidationVolume]]:
         """Async version of get_liquidation_volume()."""
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -147,7 +176,7 @@ class HyperliquidClient:
             "cursor": cursor,
         }
         data = await self._http.aget(
-            f"/v1/hyperliquid/liquidations/{coin.upper()}/volume",
+            f"/v1/hyperliquid/liquidations/{symbol.upper()}/volume",
             params=params,
         )
         return CursorResponse(
@@ -155,63 +184,68 @@ class HyperliquidClient:
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 
-    def get_freshness(self, coin: str) -> CoinFreshness:
+    def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """
-        Get data freshness for a coin across all data types.
+        Get data freshness for a symbol across all data types.
 
         Returns how recently each data type (orderbook, trades, funding,
-        open interest, liquidations) was updated for the given coin.
+        open interest, liquidations) was updated for the given symbol.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
 
         Returns:
             CoinFreshness with per-data-type lag information
         """
-        data = self._http.get(f"/v1/hyperliquid/freshness/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/hyperliquid/freshness/{symbol.upper()}")
         return CoinFreshness.model_validate(data["data"])
 
-    async def aget_freshness(self, coin: str) -> CoinFreshness:
+    async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
-        data = await self._http.aget(f"/v1/hyperliquid/freshness/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/hyperliquid/freshness/{symbol.upper()}")
         return CoinFreshness.model_validate(data["data"])
 
-    def get_summary(self, coin: str) -> CoinSummary:
+    def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """
-        Get combined market summary for a coin.
+        Get combined market summary for a symbol.
 
         Returns a single snapshot with price, funding, open interest,
         volume, and liquidation metrics.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
 
         Returns:
             CoinSummary with all market metrics
         """
-        data = self._http.get(f"/v1/hyperliquid/summary/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/hyperliquid/summary/{symbol.upper()}")
         return CoinSummary.model_validate(data["data"])
 
-    async def aget_summary(self, coin: str) -> CoinSummary:
+    async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
-        data = await self._http.aget(f"/v1/hyperliquid/summary/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/hyperliquid/summary/{symbol.upper()}")
         return CoinSummary.model_validate(data["data"])
 
     def get_price_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[PriceSnapshot]]:
         """
-        Get mark/oracle price history for a coin.
+        Get mark/oracle price history for a symbol.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
             start: Start timestamp (ISO or Unix ms)
             end: End timestamp (ISO or Unix ms)
             interval: Aggregation interval (e.g. '1h', '4h', '1d')
@@ -221,6 +255,7 @@ class HyperliquidClient:
         Returns:
             CursorResponse with price snapshots and next_cursor
         """
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -229,7 +264,7 @@ class HyperliquidClient:
             "cursor": cursor,
         }
         data = self._http.get(
-            f"/v1/hyperliquid/prices/{coin.upper()}",
+            f"/v1/hyperliquid/prices/{symbol.upper()}",
             params=params,
         )
         return CursorResponse(
@@ -239,15 +274,17 @@ class HyperliquidClient:
 
     async def aget_price_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[PriceSnapshot]]:
         """Async version of get_price_history()."""
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -256,7 +293,7 @@ class HyperliquidClient:
             "cursor": cursor,
         }
         data = await self._http.aget(
-            f"/v1/hyperliquid/prices/{coin.upper()}",
+            f"/v1/hyperliquid/prices/{symbol.upper()}",
             params=params,
         )
         return CursorResponse(
@@ -301,6 +338,15 @@ class Hip3Client:
         self.candles = CandlesResource(http, base_path, coin_transform=coin_transform)
         """OHLCV candle data"""
 
+        self.liquidations = LiquidationsResource(http, base_path, coin_transform=coin_transform)
+        """Liquidation events"""
+
+        self.orders = OrdersResource(http, base_path, coin_transform=coin_transform)
+        """L4 order history, flow, and TP/SL"""
+
+        self.l4_orderbook = L4OrderBookResource(http, base_path, coin_transform=coin_transform)
+        """L4 order-level orderbook data"""
+
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
         if ts is None:
@@ -317,57 +363,62 @@ class Hip3Client:
                 return int(ts)
         return None
 
-    def get_freshness(self, coin: str) -> CoinFreshness:
+    def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """
-        Get data freshness for a coin across all data types.
+        Get data freshness for a symbol across all data types.
 
         Args:
-            coin: Coin symbol (case-sensitive, e.g. 'km:US500')
+            symbol: Symbol (case-sensitive, e.g. 'km:US500')
 
         Returns:
             CoinFreshness with per-data-type lag information
         """
-        data = self._http.get(f"/v1/hyperliquid/hip3/freshness/{coin}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/hyperliquid/hip3/freshness/{symbol}")
         return CoinFreshness.model_validate(data["data"])
 
-    async def aget_freshness(self, coin: str) -> CoinFreshness:
+    async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
-        data = await self._http.aget(f"/v1/hyperliquid/hip3/freshness/{coin}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/hyperliquid/hip3/freshness/{symbol}")
         return CoinFreshness.model_validate(data["data"])
 
-    def get_summary(self, coin: str) -> CoinSummary:
+    def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """
-        Get combined market summary for a coin.
+        Get combined market summary for a symbol.
 
         Args:
-            coin: Coin symbol (case-sensitive, e.g. 'km:US500')
+            symbol: Symbol (case-sensitive, e.g. 'km:US500')
 
         Returns:
             CoinSummary with all market metrics
         """
-        data = self._http.get(f"/v1/hyperliquid/hip3/summary/{coin}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/hyperliquid/hip3/summary/{symbol}")
         return CoinSummary.model_validate(data["data"])
 
-    async def aget_summary(self, coin: str) -> CoinSummary:
+    async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
-        data = await self._http.aget(f"/v1/hyperliquid/hip3/summary/{coin}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/hyperliquid/hip3/summary/{symbol}")
         return CoinSummary.model_validate(data["data"])
 
     def get_price_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[PriceSnapshot]]:
         """
-        Get mark/oracle price history for a coin.
+        Get mark/oracle price history for a symbol.
 
         Args:
-            coin: Coin symbol (case-sensitive, e.g. 'km:US500')
+            symbol: Symbol (case-sensitive, e.g. 'km:US500')
             start: Start timestamp (ISO or Unix ms)
             end: End timestamp (ISO or Unix ms)
             interval: Aggregation interval (e.g. '1h', '4h', '1d')
@@ -377,6 +428,7 @@ class Hip3Client:
         Returns:
             CursorResponse with price snapshots and next_cursor
         """
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -385,7 +437,7 @@ class Hip3Client:
             "cursor": cursor,
         }
         data = self._http.get(
-            f"/v1/hyperliquid/hip3/prices/{coin}",
+            f"/v1/hyperliquid/hip3/prices/{symbol}",
             params=params,
         )
         return CursorResponse(
@@ -395,15 +447,17 @@ class Hip3Client:
 
     async def aget_price_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[PriceSnapshot]]:
         """Async version of get_price_history()."""
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -412,7 +466,7 @@ class Hip3Client:
             "cursor": cursor,
         }
         data = await self._http.aget(
-            f"/v1/hyperliquid/hip3/prices/{coin}",
+            f"/v1/hyperliquid/hip3/prices/{symbol}",
             params=params,
         )
         return CursorResponse(
@@ -457,6 +511,9 @@ class LighterClient:
         self.candles = CandlesResource(http, base_path)
         """OHLCV candle data"""
 
+        self.l3_orderbook = L3OrderBookResource(http, base_path)
+        """L3 individual order-level orderbook data"""
+
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
         if ts is None:
@@ -473,57 +530,62 @@ class LighterClient:
                 return int(ts)
         return None
 
-    def get_freshness(self, coin: str) -> CoinFreshness:
+    def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """
-        Get data freshness for a coin across all data types.
+        Get data freshness for a symbol across all data types.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
 
         Returns:
             CoinFreshness with per-data-type lag information
         """
-        data = self._http.get(f"/v1/lighter/freshness/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/lighter/freshness/{symbol.upper()}")
         return CoinFreshness.model_validate(data["data"])
 
-    async def aget_freshness(self, coin: str) -> CoinFreshness:
+    async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
-        data = await self._http.aget(f"/v1/lighter/freshness/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/lighter/freshness/{symbol.upper()}")
         return CoinFreshness.model_validate(data["data"])
 
-    def get_summary(self, coin: str) -> CoinSummary:
+    def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """
-        Get combined market summary for a coin.
+        Get combined market summary for a symbol.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
 
         Returns:
             CoinSummary with all market metrics
         """
-        data = self._http.get(f"/v1/lighter/summary/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/lighter/summary/{symbol.upper()}")
         return CoinSummary.model_validate(data["data"])
 
-    async def aget_summary(self, coin: str) -> CoinSummary:
+    async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
-        data = await self._http.aget(f"/v1/lighter/summary/{coin.upper()}")
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/lighter/summary/{symbol.upper()}")
         return CoinSummary.model_validate(data["data"])
 
     def get_price_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[PriceSnapshot]]:
         """
-        Get mark/oracle price history for a coin.
+        Get mark/oracle price history for a symbol.
 
         Args:
-            coin: Coin symbol (e.g. 'BTC')
+            symbol: Symbol (e.g. 'BTC')
             start: Start timestamp (ISO or Unix ms)
             end: End timestamp (ISO or Unix ms)
             interval: Aggregation interval (e.g. '1h', '4h', '1d')
@@ -533,6 +595,7 @@ class LighterClient:
         Returns:
             CursorResponse with price snapshots and next_cursor
         """
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -541,7 +604,7 @@ class LighterClient:
             "cursor": cursor,
         }
         data = self._http.get(
-            f"/v1/lighter/prices/{coin.upper()}",
+            f"/v1/lighter/prices/{symbol.upper()}",
             params=params,
         )
         return CursorResponse(
@@ -551,15 +614,17 @@ class LighterClient:
 
     async def aget_price_history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[PriceSnapshot]]:
         """Async version of get_price_history()."""
+        symbol = _resolve_symbol(symbol, kwargs)
         params: dict = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
@@ -568,7 +633,7 @@ class LighterClient:
             "cursor": cursor,
         }
         data = await self._http.aget(
-            f"/v1/lighter/prices/{coin.upper()}",
+            f"/v1/lighter/prices/{symbol.upper()}",
             params=params,
         )
         return CursorResponse(

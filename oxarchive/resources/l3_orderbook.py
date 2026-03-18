@@ -1,4 +1,4 @@
-"""Candles (OHLCV) API resource."""
+"""L3 order book API resource (Lighter only)."""
 
 from __future__ import annotations
 
@@ -6,24 +6,21 @@ from datetime import datetime
 from typing import Optional
 
 from ..http import HttpClient
-from ..types import Candle, CandleInterval, CursorResponse, Timestamp
+from ..types import CursorResponse, Timestamp
 
 
-class CandlesResource:
+class L3OrderBookResource:
     """
-    Candles (OHLCV) API resource.
+    L3 order book resource (Lighter.xyz only).
+
+    Provides individual order-level orderbook data.
 
     Example:
-        >>> # Get candle history
-        >>> result = client.candles.history("BTC", start=start, end=end, interval="1h")
-        >>> for candle in result.data:
-        ...     print(f"{candle.timestamp}: O={candle.open} H={candle.high} L={candle.low} C={candle.close}")
+        >>> # Get current L3 orderbook snapshot
+        >>> snapshot = client.lighter.l3_orderbook.get("BTC")
         >>>
-        >>> # Paginate through large datasets
-        >>> all_candles = result.data
-        >>> while result.next_cursor:
-        ...     result = client.candles.history("BTC", start=start, end=end, cursor=result.next_cursor)
-        ...     all_candles.extend(result.data)
+        >>> # Get L3 orderbook history
+        >>> history = client.lighter.l3_orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
@@ -47,53 +44,92 @@ class CandlesResource:
                 return int(ts)
         return None
 
+    def get(
+        self,
+        symbol: str,
+        *,
+        timestamp: Optional[Timestamp] = None,
+        depth: Optional[int] = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Get L3 order book snapshot (Lighter only).
+
+        Args:
+            symbol: The symbol (e.g., 'BTC', 'ETH')
+            timestamp: Optional timestamp to get historical snapshot
+            depth: Number of price levels to return per side
+
+        Returns:
+            L3 order book snapshot (dict)
+        """
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = self._http.get(
+            f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}",
+            params={
+                "timestamp": self._convert_timestamp(timestamp),
+                "depth": depth,
+            },
+        )
+        return data["data"]
+
+    async def aget(
+        self,
+        symbol: str,
+        *,
+        timestamp: Optional[Timestamp] = None,
+        depth: Optional[int] = None,
+        **kwargs,
+    ) -> dict:
+        """Async version of get()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(
+            f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}",
+            params={
+                "timestamp": self._convert_timestamp(timestamp),
+                "depth": depth,
+            },
+        )
+        return data["data"]
+
     def history(
         self,
         symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
-        interval: Optional[CandleInterval] = None,
-        cursor: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        depth: Optional[int] = None,
         **kwargs,
-    ) -> CursorResponse[list[Candle]]:
+    ) -> CursorResponse:
         """
-        Get historical OHLCV candle data with cursor-based pagination.
+        Get L3 order book history (Lighter only).
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
-            interval: Candle interval (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w). Default: 1h
             cursor: Cursor from previous response's next_cursor
-            limit: Maximum number of results (default: 100, max: 10000 for candles)
+            limit: Maximum number of results
+            depth: Number of price levels per side
 
         Returns:
-            CursorResponse with candle records and next_cursor for pagination
-
-        Example:
-            >>> result = client.candles.history("BTC", start=start, end=end, interval="1h", limit=10000)
-            >>> candles = result.data
-            >>> while result.next_cursor:
-            ...     result = client.candles.history(
-            ...         "BTC", start=start, end=end, interval="1h", cursor=result.next_cursor, limit=10000
-            ...     )
-            ...     candles.extend(result.data)
+            CursorResponse with L3 orderbook snapshots and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/candles/{self._coin_transform(symbol)}",
+            f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
-                "interval": interval,
-                "cursor": self._convert_timestamp(cursor),
+                "cursor": cursor,
                 "limit": limit,
+                "depth": depth,
             },
         )
         return CursorResponse(
-            data=[Candle.model_validate(item) for item in data["data"]],
+            data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 
@@ -103,25 +139,25 @@ class CandlesResource:
         *,
         start: Timestamp,
         end: Timestamp,
-        interval: Optional[CandleInterval] = None,
-        cursor: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        depth: Optional[int] = None,
         **kwargs,
-    ) -> CursorResponse[list[Candle]]:
-        """Async version of history(). start and end are required."""
+    ) -> CursorResponse:
+        """Async version of history()."""
         symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/candles/{self._coin_transform(symbol)}",
+            f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}/history",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
-                "interval": interval,
-                "cursor": self._convert_timestamp(cursor),
+                "cursor": cursor,
                 "limit": limit,
+                "depth": depth,
             },
         )
         return CursorResponse(
-            data=[Candle.model_validate(item) for item in data["data"]],
+            data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 

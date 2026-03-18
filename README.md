@@ -4,7 +4,7 @@ Official Python SDK for [0xarchive](https://0xarchive.io) - Historical Market Da
 
 Supports multiple exchanges:
 - **Hyperliquid** - Perpetuals data from April 2023
-- **Hyperliquid HIP-3** - Builder-deployed perpetuals (Pro+ only, February 2026+)
+- **Hyperliquid HIP-3** - Builder-deployed perpetuals (February 2026+, free tier: km:US500, Build+: all symbols, Pro+: orderbook history)
 - **Lighter.xyz** - Perpetuals data (August 2025+ for fills, Jan 2026+ for OB, OI, Funding Rate)
 
 ## Installation
@@ -119,9 +119,14 @@ history = client.hyperliquid.orderbook.history(
     depth=20  # Price levels per side
 )
 
+# HIP-3 order book (case-sensitive coins)
+hip3_ob = client.hyperliquid.hip3.orderbook.get("km:US500")
+hip3_history = client.hyperliquid.hip3.orderbook.history("km:US500", start="2026-02-01", end="2026-02-02")
+
 # Async versions
 orderbook = await client.hyperliquid.orderbook.aget("BTC")
 history = await client.hyperliquid.orderbook.ahistory("BTC", start=..., end=...)
+hip3_ob = await client.hyperliquid.hip3.orderbook.aget("km:US500")
 ```
 
 #### Orderbook Depth Limits
@@ -283,15 +288,22 @@ while result.next_cursor:
 # Filter by side
 buys = client.hyperliquid.trades.list("BTC", start=..., end=..., side="buy")
 
-# Get recent trades (Lighter only - has real-time data)
+# Get recent trades (Lighter and HIP-3 - have real-time data)
 recent = client.lighter.trades.recent("BTC", limit=100)
+
+# HIP-3 recent trades (case-sensitive coins)
+hip3_recent = client.hyperliquid.hip3.trades.recent("km:US500", limit=100)
+
+# HIP-3 trade history
+hip3_trades = client.hyperliquid.hip3.trades.list("km:US500", start="2026-02-01", end="2026-02-02")
 
 # Async versions
 result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
 recent = await client.lighter.trades.arecent("BTC", limit=100)
+hip3_recent = await client.hyperliquid.hip3.trades.arecent("km:US500", limit=100)
 ```
 
-**Note:** The `recent()` method is only available for Lighter.xyz (`client.lighter.trades.recent()`). Hyperliquid does not have a recent trades endpoint - use `list()` with a time range instead.
+**Note:** The `recent()` method is available for Lighter.xyz and HIP-3 (both have real-time data ingestion). Hyperliquid does not have a recent trades endpoint - use `list()` with a time range instead.
 
 ### Instruments
 
@@ -383,9 +395,14 @@ history = client.hyperliquid.funding.history(
     interval="1h"
 )
 
+# HIP-3 funding (case-sensitive coins)
+hip3_current = client.hyperliquid.hip3.funding.current("km:US500")
+hip3_history = client.hyperliquid.hip3.funding.history("km:US500", start="2026-02-01", end="2026-02-07")
+
 # Async versions
 current = await client.hyperliquid.funding.acurrent("BTC")
 history = await client.hyperliquid.funding.ahistory("ETH", start=..., end=...)
+hip3_current = await client.hyperliquid.hip3.funding.acurrent("km:US500")
 ```
 
 #### Funding History Parameters
@@ -420,9 +437,14 @@ oi = client.hyperliquid.open_interest.history(
     interval="1h"
 )
 
+# HIP-3 open interest (case-sensitive coins)
+hip3_current = client.hyperliquid.hip3.open_interest.current("km:US500")
+hip3_history = client.hyperliquid.hip3.open_interest.history("km:US500", start="2026-02-01", end="2026-02-07")
+
 # Async versions
 current = await client.hyperliquid.open_interest.acurrent("BTC")
 history = await client.hyperliquid.open_interest.ahistory("ETH", start=..., end=...)
+hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 ```
 
 #### Open Interest History Parameters
@@ -436,12 +458,12 @@ history = await client.hyperliquid.open_interest.ahistory("ETH", start=..., end=
 | `limit` | `int` | No | Max results (default: 100, max: 1000) |
 | `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
 
-### Liquidations (Hyperliquid only)
+### Liquidations
 
-Get historical liquidation events. Data available from May 2025 onwards.
+Get historical liquidation events. Available for Hyperliquid (May 2025+) and HIP-3.
 
 ```python
-# Get liquidation history for a coin
+# Get liquidation history for a coin (Hyperliquid)
 liquidations = client.hyperliquid.liquidations.history(
     "BTC",
     start="2025-06-01",
@@ -466,20 +488,38 @@ user_liquidations = client.hyperliquid.liquidations.by_user(
     "0x1234...",
     start="2025-06-01",
     end="2025-06-07",
-    coin="BTC"  # optional filter
+    symbol="BTC"  # optional filter
+)
+
+# HIP-3 liquidations (case-sensitive coins)
+hip3_liquidations = client.hyperliquid.hip3.liquidations.history(
+    "km:US500",
+    start="2026-02-01",
+    end="2026-02-02",
+    limit=100
+)
+
+# HIP-3 liquidation volume
+hip3_volume = client.hyperliquid.hip3.liquidations.volume(
+    "km:US500",
+    start="2026-02-01",
+    end="2026-02-08",
+    interval="1h"
 )
 
 # Async versions
 liquidations = await client.hyperliquid.liquidations.ahistory("BTC", start=..., end=...)
 user_liquidations = await client.hyperliquid.liquidations.aby_user("0x...", start=..., end=...)
+hip3_liquidations = await client.hyperliquid.hip3.liquidations.ahistory("km:US500", start=..., end=...)
+hip3_volume = await client.hyperliquid.hip3.liquidations.avolume("km:US500", start=..., end=...)
 ```
 
-### Liquidation Volume (Hyperliquid only)
+### Liquidation Volume
 
-Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records.
+Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records. Available for Hyperliquid and HIP-3.
 
 ```python
-# Get hourly liquidation volume for the last week
+# Get hourly liquidation volume for the last week (Hyperliquid)
 volume = client.hyperliquid.liquidations.volume(
     "BTC",
     start="2026-01-01",
@@ -490,8 +530,20 @@ volume = client.hyperliquid.liquidations.volume(
 for bucket in volume.data:
     print(f"{bucket.timestamp}: total=${bucket.total_usd}, long=${bucket.long_usd}, short=${bucket.short_usd}")
 
-# Async version
+# HIP-3 liquidation volume
+hip3_volume = client.hyperliquid.hip3.liquidations.volume(
+    "km:US500",
+    start="2026-02-01",
+    end="2026-02-08",
+    interval="1d"
+)
+
+# Convenience method on HyperliquidClient (Hyperliquid only)
+volume = client.hyperliquid.get_liquidation_volume("BTC", start=..., end=..., interval="1h")
+
+# Async versions
 volume = await client.hyperliquid.liquidations.avolume("BTC", start=..., end=..., interval="1h")
+hip3_volume = await client.hyperliquid.hip3.liquidations.avolume("km:US500", start=..., end=..., interval="1d")
 ```
 
 ### Freshness
@@ -617,8 +669,17 @@ lighter_candles = client.lighter.candles.history(
     interval="15m"
 )
 
+# HIP-3 candles (case-sensitive coins)
+hip3_candles = client.hyperliquid.hip3.candles.history(
+    "km:US500",
+    start="2026-02-01",
+    end="2026-02-02",
+    interval="1h"
+)
+
 # Async versions
 candles = await client.hyperliquid.candles.ahistory("BTC", start=..., end=..., interval="1h")
+hip3_candles = await client.hyperliquid.hip3.candles.ahistory("km:US500", start=..., end=..., interval="1h")
 ```
 
 #### Available Intervals
@@ -633,6 +694,158 @@ candles = await client.hyperliquid.candles.ahistory("BTC", start=..., end=..., i
 | `4h` | 4 hours |
 | `1d` | 1 day |
 | `1w` | 1 week |
+
+### L4 Orderbook (Order-Level)
+
+Get L4 order-level orderbook data with user attribution. Available for Hyperliquid and HIP-3.
+
+```python
+# Get current L4 orderbook snapshot (Hyperliquid)
+snapshot = client.hyperliquid.l4_orderbook.get("BTC")
+snapshot = client.hyperliquid.l4_orderbook.get("BTC", depth=10)
+
+# Get L4 orderbook at a specific timestamp
+historical = client.hyperliquid.l4_orderbook.get("BTC", timestamp=1704067200000)
+
+# Get L4 orderbook diffs (order-level changes)
+diffs = client.hyperliquid.l4_orderbook.diffs(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    limit=1000
+)
+
+# Get L4 orderbook history (full snapshots over time)
+history = client.hyperliquid.l4_orderbook.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    depth=20,
+    limit=100
+)
+
+# HIP-3 L4 orderbook (case-sensitive coins)
+hip3_snapshot = client.hyperliquid.hip3.l4_orderbook.get("km:US500")
+hip3_diffs = client.hyperliquid.hip3.l4_orderbook.diffs("km:US500", start=..., end=...)
+hip3_history = client.hyperliquid.hip3.l4_orderbook.history("km:US500", start=..., end=...)
+
+# Async versions
+snapshot = await client.hyperliquid.l4_orderbook.aget("BTC")
+diffs = await client.hyperliquid.l4_orderbook.adiffs("BTC", start=..., end=...)
+history = await client.hyperliquid.l4_orderbook.ahistory("BTC", start=..., end=...)
+hip3_snapshot = await client.hyperliquid.hip3.l4_orderbook.aget("km:US500")
+```
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `get(symbol, *, timestamp, depth)` | Get L4 orderbook snapshot |
+| `diffs(symbol, *, start, end, cursor, limit)` | Get L4 orderbook diffs (order-level changes) |
+| `history(symbol, *, start, end, cursor, limit, depth)` | Get L4 orderbook history (full snapshots) |
+
+### L3 Orderbook (Lighter.xyz Only)
+
+Get L3 individual order-level orderbook data. Available for Lighter.xyz only.
+
+```python
+# Get current L3 orderbook snapshot
+snapshot = client.lighter.l3_orderbook.get("BTC")
+snapshot = client.lighter.l3_orderbook.get("BTC", depth=20)
+
+# Get L3 orderbook at a specific timestamp
+historical = client.lighter.l3_orderbook.get("BTC", timestamp=1704067200000)
+
+# Get L3 orderbook history
+history = client.lighter.l3_orderbook.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    depth=20,
+    limit=100
+)
+
+# Paginate through results
+while history.next_cursor:
+    history = client.lighter.l3_orderbook.history(
+        "BTC",
+        start="2024-01-01",
+        end="2024-01-02",
+        cursor=history.next_cursor,
+        limit=100
+    )
+
+# Async versions
+snapshot = await client.lighter.l3_orderbook.aget("BTC")
+history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
+```
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `get(symbol, *, timestamp, depth)` | Get L3 orderbook snapshot |
+| `history(symbol, *, start, end, cursor, limit, depth)` | Get L3 orderbook history |
+
+### Orders (L4 Order History)
+
+Get L4 order history, order flow aggregation, and TP/SL data. Available for Hyperliquid and HIP-3.
+
+```python
+# Get order history (Build+ tier)
+result = client.hyperliquid.orders.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    limit=1000
+)
+
+# Filter by user, status, or order type
+result = client.hyperliquid.orders.history(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    user="0x1234...",
+    status="filled",
+    order_type="limit"
+)
+
+# Get order flow aggregation (Build+ tier)
+flow = client.hyperliquid.orders.flow(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    interval="1h"
+)
+
+# Get TP/SL history (Pro+ tier)
+tpsl = client.hyperliquid.orders.tpsl(
+    "BTC",
+    start="2024-01-01",
+    end="2024-01-02",
+    user="0x1234...",       # optional
+    triggered=True          # optional filter
+)
+
+# HIP-3 orders (case-sensitive coins)
+hip3_orders = client.hyperliquid.hip3.orders.history("km:US500", start=..., end=...)
+hip3_flow = client.hyperliquid.hip3.orders.flow("km:US500", start=..., end=..., interval="1h")
+hip3_tpsl = client.hyperliquid.hip3.orders.tpsl("km:US500", start=..., end=...)
+
+# Async versions
+result = await client.hyperliquid.orders.ahistory("BTC", start=..., end=...)
+flow = await client.hyperliquid.orders.aflow("BTC", start=..., end=...)
+tpsl = await client.hyperliquid.orders.atpsl("BTC", start=..., end=...)
+hip3_orders = await client.hyperliquid.hip3.orders.ahistory("km:US500", start=..., end=...)
+```
+
+**Methods:**
+
+| Method | Description | Tier |
+|--------|-------------|------|
+| `history(symbol, *, start, end, user, status, order_type, cursor, limit)` | Get order history | Build+ |
+| `flow(symbol, *, start, end, interval, limit)` | Get order flow aggregation | Build+ |
+| `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history | Pro+ |
 
 ### Data Quality Monitoring
 
@@ -840,7 +1053,7 @@ trades = client.trades.list("BTC", start=..., end=...)
 
 ## WebSocket Client
 
-The WebSocket client supports three modes: real-time streaming, historical replay, and bulk streaming.
+The WebSocket client supports two modes: real-time streaming and historical replay. For bulk data downloads, use the S3 Parquet bulk export via the [Data Explorer](https://0xarchive.io/data).
 
 ```python
 import asyncio
@@ -949,59 +1162,9 @@ async def main():
 asyncio.run(main())
 ```
 
-### Bulk Streaming
-
-Fast bulk download for data pipelines. Data arrives in batches without timing delays.
-
-```python
-import asyncio
-import time
-from oxarchive import OxArchiveWs, WsOptions
-
-async def main():
-    ws = OxArchiveWs(WsOptions(api_key="ox_..."))
-    all_data = []
-
-    # Handle batched data
-    ws.on_batch(lambda coin, records:
-        all_data.extend([r.data for r in records])
-    )
-
-    ws.on_stream_progress(lambda snapshots_sent:
-        print(f"Progress: {snapshots_sent} snapshots")
-    )
-
-    ws.on_stream_complete(lambda ch, coin, sent:
-        print(f"Downloaded {sent} records")
-    )
-
-    await ws.connect()
-
-    # Start bulk stream
-    await ws.stream(
-        "orderbook", "ETH",
-        start=int(time.time() * 1000) - 3600000,  # 1 hour ago
-        end=int(time.time() * 1000),
-        batch_size=1000                            # Optional, defaults to 1000
-    )
-
-    # Lighter.xyz stream with granularity (tier restrictions apply)
-    await ws.stream(
-        "orderbook", "BTC",
-        start=int(time.time() * 1000) - 3600000,
-        end=int(time.time() * 1000),
-        granularity="10s"  # Options: 'checkpoint', '30s', '10s', '1s', 'tick'
-    )
-
-    # Stop if needed
-    await ws.stream_stop()
-
-asyncio.run(main())
-```
-
 ### Gap Detection
 
-During historical replay and bulk streaming, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
+During historical replay, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
 
 ```python
 import asyncio
@@ -1057,10 +1220,10 @@ ws = OxArchiveWs(WsOptions(
 |---------|-------------|---------------|-------------------|
 | `orderbook` | L2 order book updates | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes |
-| `candles` | OHLCV candle data | Yes | Yes (replay/stream only) |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay/stream only) |
-| `open_interest` | Open interest snapshots | Yes | Yes (replay/stream only) |
-| `funding` | Funding rate records | Yes | Yes (replay/stream only) |
+| `candles` | OHLCV candle data | Yes | Yes (replay only) |
+| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay only) |
+| `open_interest` | Open interest snapshots | Yes | Yes (replay only) |
+| `funding` | Funding rate records | Yes | Yes (replay only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
 
@@ -1071,8 +1234,9 @@ ws = OxArchiveWs(WsOptions(
 | `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes |
 | `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes |
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
-| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes (replay/stream only) |
-| `hip3_funding` | HIP-3 funding rate records | Yes | Yes (replay/stream only) |
+| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes (replay only) |
+| `hip3_funding` | HIP-3 funding rate records | Yes | Yes (replay only) |
+| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes (replay only) |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -1083,10 +1247,11 @@ ws = OxArchiveWs(WsOptions(
 | `lighter_orderbook` | Lighter L2 order book (reconstructed) | Yes | Yes |
 | `lighter_trades` | Lighter trade/fill updates | Yes | Yes |
 | `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
-| `lighter_open_interest` | Lighter open interest snapshots | Yes | Yes (replay/stream only) |
-| `lighter_funding` | Lighter funding rate records | Yes | Yes (replay/stream only) |
+| `lighter_open_interest` | Lighter open interest snapshots | Yes | Yes (replay only) |
+| `lighter_funding` | Lighter funding rate records | Yes | Yes (replay only) |
+| `lighter_l3_orderbook` | Lighter L3 order-level orderbook (Pro+) | Yes | Yes |
 
-#### Candle Replay/Stream
+#### Candle Replay
 
 ```python
 # Replay candles at 10x speed
@@ -1098,15 +1263,6 @@ await ws.replay(
     interval="15m"  # 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
 )
 
-# Bulk stream candles
-await ws.stream(
-    "candles", "ETH",
-    start=int(time.time() * 1000) - 3600000,
-    end=int(time.time() * 1000),
-    batch_size=1000,
-    interval="1h"
-)
-
 # Lighter.xyz candles
 await ws.replay(
     "lighter_candles", "BTC",
@@ -1116,7 +1272,7 @@ await ws.replay(
 )
 ```
 
-#### HIP-3 Replay/Stream
+#### HIP-3 Replay
 
 ```python
 # Replay HIP-3 orderbook at 50x speed
@@ -1125,14 +1281,6 @@ await ws.replay(
     start=int(time.time() * 1000) - 3600000,
     end=int(time.time() * 1000),
     speed=50,
-)
-
-# Bulk stream HIP-3 trades
-await ws.stream(
-    "hip3_trades", "xyz:XYZ100",
-    start=int(time.time() * 1000) - 86400000,
-    end=int(time.time() * 1000),
-    batch_size=1000,
 )
 
 # HIP-3 candles
@@ -1145,9 +1293,9 @@ await ws.replay(
 )
 ```
 
-#### Open Interest / Funding Replay & Stream
+#### Open Interest / Funding Replay
 
-The `open_interest`, `funding`, `lighter_open_interest`, `lighter_funding`, `hip3_open_interest`, and `hip3_funding` channels are **historical only** (replay/stream). They do not support real-time subscriptions.
+The `open_interest`, `funding`, `lighter_open_interest`, `lighter_funding`, `hip3_open_interest`, and `hip3_funding` channels are **historical only** (replay). They do not support real-time subscriptions.
 
 ```python
 # Replay open interest at 50x speed
@@ -1163,14 +1311,6 @@ await ws.replay(
     "funding", "ETH",
     start=int(time.time() * 1000) - 86400000,
     speed=50,
-)
-
-# Bulk stream Lighter open interest
-await ws.stream(
-    "lighter_open_interest", "BTC",
-    start=int(time.time() * 1000) - 86400000,
-    end=int(time.time() * 1000),
-    batch_size=1000,
 )
 
 # HIP-3 funding replay
@@ -1268,52 +1408,6 @@ await ws.multi_replay(
 )
 ```
 
-### Multi-Channel Bulk Streaming
-
-Stream multiple channels together as fast as possible for bulk data download. Data arrives in batches with interleaved channels.
-
-```python
-import asyncio
-import time
-from oxarchive import OxArchiveWs, WsOptions
-
-async def main():
-    ws = OxArchiveWs(WsOptions(api_key="ox_..."))
-    data_by_channel = {}
-
-    def on_batch(coin, records):
-        for r in records:
-            print(f"Batch record: {r.timestamp} -> {r.data}")
-
-    def on_message(msg):
-        if hasattr(msg, 'type') and msg.type == "historical_batch":
-            channel = msg.channel
-            data_by_channel.setdefault(channel, []).extend(msg.data)
-
-    ws.on_batch(on_batch)
-    ws.on_message(on_message)
-
-    ws.on_stream_complete(lambda ch, coin, sent:
-        print(f"Done: {sent} total records across all channels")
-    )
-
-    await ws.connect()
-
-    # Stream orderbook + trades + funding together
-    await ws.multi_stream(
-        ["orderbook", "trades", "funding"],
-        "ETH",
-        start=int(time.time() * 1000) - 3600000,
-        end=int(time.time() * 1000),
-        batch_size=1000,
-    )
-
-    await asyncio.sleep(30)
-    await ws.disconnect()
-
-asyncio.run(main())
-```
-
 ## Timestamp Formats
 
 The SDK accepts timestamps in multiple formats:
@@ -1322,13 +1416,13 @@ The SDK accepts timestamps in multiple formats:
 from datetime import datetime
 
 # Unix milliseconds (int)
-client.orderbook.get("BTC", timestamp=1704067200000)
+client.hyperliquid.orderbook.get("BTC", timestamp=1704067200000)
 
 # ISO string
-client.orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+client.hyperliquid.orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
 
 # datetime object
-client.orderbook.history(
+client.hyperliquid.orderbook.history(
     "BTC",
     start=datetime(2024, 1, 1),
     end=datetime(2024, 1, 2)
@@ -1387,6 +1481,10 @@ granularity: LighterGranularity = "10s"
 tick_data: TickData = client.lighter.orderbook.history_tick("BTC", start=..., end=...)
 snapshots: list[ReconstructedOrderBook] = client.lighter.orderbook.history_reconstructed("BTC", start=..., end=...)
 ```
+
+## Bulk Data Downloads
+
+For large-scale data exports (full order books, complete trade history, etc.), use the S3 Parquet bulk export available at [0xarchive.io/data](https://0xarchive.io/data). The Data Explorer lets you select time ranges, symbols, and data types, then download compressed Parquet files directly.
 
 ## Requirements
 

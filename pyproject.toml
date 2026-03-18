@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oxarchive"
-version = "0.9.2"
-description = "Official Python SDK for 0xarchive - Hyperliquid Historical Data API"
+version = "1.2.0"
+description = "Official Python SDK for 0xarchive - Historical Market Data API for Hyperliquid, Lighter.xyz, and HIP-3"
 readme = "README.md"
 license = "MIT"
 authors = [
@@ -13,7 +13,7 @@ authors = [
 ]
 keywords = ["0xarchive", "hyperliquid", "trading", "orderbook", "historical-data", "api", "sdk"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",

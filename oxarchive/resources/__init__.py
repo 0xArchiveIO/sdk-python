@@ -9,6 +9,9 @@ from .candles import CandlesResource
 from .liquidations import LiquidationsResource
 from .data_quality import DataQualityResource
 from .web3 import Web3Resource
+from .orders import OrdersResource
+from .l4_orderbook import L4OrderBookResource
+from .l3_orderbook import L3OrderBookResource
 
 __all__ = [
     "OrderBookResource",
@@ -22,4 +25,7 @@ __all__ = [
     "LiquidationsResource",
     "DataQualityResource",
     "Web3Resource",
+    "OrdersResource",
+    "L4OrderBookResource",
+    "L3OrderBookResource",
 ]

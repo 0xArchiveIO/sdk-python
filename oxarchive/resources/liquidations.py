@@ -33,9 +33,10 @@ class LiquidationsResource:
         ... )
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1"):
+    def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
         self._base_path = base_path
+        self._coin_transform = coin_transform
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -55,18 +56,19 @@ class LiquidationsResource:
 
     def history(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        **kwargs,
     ) -> CursorResponse[list[Liquidation]]:
         """
-        Get liquidation history for a coin with cursor-based pagination.
+        Get liquidation history for a symbol with cursor-based pagination.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
@@ -84,8 +86,9 @@ class LiquidationsResource:
             ...     )
             ...     liquidations.extend(result.data)
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/liquidations/{coin.upper()}",
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -100,16 +103,18 @@ class LiquidationsResource:
 
     async def ahistory(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Timestamp,
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        **kwargs,
     ) -> CursorResponse[list[Liquidation]]:
         """Async version of history(). start and end are required."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/liquidations/{coin.upper()}",
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -128,9 +133,10 @@ class LiquidationsResource:
         *,
         start: Timestamp,
         end: Timestamp,
-        coin: Optional[str] = None,
+        symbol: Optional[str] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        **kwargs,
     ) -> CursorResponse[list[Liquidation]]:
         """
         Get liquidation history for a specific user.
@@ -143,21 +149,35 @@ class LiquidationsResource:
             user_address: User's wallet address (e.g., '0x1234...')
             start: Start timestamp (required)
             end: End timestamp (required)
-            coin: Optional coin filter (e.g., 'BTC', 'ETH')
+            symbol: Optional symbol filter (e.g., 'BTC', 'ETH')
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results (default: 100, max: 1000)
 
         Returns:
             CursorResponse with liquidation records and next_cursor for pagination
         """
+        # Handle deprecated 'coin' kwarg for the symbol filter
+        if "coin" in kwargs:
+            import warnings
+
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+
         params = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
             "cursor": cursor,
             "limit": limit,
         }
-        if coin:
-            params["coin"] = coin.upper()
+        if symbol:
+            params["coin"] = symbol.upper()
 
         data = self._http.get(
             f"{self._base_path}/liquidations/user/{user_address}",
@@ -174,19 +194,34 @@ class LiquidationsResource:
         *,
         start: Timestamp,
         end: Timestamp,
-        coin: Optional[str] = None,
+        symbol: Optional[str] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        **kwargs,
     ) -> CursorResponse[list[Liquidation]]:
         """Async version of by_user()."""
+        # Handle deprecated 'coin' kwarg for the symbol filter
+        if "coin" in kwargs:
+            import warnings
+
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+
         params = {
             "start": self._convert_timestamp(start),
             "end": self._convert_timestamp(end),
             "cursor": cursor,
             "limit": limit,
         }
-        if coin:
-            params["coin"] = coin.upper()
+        if symbol:
+            params["coin"] = symbol.upper()
 
         data = await self._http.aget(
             f"{self._base_path}/liquidations/user/{user_address}",
@@ -199,19 +234,20 @@ class LiquidationsResource:
 
     def volume(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[LiquidationVolume]]:
         """
-        Get pre-aggregated liquidation volume for a coin.
+        Get pre-aggregated liquidation volume for a symbol.
 
         Args:
-            coin: The coin symbol (e.g., 'BTC', 'ETH')
+            symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp
             end: End timestamp
             interval: Aggregation interval (e.g., '1h', '1d')
@@ -226,8 +262,9 @@ class LiquidationsResource:
             >>> for bucket in result.data:
             ...     print(f"{bucket.timestamp}: ${bucket.total_usd:.0f} ({bucket.count} liquidations)")
         """
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
-            f"{self._base_path}/liquidations/{coin.upper()}/volume",
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/volume",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -243,17 +280,19 @@ class LiquidationsResource:
 
     async def avolume(
         self,
-        coin: str,
+        symbol: str,
         *,
         start: Optional[Timestamp] = None,
         end: Optional[Timestamp] = None,
         interval: Optional[str] = None,
         limit: Optional[int] = None,
         cursor: Optional[str] = None,
+        **kwargs,
     ) -> CursorResponse[list[LiquidationVolume]]:
         """Async version of volume()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
-            f"{self._base_path}/liquidations/{coin.upper()}/volume",
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/volume",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
@@ -266,3 +305,19 @@ class LiquidationsResource:
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
+
+    @staticmethod
+    def _resolve_symbol(symbol, kwargs):
+        import warnings
+
+        if "coin" in kwargs:
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+        return symbol
