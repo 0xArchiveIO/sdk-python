@@ -11,6 +11,7 @@ from .data_quality import DataQualityResource
 from .web3 import Web3Resource
 from .orders import OrdersResource
 from .l4_orderbook import L4OrderBookResource
+from .l2_orderbook import L2OrderBookResource
 from .l3_orderbook import L3OrderBookResource
 
 __all__ = [
@@ -27,5 +28,6 @@ __all__ = [
     "Web3Resource",
     "OrdersResource",
     "L4OrderBookResource",
+    "L2OrderBookResource",
     "L3OrderBookResource",
 ]

@@ -34,6 +34,7 @@ from .orderbook_reconstructor import (
     reconstruct_orderbook,
     reconstruct_final,
 )
+from .l4_reconstructor import L4OrderBookReconstructor, L4Order, L2Level
 from .types import (
     OrderBook,
     Trade,
@@ -93,7 +94,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = [
     # Client
@@ -105,7 +106,7 @@ __all__ = [
     # WebSocket Client
     "OxArchiveWs",
     "WsOptions",
-    # Orderbook Reconstructor (Enterprise tier)
+    # Orderbook Reconstructor (Enterprise tier — Lighter)
     "OrderBookReconstructor",
     "OrderbookDelta",
     "TickData",
@@ -113,6 +114,10 @@ __all__ = [
     "ReconstructOptions",
     "reconstruct_orderbook",
     "reconstruct_final",
+    # L4 Orderbook Reconstructor (Pro+ — Hyperliquid / HIP-3)
+    "L4OrderBookReconstructor",
+    "L4Order",
+    "L2Level",
     # Types
     "OrderBook",
     "Trade",

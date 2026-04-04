@@ -19,6 +19,7 @@ from .resources import (
     LiquidationsResource,
     OrdersResource,
     L4OrderBookResource,
+    L2OrderBookResource,
     L3OrderBookResource,
 )
 from .types import (
@@ -89,6 +90,9 @@ class HyperliquidClient:
 
         self.l4_orderbook = L4OrderBookResource(http, base_path)
         """L4 order-level orderbook data"""
+
+        self.l2_orderbook = L2OrderBookResource(http, base_path)
+        """L2 full-depth orderbook (derived from L4)"""
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (February 2026+)"""
@@ -346,6 +350,9 @@ class Hip3Client:
 
         self.l4_orderbook = L4OrderBookResource(http, base_path, coin_transform=coin_transform)
         """L4 order-level orderbook data"""
+
+        self.l2_orderbook = L2OrderBookResource(http, base_path, coin_transform=coin_transform)
+        """L2 full-depth orderbook (derived from L4)"""
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
