@@ -787,6 +787,38 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 | `get(symbol, *, timestamp, depth)` | Get L3 orderbook snapshot |
 | `history(symbol, *, start, end, cursor, limit, depth)` | Get L3 orderbook history |
 
+### L2 Orderbook (Full-Depth)
+
+Get L2 full-depth orderbook derived from L4 data. Available for Hyperliquid and HIP-3.
+
+```python
+# L2 full-depth orderbook (Build+ tier)
+l2 = client.hyperliquid.l2_orderbook.get("BTC")
+l2_historical = client.hyperliquid.l2_orderbook.get("BTC", timestamp=1711900800000)
+
+# L2 orderbook history (Build+ tier)
+l2_history = client.hyperliquid.l2_orderbook.history("BTC", start=start, end=end)
+
+# L2 tick-level diffs (Pro+ tier)
+l2_diffs = client.hyperliquid.l2_orderbook.diffs("BTC", start=start, end=end)
+
+# HIP-3 L2 orderbook
+hip3_l2 = client.hyperliquid.hip3.l2_orderbook.get("km:US500")
+
+# Async versions
+l2 = await client.hyperliquid.l2_orderbook.aget("BTC")
+l2_history = await client.hyperliquid.l2_orderbook.ahistory("BTC", start=..., end=...)
+l2_diffs = await client.hyperliquid.l2_orderbook.adiffs("BTC", start=..., end=...)
+```
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `get(symbol, *, timestamp, depth)` | Get L2 full-depth orderbook snapshot |
+| `history(symbol, *, start, end, cursor, limit, depth)` | Get L2 orderbook history |
+| `diffs(symbol, *, start, end, cursor, limit)` | Get L2 tick-level diffs |
+
 ### Orders (L4 Order History)
 
 Get L4 order history, order flow aggregation, and TP/SL data. Available for Hyperliquid and HIP-3.
@@ -1226,6 +1258,8 @@ ws = OxArchiveWs(WsOptions(
 | `funding` | Funding rate records | Yes | Yes (replay only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
+| `l4_diffs` | L4 orderbook diffs with user attribution (Pro+) | Yes | Real-time only |
+| `l4_orders` | Order lifecycle events with user attribution (Pro+) | Yes | Real-time only |
 
 #### HIP-3 Builder Perps Channels
 
@@ -1237,6 +1271,8 @@ ws = OxArchiveWs(WsOptions(
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes (replay only) |
 | `hip3_funding` | HIP-3 funding rate records | Yes | Yes (replay only) |
 | `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes (replay only) |
+| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs (Pro+) | Yes | Real-time only |
+| `hip3_l4_orders` | HIP-3 order lifecycle events (Pro+) | Yes | Real-time only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
