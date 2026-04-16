@@ -133,6 +133,24 @@ class Trade(BaseModel):
     taker_address: Optional[str] = None
     """Taker's wallet address (for market-level WebSocket trades)."""
 
+    builder_address: Optional[str] = None
+    """Builder address that routed this order. Present only when the order was placed through a builder."""
+
+    builder_fee: Optional[str] = None
+    """Builder fee charged on this fill, paid to the builder (in quote currency, typically USDC). Present only when builder_address is set."""
+
+    deployer_fee: Optional[str] = None
+    """HIP-3 deployer fee share on this fill (in quote currency). Negative for the maker side (rebate), positive for the taker side. Present only on HIP-3 fills."""
+
+    priority_gas: Optional[float] = None
+    """Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builder_fee and deployer_fee — paid to the network, not to a builder or deployer. Present only when the order paid for priority."""
+
+    cloid: Optional[str] = None
+    """Client order ID."""
+
+    twap_id: Optional[int] = None
+    """TWAP execution ID."""
+
 
 # =============================================================================
 # Instrument Types
