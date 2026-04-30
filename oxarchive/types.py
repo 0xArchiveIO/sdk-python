@@ -733,7 +733,7 @@ class WsHistoricalTickData(BaseModel):
 
 
 # =============================================================================
-# WebSocket Bulk Stream Types (Bulk Download Mode)
+# WebSocket Bulk Stream Types (Data Catalog Mode)
 # =============================================================================
 
 
@@ -1058,7 +1058,7 @@ class CoverageResponse(BaseModel):
     """Overall coverage response."""
 
     exchanges: list[ExchangeCoverage]
-    """Coverage for all exchanges."""
+    """Coverage for supported venue APIs."""
 
 
 class CoverageGap(BaseModel):

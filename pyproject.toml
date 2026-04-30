@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "oxarchive"
 version = "1.4.0"
-description = "Official Python SDK for 0xarchive - Historical Market Data API for Hyperliquid, Lighter.xyz, and HIP-3"
+description = "Python SDK for the 0xArchive market data API for Hyperliquid and Lighter.xyz"
 readme = "README.md"
 license = "MIT"
 authors = [
     { name = "0xarchive", email = "support@0xarchive.io" }
 ]
-keywords = ["0xarchive", "hyperliquid", "trading", "orderbook", "historical-data", "api", "sdk"]
+keywords = ["0xarchive", "market-data", "hyperliquid", "lighterxyz", "orderbook", "trades", "replay", "api", "sdk"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -47,10 +47,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://0xarchive.io"
-Documentation = "https://0xarchive.io/docs/sdks"
-Repository = "https://github.com/0xarchiveIO/sdk-python"
-Issues = "https://github.com/0xarchiveIO/sdk-python/issues"
+Homepage = "https://www.0xarchive.io/github-python"
+Documentation = "https://www.0xarchive.io/docs/sdks"
+Repository = "https://github.com/0xArchiveIO/sdk-python"
+Issues = "https://github.com/0xArchiveIO/sdk-python/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["oxarchive"]

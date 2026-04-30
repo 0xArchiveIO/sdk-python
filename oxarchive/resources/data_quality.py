@@ -30,7 +30,7 @@ class DataQualityResource:
         >>> status = client.data_quality.status()
         >>> print(f"System status: {status.status}")
         >>>
-        >>> # Get coverage for all exchanges
+        >>> # Get coverage across venue APIs
         >>> coverage = client.data_quality.coverage()
         >>>
         >>> # Get symbol-specific coverage with gap detection
@@ -69,7 +69,7 @@ class DataQualityResource:
         Get overall system health status.
 
         Returns:
-            StatusResponse with overall status, per-exchange status,
+            StatusResponse with overall status, per-scope status,
             per-data-type status, and active incident count.
 
         Example:
@@ -92,10 +92,10 @@ class DataQualityResource:
 
     def coverage(self) -> CoverageResponse:
         """
-        Get data coverage summary for all exchanges.
+        Get data coverage summary across venue APIs.
 
         Returns:
-            CoverageResponse with coverage info for all exchanges and data types.
+            CoverageResponse with coverage info for supported venue APIs and data types.
 
         Example:
             >>> coverage = client.data_quality.coverage()
@@ -114,13 +114,13 @@ class DataQualityResource:
 
     def exchange_coverage(self, exchange: str) -> ExchangeCoverage:
         """
-        Get data coverage for a specific exchange.
+        Get data coverage for a specific venue scope.
 
         Args:
-            exchange: Exchange name ('hyperliquid', 'lighter', or 'hip3')
+            exchange: Venue scope ('hyperliquid', 'lighter', or 'hip3')
 
         Returns:
-            ExchangeCoverage with coverage info for all data types on this exchange.
+            ExchangeCoverage with coverage info for all data types on this venue scope.
 
         Example:
             >>> hl = client.data_quality.exchange_coverage("hyperliquid")
@@ -143,13 +143,13 @@ class DataQualityResource:
         to_time: Optional[Timestamp] = None,
     ) -> SymbolCoverageResponse:
         """
-        Get data coverage for a specific symbol on an exchange.
+        Get data coverage for a specific symbol on a venue scope.
 
         Includes gap detection, empirical data cadence, and hour-level
         historical coverage.
 
         Args:
-            exchange: Exchange name ('hyperliquid', 'lighter', or 'hip3')
+            exchange: Venue scope ('hyperliquid', 'lighter', or 'hip3')
             symbol: Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
             from_time: Start of gap detection window (default: now - 30 days).
                 Accepts Unix ms, datetime, or ISO string.
@@ -299,7 +299,7 @@ class DataQualityResource:
 
     def latency(self) -> LatencyResponse:
         """
-        Get current latency metrics for all exchanges.
+        Get current latency metrics for supported venue APIs.
 
         Returns:
             LatencyResponse with WebSocket, REST API, and data freshness metrics.

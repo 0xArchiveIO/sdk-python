@@ -24,8 +24,9 @@ class Client:
     """
     0xarchive API client.
 
-    Supports multiple exchanges:
+    Supports two top-level venue APIs:
     - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
+      - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
     - `client.lighter` - Lighter.xyz perpetuals
 
     Example:
@@ -39,6 +40,9 @@ class Client:
         >>>
         >>> # Lighter.xyz data
         >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
+        >>>
+        >>> # Hyperliquid HIP-3 data
+        >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
         >>>
         >>> # Get historical snapshots
         >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
