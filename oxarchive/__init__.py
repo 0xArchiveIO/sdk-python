@@ -1,9 +1,9 @@
 """
 oxarchive - Official Python SDK for 0xarchive
 
-Historical Market Data API for multiple exchanges:
+Historical Market Data API for two top-level venue APIs:
 - Hyperliquid (perpetuals data from April 2023)
-- Hyperliquid HIP-3 builder perps (Free: km:US500, Build+: all symbols, February 2026+)
+- Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
 - Lighter.xyz (perpetuals data)
 
 Example:
@@ -17,6 +17,9 @@ Example:
     >>>
     >>> # Lighter.xyz data
     >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
+    >>>
+    >>> # Hyperliquid HIP-3 data
+    >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
     >>>
     >>> # Get historical snapshots
     >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
