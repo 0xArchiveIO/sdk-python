@@ -4,6 +4,7 @@ oxarchive - Official Python SDK for 0xarchive
 Historical Market Data API for two top-level venue APIs:
 - Hyperliquid (perpetuals data from April 2023)
 - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
+- Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
 - Lighter.xyz (perpetuals data)
 
 Example:
@@ -26,7 +27,7 @@ Example:
 """
 
 from .client import Client
-from .exchanges import HyperliquidClient, Hip3Client, LighterClient
+from .exchanges import HyperliquidClient, Hip3Client, Hip4Client, LighterClient
 from .resources.orderbook import LighterGranularity
 from .orderbook_reconstructor import (
     OrderBookReconstructor,
@@ -44,6 +45,11 @@ from .types import (
     Instrument,
     LighterInstrument,
     Hip3Instrument,
+    Hip4Outcome,
+    Hip4OutcomeAggregate,
+    Hip4SideSpec,
+    Hip4AggregatedOi,
+    Hip4OpenInterestRecord,
     FundingRate,
     OpenInterest,
     Liquidation,
@@ -86,6 +92,8 @@ from .types import (
     WsStreamCompleted,
     WsStreamStopped,
     TimestampedRecord,
+    # HIP-4 settlement event
+    WsOutcomeSettled,
 )
 
 # WebSocket client (optional import - requires websockets package)
@@ -97,7 +105,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.4.0"
+__version__ = "1.6.0"
 
 __all__ = [
     # Client
@@ -105,6 +113,7 @@ __all__ = [
     # Exchange Clients
     "HyperliquidClient",
     "Hip3Client",
+    "Hip4Client",
     "LighterClient",
     # WebSocket Client
     "OxArchiveWs",
@@ -127,6 +136,11 @@ __all__ = [
     "Instrument",
     "LighterInstrument",
     "Hip3Instrument",
+    "Hip4Outcome",
+    "Hip4OutcomeAggregate",
+    "Hip4SideSpec",
+    "Hip4AggregatedOi",
+    "Hip4OpenInterestRecord",
     "LighterGranularity",
     "FundingRate",
     "OpenInterest",
@@ -170,4 +184,6 @@ __all__ = [
     "WsStreamCompleted",
     "WsStreamStopped",
     "TimestampedRecord",
+    # HIP-4 Settlement Event
+    "WsOutcomeSettled",
 ]

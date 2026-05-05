@@ -103,10 +103,18 @@ async with Client(api_key="0xa_your_api_key") as client:
 
 ```python
 client = Client(
-    api_key="0xa_your_api_key",           # Required
+    api_key="0xa_your_api_key",           # Required (or via OXARCHIVE_API_KEY env var)
     base_url="https://api.0xarchive.io", # Optional
     timeout=30.0,                         # Optional, request timeout in seconds (default: 30.0)
 )
+```
+
+If ``api_key`` is omitted, the SDK falls back to the ``OXARCHIVE_API_KEY``
+environment variable.
+
+```python
+# OXARCHIVE_API_KEY=0xa_your_api_key python script.py
+client = Client()
 ```
 
 ## REST API Reference
@@ -391,6 +399,39 @@ us500 = await client.hyperliquid.hip3.instruments.aget("km:US500")
 |---------|-------|
 | xyz (Hyperliquid) | `xyz:XYZ100` |
 | km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
+
+#### HIP-4 Outcome Markets
+
+HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 has **no funding, no liquidations, and no candles by design**. Those endpoints return 404. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
+
+```python
+# Outcome-level metadata (one row per outcome_id; sides folded into side_specs).
+result = client.hyperliquid.hip4.list_outcomes(is_settled=False, limit=50)
+for o in result.data:
+    print(f"#{o.outcome_id}: {o.underlying} {o.class_} expiry={o.expiry}")
+
+# Single-outcome detail. Includes aggregated_oi (paired both-sides snapshot).
+outcome = client.hyperliquid.hip4.get_outcome(0)
+agg = outcome.aggregated_oi
+print(f"Display OI: {agg.outcome_display_open_interest_contracts} {agg.currency}")
+print(f"Side parity: {agg.side_supply_parity}")
+
+# Look up by slug (per-outcome OR per-side). Returns aggregated_oi too.
+outcome = client.hyperliquid.hip4.get_outcome_by_slug("btc-above-78213-may-04-0600")
+
+# Filter the list endpoint by slug. Short-circuits to a one-item response.
+result = client.hyperliquid.hip4.list_outcomes(slug="btc-above-78213-yes-may-04-0600")
+
+# Per-side instruments. Either bare or "#"-prefixed works.
+yes = client.hyperliquid.hip4.instruments.get("0")     # bare, recommended
+no_ = client.hyperliquid.hip4.instruments.get("#1")    # also works
+
+# Market data (Pro+ for orderbook & L4; Build+ for trades/OI).
+ob = client.hyperliquid.hip4.get_orderbook("0")
+trades = client.hyperliquid.hip4.get_trades_recent("0", limit=50)
+oi = client.hyperliquid.hip4.get_open_interest_current("0")  # mark_price is in [0, 1]
+summary = client.hyperliquid.hip4.get_summary("0")           # mark_price is in [0, 1]
+```
 
 ### Funding Rates
 
@@ -1271,13 +1312,15 @@ ws = OxArchiveWs(WsOptions(
 | `orderbook` | L2 order book updates | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | Yes (replay only) |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Yes (replay only) |
+| `liquidations` | Liquidation events (May 2025+) | Yes | **Yes (realtime + replay)** |
 | `open_interest` | Open interest snapshots | Yes | Yes (replay only) |
 | `funding` | Funding rate records | Yes | Yes (replay only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
 | `l4_diffs` | L4 orderbook diffs with user attribution (Pro+) | Yes | Real-time only |
 | `l4_orders` | Order lifecycle events with user attribution (Pro+) | Yes | Real-time only |
+
+> **Note:** ``liquidations`` and ``hip3_liquidations`` now stream live. Each item shares the trades wire shape (a fill row with ``is_liquidation: true``). The SDK exposes a typed ``on_liquidations`` callback that decodes them into :class:`Liquidation` records.
 
 #### HIP-3 Builder Perps Channels
 
@@ -1288,11 +1331,33 @@ ws = OxArchiveWs(WsOptions(
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes |
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes (replay only) |
 | `hip3_funding` | HIP-3 funding rate records | Yes | Yes (replay only) |
-| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes (replay only) |
+| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | **Yes (realtime + replay)** |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs (Pro+) | Yes | Real-time only |
 | `hip3_l4_orders` | HIP-3 order lifecycle events (Pro+) | Yes | Real-time only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
+
+#### HIP-4 Outcome Market Channels
+
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `hip4_orderbook` | HIP-4 L2 order book snapshots (Pro+) | Yes | Yes |
+| `hip4_trades` | HIP-4 trade/fill updates (Build+) | Yes | Yes |
+| `hip4_open_interest` | HIP-4 per-side OI ticks (Build+) | Yes | Yes (replay only) |
+| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs (Pro+) | Yes | Real-time only |
+| `hip4_l4_orders` | HIP-4 order lifecycle events (Pro+) | Yes | Real-time only |
+
+HIP-4 has **no funding, no liquidations, and no candles by design**. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
+
+```python
+def on_settled(msg):
+    print(f"Outcome {msg.outcome_id} side {msg.side} settled at {msg.settlement_value}")
+    # Server has already auto-unsubscribed; the SDK mirrors that locally.
+
+ws.on_outcome_settled(on_settled)
+ws.subscribe_hip4_orderbook("#0")
+ws.subscribe_hip4_trades("#0")
+```
 
 #### Lighter.xyz Channels
 

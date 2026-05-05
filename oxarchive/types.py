@@ -208,6 +208,159 @@ class Hip3Instrument(BaseModel):
     """Timestamp of latest data point."""
 
 
+class Hip4SideSpec(BaseModel):
+    """Per-side spec inside a Hip4OutcomeAggregate.side_specs list."""
+
+    side: int
+    """Side index (0 = Yes, 1 = No)."""
+
+    name: str
+    """Side display name (e.g. 'Yes', 'No')."""
+
+    coin: str
+    """Per-side coin symbol (e.g. '#0', '#1')."""
+
+    asset_id: int
+    """Public asset id: 100_000_000 + 10*outcome_id + side."""
+
+    display_title: Optional[str] = None
+    """Human-readable per-side title (e.g. 'BTC above 78,213 on May 4 at 06:00 UTC? — Yes')."""
+
+    slug: Optional[str] = None
+    """Per-side URL slug mirroring HL's URL pattern (e.g. 'btc-above-78213-yes-may-04-0600')."""
+
+
+class Hip4AggregatedOi(BaseModel):
+    """Latest both-sides OI snapshot for an outcome (returned on detail only)."""
+
+    side0_open_interest_contracts: Optional[float] = None
+    side1_open_interest_contracts: Optional[float] = None
+    outcome_display_open_interest_contracts: Optional[float] = None
+    paired_set_supply_contracts: Optional[float] = None
+    side_supply_parity: Optional[bool] = None
+    currency: Optional[str] = None
+    """Quote currency (typically 'USDH')."""
+
+    as_of: Optional[datetime] = None
+    side0_as_of: Optional[datetime] = None
+    side1_as_of: Optional[datetime] = None
+
+
+class Hip4Outcome(BaseModel):
+    """HIP-4 per-side instrument metadata.
+
+    Returned by /v1/hyperliquid/hip4/instruments and /instruments/{symbol}.
+    One row per `#N` (per outcome side).
+    """
+
+    outcome_id: int
+    """Outcome market id."""
+
+    side: int
+    """Side index (0 = Yes, 1 = No)."""
+
+    asset_id: int
+    """Public asset id: 100_000_000 + 10*outcome_id + side."""
+
+    coin: str
+    """Coin symbol (e.g. '#0', '#1')."""
+
+    symbol: str
+    """Same as coin, for symbol-style consumers."""
+
+    name: Optional[str] = None
+    """Human-readable per-side name."""
+
+    description: Optional[str] = None
+    """Pipe-delimited raw description from upstream."""
+
+    side_name: Optional[str] = None
+    """Side label ('Yes' or 'No')."""
+
+    recurring_class: Optional[str] = None
+    recurring_underlying: Optional[str] = None
+    recurring_expiry: Optional[datetime] = None
+    recurring_target_px: Optional[float] = None
+    recurring_period: Optional[str] = None
+    builder_address: Optional[str] = None
+
+    is_settled: Optional[bool] = None
+    """True after the outcome resolves."""
+
+    first_seen_at: Optional[datetime] = None
+    last_updated_at: Optional[datetime] = None
+
+    display_title: Optional[str] = None
+    """Human-readable per-side title."""
+
+    slug: Optional[str] = None
+    """Per-side URL slug mirroring HL's pattern."""
+
+
+class Hip4OutcomeAggregate(BaseModel):
+    """HIP-4 per-outcome aggregated metadata.
+
+    Returned by /v1/hyperliquid/hip4/outcomes (list, no aggregated_oi)
+    and /outcomes/{outcome_id} (detail, includes aggregated_oi).
+    """
+
+    outcome_id: int
+    name: Optional[str] = None
+    description_raw: Optional[str] = None
+    class_: Optional[str] = Field(default=None, alias="class")
+    """Outcome class (e.g. 'priceBinary'). Aliased because 'class' is a Python keyword."""
+
+    underlying: Optional[str] = None
+    expiry: Optional[datetime] = None
+    target_price: Optional[float] = None
+    period: Optional[str] = None
+    side_specs: list[Hip4SideSpec] = Field(default_factory=list)
+    is_settled: Optional[bool] = None
+    status: Optional[str] = None
+    """Lifecycle status (e.g. 'live', 'settled')."""
+
+    source_seen_at: Optional[datetime] = None
+    aggregated_oi: Optional[Hip4AggregatedOi] = None
+    """Populated only on the detail endpoint (/outcomes/{outcome_id})."""
+
+    display_title: Optional[str] = None
+    """Per-outcome human-readable title (e.g. 'BTC above 78,213 on May 4 at 06:00 UTC?')."""
+
+    slug: Optional[str] = None
+    """Per-outcome URL slug (e.g. 'btc-above-78213-may-04-0600')."""
+
+    outcome_pair: Optional[list[str]] = None
+    """Paired sibling coins for this outcome (e.g. ['#10', '#11'])."""
+
+    settlement_value: Optional[float] = None
+    """Terminal settled value (0.0 or 1.0 for binary outcomes), if settled."""
+
+    settlement_at: Optional[datetime] = None
+    """Wallclock time the outcome settled, if settled."""
+
+    model_config = {"populate_by_name": True}
+
+
+class Hip4OpenInterestRecord(BaseModel):
+    """HIP-4 OI record (per side). Mirrors HIP-3 OI plus outcome_id and side.
+
+    Note: `mark_price` is an implied probability in [0, 1], not a USD price.
+    Field name mirrors upstream Hyperliquid `markPx`. `oracle_price` is omitted
+    for HIP-4 (outcomes have no oracle feed).
+    """
+
+    coin: str
+    symbol: str
+    outcome_id: int
+    side: int
+    timestamp: datetime
+    open_interest: str
+    mark_price: Optional[str] = None
+    """Implied probability in [0, 1] (NOT USD). Same field name as perps."""
+
+    mid_price: Optional[str] = None
+
+
 class LighterInstrument(BaseModel):
     """Trading instrument specification (Lighter.xyz).
 
@@ -545,6 +698,8 @@ WsChannel = Literal[
     "lighter_open_interest", "lighter_funding", "lighter_l3_orderbook",
     "hip3_orderbook", "hip3_trades", "hip3_candles",
     "hip3_open_interest", "hip3_funding", "hip3_liquidations",
+    "hip4_orderbook", "hip4_trades", "hip4_open_interest",
+    "hip4_l4_diffs", "hip4_l4_orders",
     "l4_diffs", "l4_orders",
     "hip3_l4_diffs", "hip3_l4_orders",
 ]
@@ -552,12 +707,16 @@ WsChannel = Literal[
 
 Notes:
 - ticker/all_tickers are real-time only.
-- liquidations is historical only (May 2025+).
-- hip3_liquidations is historical only (Feb 2026+).
+- liquidations and hip3_liquidations now stream live (realtime + replay).
+  Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
 - open_interest, funding, lighter_open_interest, lighter_funding,
   hip3_open_interest, hip3_funding are historical only (replay/stream).
-- l4_diffs, l4_orders: L4 order-level data channels.
-- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data channels.
+- l4_diffs, l4_orders: Hyperliquid L4 order-level data (Pro+, realtime only).
+- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (Pro+, realtime only).
+- hip4_orderbook, hip4_trades, hip4_open_interest: HIP-4 outcome markets
+  (realtime + replay; orderbook is Pro+, the rest is Build+).
+- hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (Pro+, realtime only).
+- HIP-4 has no funding / liquidations / candles by design.
 """
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]
@@ -816,6 +975,37 @@ class WsGapDetected(BaseModel):
     """End of the gap (next data point timestamp in ms)."""
     duration_minutes: int
     """Gap duration in minutes."""
+
+
+# =============================================================================
+# WebSocket HIP-4 Settlement Event
+# =============================================================================
+
+
+class WsOutcomeSettled(BaseModel):
+    """HIP-4 outcome settlement notification.
+
+    Pushed once per ``(outcome_id, side)`` when ``hip4_outcome_metadata.is_settled``
+    flips to true. After delivering this message the server proactively
+    unsubscribes the client from every ``hip4_*`` subscription on the settled
+    coin. Treat the event as a terminal signal for that coin.
+    """
+
+    type: Literal["outcome_settled"]
+    coin: str
+    """Per-side coin symbol, e.g. ``'#55850'``."""
+
+    outcome_id: int
+    """Outcome market id."""
+
+    side: int
+    """Side index (0 = Yes, 1 = No)."""
+
+    settlement_value: Optional[float] = None
+    """Final implied probability for this side (0.0 or 1.0 for binary outcomes)."""
+
+    settlement_at: Optional[datetime] = None
+    """When the outcome resolved (UTC)."""
 
 
 # =============================================================================
