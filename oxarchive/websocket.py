@@ -51,6 +51,7 @@ except ImportError:
     )
 
 from .types import (
+    Liquidation,
     OrderBook,
     OrderbookDelta,
     PriceLevel,
@@ -59,6 +60,7 @@ from .types import (
     WsConnectionState,
     WsData,
     WsError,
+    WsOutcomeSettled,
     WsPong,
     WsSubscribed,
     WsUnsubscribed,
@@ -116,9 +118,14 @@ class WsOptions:
     ping_interval: float = DEFAULT_PING_INTERVAL
 
 
-MessageHandler = Callable[[Union[WsSubscribed, WsUnsubscribed, WsPong, WsError, WsData]], None]
+MessageHandler = Callable[
+    [Union[WsSubscribed, WsUnsubscribed, WsPong, WsError, WsData, WsOutcomeSettled]],
+    None,
+]
 OrderbookHandler = Callable[[str, OrderBook], None]
 TradesHandler = Callable[[str, list[Trade]], None]
+LiquidationsHandler = Callable[[str, list[Liquidation]], None]
+OutcomeSettledHandler = Callable[[WsOutcomeSettled], None]
 StateHandler = Callable[[WsConnectionState], None]
 ErrorHandler = Callable[[Exception], None]
 
@@ -206,6 +213,68 @@ def _transform_trades(coin: str, raw_data: list) -> list[Trade]:
     return [_transform_trade(coin, t) for t in raw_data]
 
 
+def _transform_liquidation(coin: str, raw: dict) -> Liquidation:
+    """Transform a single liquidation fill row to a Liquidation.
+
+    Liquidations stream over WebSocket as fill rows with ``is_liquidation: true``,
+    sharing the trades wire shape. The maker is the liquidated user; the taker
+    is the liquidator. We map both naming styles (raw Hyperliquid ``users``
+    array; SDK-shaped historical replay payload).
+    """
+    from datetime import datetime
+
+    # SDK-shaped (REST API or historical replay): already snake_case fields.
+    if "liquidated_user" in raw:
+        return Liquidation.model_validate({**raw, "coin": raw.get("coin", coin)})
+
+    # Wire shape mirrors trades: { coin, side, px, sz, time, hash, tid, users: [maker, taker], ... }
+    time_ms = raw.get("time")
+    timestamp = (
+        datetime.utcfromtimestamp(time_ms / 1000).isoformat() + "Z" if time_ms else None
+    )
+    users = raw.get("users") or []
+    liquidated = users[0] if len(users) > 0 else (raw.get("liquidated_user") or "")
+    liquidator = users[1] if len(users) > 1 else (raw.get("liquidator_user") or "")
+
+    side = raw.get("side", "B")
+    # Liquidation type uses 'B'/'S'; fills use 'A' for ask/sell, 'B' for buy.
+    if side == "A":
+        side = "S"
+
+    return Liquidation(
+        coin=raw.get("coin", coin),
+        timestamp=timestamp or datetime.utcnow().isoformat() + "Z",
+        liquidated_user=liquidated,
+        liquidator_user=liquidator,
+        price=str(raw.get("px") or raw.get("price") or "0"),
+        size=str(raw.get("sz") or raw.get("size") or "0"),
+        side=side,  # type: ignore[arg-type]
+        mark_price=raw.get("mark_price"),
+        closed_pnl=raw.get("closedPnl") or raw.get("closed_pnl"),
+        direction=raw.get("dir") or raw.get("direction"),
+        trade_id=raw.get("tid") or raw.get("trade_id"),
+        tx_hash=raw.get("hash") or raw.get("tx_hash"),
+    )
+
+
+def _transform_liquidations(coin: str, raw_data) -> list[Liquidation]:
+    """Transform raw liquidation payload(s) into a list of Liquidation."""
+    if isinstance(raw_data, list):
+        # Some payloads may include non-liquidation fills mixed in. The server
+        # already filters but be defensive.
+        out: list[Liquidation] = []
+        for item in raw_data:
+            if not isinstance(item, dict):
+                continue
+            if item.get("is_liquidation") is False:
+                continue
+            out.append(_transform_liquidation(coin, item))
+        return out
+    if isinstance(raw_data, dict):
+        return [_transform_liquidation(coin, raw_data)]
+    return []
+
+
 def _transform_orderbook(coin: str, raw: dict) -> OrderBook:
     """Transform raw Hyperliquid orderbook format to SDK OrderBook type.
 
@@ -288,6 +357,8 @@ class OxArchiveWs:
         self._on_message: Optional[MessageHandler] = None
         self._on_orderbook: Optional[OrderbookHandler] = None
         self._on_trades: Optional[TradesHandler] = None
+        self._on_liquidations: Optional[LiquidationsHandler] = None
+        self._on_outcome_settled: Optional[OutcomeSettledHandler] = None
         self._on_state_change: Optional[StateHandler] = None
         self._on_error: Optional[ErrorHandler] = None
         self._on_open: Optional[Callable[[], None]] = None
@@ -442,6 +513,79 @@ class OxArchiveWs:
         """Unsubscribe from all tickers."""
         self.unsubscribe("all_tickers")
 
+    # -- Liquidations (now realtime + replay) --------------------------------
+
+    def subscribe_liquidations(self, coin: str) -> None:
+        """Subscribe to live Hyperliquid liquidations for a coin.
+
+        Each item shares the trades wire shape (a fill row with
+        ``is_liquidation: true``). Use :py:meth:`on_liquidations` to receive
+        decoded :class:`~oxarchive.types.Liquidation` records.
+        """
+        self.subscribe("liquidations", coin)
+
+    def unsubscribe_liquidations(self, coin: str) -> None:
+        """Unsubscribe from live Hyperliquid liquidations for a coin."""
+        self.unsubscribe("liquidations", coin)
+
+    def subscribe_hip3_liquidations(self, coin: str) -> None:
+        """Subscribe to live HIP-3 liquidations for a coin (case-sensitive)."""
+        self.subscribe("hip3_liquidations", coin)
+
+    def unsubscribe_hip3_liquidations(self, coin: str) -> None:
+        """Unsubscribe from live HIP-3 liquidations for a coin."""
+        self.unsubscribe("hip3_liquidations", coin)
+
+    # -- HIP-4 outcome markets -----------------------------------------------
+
+    def subscribe_hip4_orderbook(self, coin: str) -> None:
+        """Subscribe to live HIP-4 L2 orderbook for a per-side coin (Pro+).
+
+        ``coin`` should be the on-chain ``#N`` form (e.g. ``"#0"``). The raw
+        ``#`` is sent in the JSON body — only the REST path strips it.
+        """
+        self.subscribe("hip4_orderbook", coin)
+
+    def unsubscribe_hip4_orderbook(self, coin: str) -> None:
+        """Unsubscribe from live HIP-4 L2 orderbook for a per-side coin."""
+        self.unsubscribe("hip4_orderbook", coin)
+
+    def subscribe_hip4_trades(self, coin: str) -> None:
+        """Subscribe to live HIP-4 trades for a per-side coin (Build+)."""
+        self.subscribe("hip4_trades", coin)
+
+    def unsubscribe_hip4_trades(self, coin: str) -> None:
+        """Unsubscribe from live HIP-4 trades for a per-side coin."""
+        self.unsubscribe("hip4_trades", coin)
+
+    def subscribe_hip4_open_interest(self, coin: str) -> None:
+        """Subscribe to live HIP-4 per-side open-interest ticks (Build+)."""
+        self.subscribe("hip4_open_interest", coin)
+
+    def unsubscribe_hip4_open_interest(self, coin: str) -> None:
+        """Unsubscribe from live HIP-4 per-side open-interest ticks."""
+        self.unsubscribe("hip4_open_interest", coin)
+
+    def subscribe_hip4_l4_diffs(self, coin: str) -> None:
+        """Subscribe to HIP-4 L4 orderbook diffs (Pro+, realtime only).
+
+        On subscribe the server first pushes an ``l4_snapshot`` followed by a
+        stream of ``l4_batch`` messages.
+        """
+        self.subscribe("hip4_l4_diffs", coin)
+
+    def unsubscribe_hip4_l4_diffs(self, coin: str) -> None:
+        """Unsubscribe from HIP-4 L4 orderbook diffs."""
+        self.unsubscribe("hip4_l4_diffs", coin)
+
+    def subscribe_hip4_l4_orders(self, coin: str) -> None:
+        """Subscribe to HIP-4 L4 order lifecycle events (Pro+, realtime only)."""
+        self.subscribe("hip4_l4_orders", coin)
+
+    def unsubscribe_hip4_l4_orders(self, coin: str) -> None:
+        """Unsubscribe from HIP-4 L4 order lifecycle events."""
+        self.unsubscribe("hip4_l4_orders", coin)
+
     # =========================================================================
     # Historical Replay (Option B) - Like Tardis.dev
     # =========================================================================
@@ -474,7 +618,7 @@ class OxArchiveWs:
         msg = {
             "op": "replay",
             "channel": channel,
-            "coin": coin,
+            "symbol": coin,
             "start": start,
             "speed": speed,
         }
@@ -545,7 +689,7 @@ class OxArchiveWs:
         msg: dict[str, Any] = {
             "op": "replay",
             "channels": channels,
-            "coin": coin,
+            "symbol": coin,
             "start": start,
             "speed": speed,
         }
@@ -585,7 +729,7 @@ class OxArchiveWs:
         msg = {
             "op": "stream",
             "channel": channel,
-            "coin": coin,
+            "symbol": coin,
             "start": start,
             "end": end,
             "batch_size": batch_size,
@@ -635,7 +779,7 @@ class OxArchiveWs:
         msg: dict[str, Any] = {
             "op": "stream",
             "channels": channels,
-            "coin": coin,
+            "symbol": coin,
             "start": start,
             "end": end,
             "batch_size": batch_size,
@@ -655,6 +799,23 @@ class OxArchiveWs:
     def on_trades(self, handler: TradesHandler) -> None:
         """Set handler for trade data."""
         self._on_trades = handler
+
+    def on_liquidations(self, handler: LiquidationsHandler) -> None:
+        """Set handler for live liquidation data.
+
+        Fires for both ``liquidations`` (Hyperliquid) and ``hip3_liquidations``
+        (HIP-3 nodes). Each callback receives ``(coin, [Liquidation, ...])``.
+        """
+        self._on_liquidations = handler
+
+    def on_outcome_settled(self, handler: OutcomeSettledHandler) -> None:
+        """Set handler for HIP-4 ``outcome_settled`` events.
+
+        The server pushes this once per ``(outcome_id, side)`` and then
+        unsubscribes the client from all ``hip4_*`` channels for the settled
+        coin. Treat the event as terminal for that coin.
+        """
+        self._on_outcome_settled = handler
 
     def on_state_change(self, handler: StateHandler) -> None:
         """Set handler for state changes."""
@@ -791,19 +952,20 @@ class OxArchiveWs:
         return f"{channel}:{coin}" if coin else channel
 
     async def _send_subscribe(self, channel: WsChannel, coin: Optional[str]) -> None:
-        """Send subscribe message."""
+        """Send subscribe message. Wire field is `symbol`; `coin` is the
+        deprecated alias kept on the SDK surface for backward compatibility."""
         if self._ws:
             msg = {"op": "subscribe", "channel": channel}
             if coin:
-                msg["coin"] = coin
+                msg["symbol"] = coin
             await self._ws.send(json.dumps(msg))
 
     async def _send_unsubscribe(self, channel: WsChannel, coin: Optional[str]) -> None:
-        """Send unsubscribe message."""
+        """Send unsubscribe message. Wire field is `symbol`."""
         if self._ws:
             msg = {"op": "unsubscribe", "channel": channel}
             if coin:
-                msg["coin"] = coin
+                msg["symbol"] = coin
             await self._ws.send(json.dumps(msg))
 
     async def _resubscribe(self) -> None:
@@ -885,15 +1047,39 @@ class OxArchiveWs:
                 coin = data.get("coin", "")
                 raw_data = data.get("data", {})
 
-                if channel == "orderbook" and self._on_orderbook:
+                # Map venue-prefixed channel variants to the same typed handler.
+                # All orderbook variants (Hyperliquid/HIP-3/HIP-4/Lighter) share
+                # the same wire shape; same for trades and liquidations. Users
+                # should not have to fall back to on_message just because they
+                # subscribed to ``hip4_orderbook`` instead of ``orderbook``.
+                if channel in (
+                    "orderbook",
+                    "hip3_orderbook",
+                    "hip4_orderbook",
+                    "lighter_orderbook",
+                ) and self._on_orderbook:
                     # Transform raw Hyperliquid format to SDK OrderBook type
                     orderbook = _transform_orderbook(coin, raw_data)
                     self._on_orderbook(coin, orderbook)
 
-                elif channel == "trades" and self._on_trades:
+                elif channel in (
+                    "trades",
+                    "hip3_trades",
+                    "hip4_trades",
+                    "lighter_trades",
+                ) and self._on_trades:
                     # Transform raw Hyperliquid format to SDK Trade type
                     trades = _transform_trades(coin, raw_data)
                     self._on_trades(coin, trades)
+
+                elif (
+                    channel in ("liquidations", "hip3_liquidations")
+                    and self._on_liquidations
+                ):
+                    # Liquidations stream as fill rows with is_liquidation=true,
+                    # sharing the trades wire shape.
+                    liqs = _transform_liquidations(coin, raw_data)
+                    self._on_liquidations(coin, liqs)
 
             # Replay messages (Option B)
             elif msg_type == "replay_started" and self._on_replay_start:
@@ -944,6 +1130,24 @@ class OxArchiveWs:
                     data["gap_end"],
                     data["duration_minutes"],
                 )
+
+            # HIP-4 outcome settlement (server auto-unsubscribes after sending).
+            elif msg_type == "outcome_settled":
+                msg = WsOutcomeSettled(**data)
+                if self._on_message:
+                    self._on_message(msg)
+                if self._on_outcome_settled:
+                    self._on_outcome_settled(msg)
+                # Server auto-unsubscribes; mirror that locally so resubscribes
+                # after a reconnect don't try to re-arm a settled market.
+                settled_coin = msg.coin
+                self._subscriptions = {
+                    key
+                    for key in self._subscriptions
+                    if not (
+                        key.startswith("hip4_") and key.endswith(f":{settled_coin}")
+                    )
+                }
 
         except Exception as e:
             logger.error(f"Error handling message: {e}")

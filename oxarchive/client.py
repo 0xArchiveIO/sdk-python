@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from .http import HttpClient
@@ -18,6 +19,7 @@ from .resources import (
 
 DEFAULT_BASE_URL = "https://api.0xarchive.io"
 DEFAULT_TIMEOUT = 30.0
+API_KEY_ENV_VAR = "OXARCHIVE_API_KEY"
 
 
 class Client:
@@ -27,6 +29,7 @@ class Client:
     Supports two top-level venue APIs:
     - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
       - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
+      - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace
     - `client.lighter` - Lighter.xyz perpetuals
 
     Example:
@@ -69,7 +72,7 @@ class Client:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str] = None,
         *,
         base_url: Optional[str] = None,
         timeout: Optional[float] = None,
@@ -78,16 +81,22 @@ class Client:
         Create a new 0xarchive client.
 
         Args:
-            api_key: Your 0xarchive API key
+            api_key: Your 0xarchive API key. Falls back to the
+                ``OXARCHIVE_API_KEY`` environment variable when not provided.
             base_url: Base URL for the API (defaults to https://api.0xarchive.io)
             timeout: Request timeout in seconds (defaults to 30.0)
         """
-        if not api_key:
-            raise ValueError("API key is required. Get one at https://0xarchive.io/signup")
+        resolved_key = api_key or os.getenv(API_KEY_ENV_VAR)
+        if not resolved_key:
+            raise ValueError(
+                "API key is required. Pass api_key=... or set the "
+                f"{API_KEY_ENV_VAR} environment variable. "
+                "Get a key at https://0xarchive.io/signup"
+            )
 
         self._http = HttpClient(
             base_url=base_url or DEFAULT_BASE_URL,
-            api_key=api_key,
+            api_key=resolved_key,
             timeout=timeout or DEFAULT_TIMEOUT,
         )
 
@@ -113,7 +122,9 @@ class Client:
         self.orderbook = OrderBookResource(self._http, legacy_base)
         """[DEPRECATED] Use client.hyperliquid.orderbook instead"""
 
-        self.trades = TradesResource(self._http, legacy_base)
+        # Legacy Hyperliquid namespace; same endpoint path as
+        # ``client.hyperliquid.trades`` so ``recent()`` is also unavailable here.
+        self.trades = TradesResource(self._http, legacy_base, allow_recent=False)
         """[DEPRECATED] Use client.hyperliquid.trades instead"""
 
         self.instruments = InstrumentsResource(self._http, legacy_base)

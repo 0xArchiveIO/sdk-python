@@ -104,7 +104,10 @@ class HttpClient:
         if params:
             params = {k: v for k, v in params.items() if v is not None}
 
-        response = self.client.get(path, params=params)
+        try:
+            response = self.client.get(path, params=params)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
         return self._handle_response(response)
 
     async def aget(
@@ -117,7 +120,10 @@ class HttpClient:
         if params:
             params = {k: v for k, v in params.items() if v is not None}
 
-        response = await self.async_client.get(path, params=params)
+        try:
+            response = await self.async_client.get(path, params=params)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
         return self._handle_response(response)
 
     def post(
@@ -126,7 +132,10 @@ class HttpClient:
         json: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Make a synchronous POST request."""
-        response = self.client.post(path, json=json)
+        try:
+            response = self.client.post(path, json=json)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
         return self._handle_response(response)
 
     async def apost(
@@ -135,5 +144,8 @@ class HttpClient:
         json: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Make an asynchronous POST request."""
-        response = await self.async_client.post(path, json=json)
+        try:
+            response = await self.async_client.post(path, json=json)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
         return self._handle_response(response)

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from ..http import HttpClient
-from ..types import CursorResponse, Trade, Timestamp
+from ..types import CursorResponse, OxArchiveError, Trade, Timestamp
 
 
 class TradesResource:
@@ -27,10 +27,22 @@ class TradesResource:
         >>> recent = client.lighter.trades.recent("BTC")
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
+    def __init__(
+        self,
+        http: HttpClient,
+        base_path: str = "/v1",
+        coin_transform=str.upper,
+        *,
+        allow_recent: bool = True,
+    ):
         self._http = http
         self._base_path = base_path
         self._coin_transform = coin_transform
+        # Hyperliquid has hourly fills backfill, not real-time, so the backend
+        # does not expose ``/trades/{symbol}/recent`` for the bare Hyperliquid
+        # namespace. Setting ``allow_recent=False`` makes the SDK fail fast
+        # with a clear pointer instead of letting the user 404 against the API.
+        self._allow_recent = allow_recent
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -140,10 +152,12 @@ class TradesResource:
         """
         Get most recent trades for a symbol.
 
-        Note: This method is available for Lighter (client.lighter.trades.recent())
-        and HIP-3 (client.hyperliquid.hip3.trades.recent()), both of which have
-        real-time data ingestion. Hyperliquid uses hourly backfill so this
-        endpoint is not available for Hyperliquid.
+        Note: This method is available for Lighter (``client.lighter.trades.recent()``),
+        HIP-3 (``client.hyperliquid.hip3.trades.recent()``), and HIP-4
+        (``client.hyperliquid.hip4.trades.recent()``), all of which have
+        real-time data ingestion. Hyperliquid uses hourly S3 backfill so this
+        endpoint is not exposed for the bare Hyperliquid namespace; calling
+        ``client.hyperliquid.trades.recent()`` raises :class:`OxArchiveError`.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
@@ -152,6 +166,17 @@ class TradesResource:
         Returns:
             List of recent trades
         """
+        if not self._allow_recent:
+            raise OxArchiveError(
+                "trades.recent() is not available for Hyperliquid (hourly S3 "
+                "backfill). Use client.hyperliquid.trades.list(symbol, "
+                "start=..., end=...) for trade history, or "
+                "client.lighter.trades.recent() / "
+                "client.hyperliquid.hip3.trades.recent() / "
+                "client.hyperliquid.hip4.trades.recent() for venues with "
+                "real-time data.",
+                404,
+            )
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}/recent",
@@ -161,6 +186,17 @@ class TradesResource:
 
     async def arecent(self, symbol: str, limit: Optional[int] = None, **kwargs) -> list[Trade]:
         """Async version of recent()."""
+        if not self._allow_recent:
+            raise OxArchiveError(
+                "trades.recent() is not available for Hyperliquid (hourly S3 "
+                "backfill). Use client.hyperliquid.trades.alist(symbol, "
+                "start=..., end=...) for trade history, or "
+                "client.lighter.trades.arecent() / "
+                "client.hyperliquid.hip3.trades.arecent() / "
+                "client.hyperliquid.hip4.trades.arecent() for venues with "
+                "real-time data.",
+                404,
+            )
         symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}/recent",

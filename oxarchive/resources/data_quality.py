@@ -117,7 +117,7 @@ class DataQualityResource:
         Get data coverage for a specific venue scope.
 
         Args:
-            exchange: Venue scope ('hyperliquid', 'lighter', or 'hip3')
+            exchange: Venue scope ('hyperliquid', 'lighter', 'hip3', or 'hip4')
 
         Returns:
             ExchangeCoverage with coverage info for all data types on this venue scope.
@@ -149,8 +149,8 @@ class DataQualityResource:
         historical coverage.
 
         Args:
-            exchange: Venue scope ('hyperliquid', 'lighter', or 'hip3')
-            symbol: Symbol name (e.g., 'BTC', 'ETH', or HIP3 coins like 'xyz:XYZ100')
+            exchange: Venue scope ('hyperliquid', 'lighter', 'hip3', or 'hip4')
+            symbol: Symbol name (e.g., 'BTC', 'ETH', HIP3 coins like 'xyz:XYZ100', or HIP4 coins like '#0')
             from_time: Start of gap detection window (default: now - 30 days).
                 Accepts Unix ms, datetime, or ISO string.
             to_time: End of gap detection window (default: now).

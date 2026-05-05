@@ -2,8 +2,22 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from ..http import HttpClient
-from ..types import Hip3Instrument, Instrument, LighterInstrument
+from ..types import Hip3Instrument, Hip4Outcome, Instrument, LighterInstrument
+
+
+def _hip4_path_segment(symbol: str) -> str:
+    """Normalize a HIP-4 coin symbol for REST paths.
+
+    Backend accepts both bare numeric (``0``) and ``#``-prefixed (``%230``)
+    forms. We send the bare form to avoid percent-encoding pain.
+    """
+    s = symbol.lstrip("#")
+    if s.isdigit():
+        return s
+    return quote(symbol, safe="")
 
 
 class InstrumentsResource:
@@ -165,3 +179,51 @@ class Hip3InstrumentsResource:
         coin = self._coin_transform(coin)
         data = await self._http.aget(f"{self._base_path}/instruments/{coin}")
         return Hip3Instrument.model_validate(data["data"])
+
+
+class Hip4InstrumentsResource:
+    """
+    HIP-4 Outcome Markets per-side instruments resource.
+
+    Each row is one ``#N`` (per outcome side). For outcome-level metadata,
+    use :class:`Hip4OutcomesResource`.
+
+    Symbols can be passed as either the bare numeric form (``"0"``) or the
+    ``#``-prefixed form (``"#0"``). The SDK normalizes to the bare form on
+    the REST path; the backend routes both to the same record.
+
+    Example:
+        >>> instruments = client.hyperliquid.hip4.instruments.list()
+        >>> outcome0_yes = client.hyperliquid.hip4.instruments.get("0")
+    """
+
+    def __init__(self, http: HttpClient, base_path: str = "/v1/hyperliquid/hip4"):
+        self._http = http
+        self._base_path = base_path
+
+    def list(self) -> list[Hip4Outcome]:
+        """List all HIP-4 per-side instruments."""
+        data = self._http.get(f"{self._base_path}/instruments")
+        return [Hip4Outcome.model_validate(item) for item in data["data"]]
+
+    async def alist(self) -> list[Hip4Outcome]:
+        """Async version of list()."""
+        data = await self._http.aget(f"{self._base_path}/instruments")
+        return [Hip4Outcome.model_validate(item) for item in data["data"]]
+
+    def get(self, symbol: str) -> Hip4Outcome:
+        """Get a single per-side instrument by symbol.
+
+        Args:
+            symbol: HIP-4 symbol. Either ``"0"`` or ``"#0"`` works; the SDK
+                normalizes to the bare form on the path.
+        """
+        seg = _hip4_path_segment(symbol)
+        data = self._http.get(f"{self._base_path}/instruments/{seg}")
+        return Hip4Outcome.model_validate(data["data"])
+
+    async def aget(self, symbol: str) -> Hip4Outcome:
+        """Async version of get()."""
+        seg = _hip4_path_segment(symbol)
+        data = await self._http.aget(f"{self._base_path}/instruments/{seg}")
+        return Hip4Outcome.model_validate(data["data"])
