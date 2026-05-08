@@ -40,6 +40,11 @@ hip3_trades = client.hyperliquid.hip3.trades.recent("km:US500")
 hip3_funding = client.hyperliquid.hip3.funding.current("xyz:XYZ100")
 hip3_oi = client.hyperliquid.hip3.open_interest.current("xyz:XYZ100")
 
+# Hyperliquid spot pairs live under client.spot. Symbols are dashed canonical.
+spot_pairs = client.spot.pairs.list()
+spot_orderbook = client.spot.orderbook.get("HYPE-USDC")
+print(f"HYPE-USDC mid: {spot_orderbook.mid_price}")
+
 # Get historical order book snapshots
 history = client.hyperliquid.orderbook.history(
     "ETH",
@@ -66,6 +71,8 @@ history = client.hyperliquid.orderbook.history(
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Perpetuals across the full venue |
 | Hyperliquid HIP-3 | February 2026+ | Free tier: `km:US500`. Build+: all HIP-3 symbols. Pro+: orderbook history. |
+| Hyperliquid HIP-4 | May 2026+ | Outcome markets. Build+ for trades/OI, Pro+ for orderbook and L4. No funding/liquidations/candles by design. |
+| Hyperliquid Spot | Trades from 2025-03-22; orderbook, L4, TWAP, orders live from 2026-05-05 | 294 dashed canonical pairs (`HYPE-USDC`, `PURR-USDC`). No funding/OI/liquidations/candles by design. |
 | Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
 
 ## Async Support
@@ -431,6 +438,53 @@ ob = client.hyperliquid.hip4.get_orderbook("0")
 trades = client.hyperliquid.hip4.get_trades_recent("0", limit=50)
 oi = client.hyperliquid.hip4.get_open_interest_current("0")  # mark_price is in [0, 1]
 summary = client.hyperliquid.hip4.get_summary("0")           # mark_price is in [0, 1]
+```
+
+#### Hyperliquid Spot
+
+Hyperliquid spot pairs live at `/v1/hyperliquid/spot` and are accessible via `client.spot`. Symbols use dashed canonical form (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format (`PURR/USDC` or `@107`) internally. Spot has **no funding, no open interest, no liquidations, and no candles by design** (perp-only constructs). The `/spot/candles/{symbol}` endpoint returns 501.
+
+Trade history goes back to 2025-03-22. Orderbook, L4, TWAP, and order lifecycle are live-only from 2026-05-05.
+
+```python
+# Pair discovery
+pairs = client.spot.pairs.list()
+hype = client.spot.pairs.get("HYPE-USDC")
+print(f"{hype.symbol}: base={hype.base} quote={hype.quote} asset_id={hype.asset_id}")
+
+# Current orderbook (Build+)
+ob = client.spot.orderbook.get("HYPE-USDC")
+print(f"HYPE-USDC mid: {ob.mid_price}, spread bps: {ob.spread_bps}")
+
+# Orderbook history
+history = client.spot.orderbook.history("HYPE-USDC", start="2026-05-05", end="2026-05-06")
+
+# Trades by time window
+trades = client.spot.trades.list("HYPE-USDC", start="2025-04-01", end="2025-04-02", limit=1000)
+
+# L4 endpoints (Pro+ for full reconstruction and raw diffs, Build+ for checkpoint history)
+snapshot = client.spot.l4_orderbook.get("HYPE-USDC")
+diffs = client.spot.l4_orderbook.diffs("HYPE-USDC", start=..., end=...)
+checkpoints = client.spot.l4_orderbook.history("HYPE-USDC", start=..., end=...)
+
+# L4 order lifecycle (Pro+)
+orders = client.spot.orders.history("HYPE-USDC", start=..., end=...)
+
+# TWAP statuses, by symbol or by user wallet
+twap_pair = client.spot.twap.by_symbol("HYPE-USDC", start=..., end=...)
+twap_user = client.spot.twap.by_user("0xabc...", start=..., end=...)
+
+# Per-table freshness lag
+fresh = client.spot.get_freshness("HYPE-USDC")
+for table, lag in fresh.tables.items():
+    # Values are dicts with optional `lag_ms` and `last_updated` keys.
+    print(f"{table}: lag={lag.get('lag_ms')}ms last_updated={lag.get('last_updated')}")
+
+# Async versions are available on every method:
+ob = await client.spot.orderbook.aget("HYPE-USDC")
+pairs = await client.spot.pairs.alist()
+twap = await client.spot.twap.aby_user("0xabc...", start=..., end=...)
+fresh = await client.spot.aget_freshness("HYPE-USDC")
 ```
 
 ### Funding Rates
@@ -1357,6 +1411,26 @@ def on_settled(msg):
 ws.on_outcome_settled(on_settled)
 ws.subscribe_hip4_orderbook("#0")
 ws.subscribe_hip4_trades("#0")
+```
+
+#### Hyperliquid Spot Channels
+
+| Channel | Description | Requires Coin | Historical Support |
+|---------|-------------|---------------|-------------------|
+| `spot_orderbook` | Spot L2 order book snapshots (Build+) | Yes | Real-time only |
+| `spot_trades` | Spot trade/fill updates (Build+) | Yes | Real-time only |
+| `spot_twap` | Spot TWAP status updates (Build+) | Yes | Real-time only |
+| `spot_l4_diffs` | Spot L4 orderbook diffs (Pro+) | Yes | Real-time only |
+| `spot_l4_orders` | Spot L4 order lifecycle events (Pro+) | Yes | Real-time only |
+
+> **Note:** Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format internally. The existing `on_orderbook` and `on_trades` typed callbacks fire for `spot_orderbook` and `spot_trades`.
+
+```python
+ws = OxArchiveWs(WsOptions(api_key="ox_..."))
+await ws.connect()
+ws.on_orderbook(lambda coin, ob: print(f"{coin} mid: {ob.mid_price}"))
+ws.subscribe_spot_orderbook("HYPE-USDC")
+ws.subscribe_spot_trades("HYPE-USDC")
 ```
 
 #### Lighter.xyz Channels

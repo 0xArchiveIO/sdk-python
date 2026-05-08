@@ -24,16 +24,18 @@ from .resources import (
     L4OrderBookResource,
     L2OrderBookResource,
     L3OrderBookResource,
+    SpotPairsResource,
+    SpotTwapResource,
 )
 from .types import (
     CoinFreshness,
     CoinSummary,
     CursorResponse,
-    DataTypeFreshness,
     Hip4Outcome,
     Hip4OutcomeAggregate,
     LiquidationVolume,
     PriceSnapshot,
+    SpotTableFreshness,
     Timestamp,
 )
 
@@ -1008,3 +1010,95 @@ class LighterClient:
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
+
+
+class SpotClient:
+    """
+    Hyperliquid spot client.
+
+    Access Hyperliquid spot market data through the 0xarchive API. Spot lives
+    at ``/v1/hyperliquid/spot`` and uses dashed canonical symbols (e.g.
+    ``HYPE-USDC``, ``PURR-USDC``); the server resolves dashed to wire format
+    (``PURR/USDC`` or ``@107``) internally.
+
+    Spot has no funding, no open interest, no liquidations, and no candles by
+    design (perp-only constructs). Trades go back to 2025-03-22; orderbook,
+    L4, TWAP, and orders are live-only from 2026-05-05.
+
+    Tier mapping:
+      * Build+: orderbook, trades, TWAP, L4 checkpoint history.
+      * Pro+: full L4 reconstruction, raw L4 diffs, order lifecycle history.
+
+    Example:
+        >>> client = oxarchive.Client(api_key="...")
+        >>> ob = client.spot.orderbook.get("HYPE-USDC")
+        >>> trades = client.spot.trades.list("HYPE-USDC", start=..., end=...)
+        >>> pairs = client.spot.pairs.list()
+    """
+
+    def __init__(self, http: HttpClient):
+        self._http = http
+        base_path = "/v1/hyperliquid/spot"
+
+        self.pairs = SpotPairsResource(http, base_path)
+        """Spot pair metadata (list and per-pair detail)."""
+
+        self.orderbook = OrderBookResource(http, base_path)
+        """L2 orderbook snapshots (Build+, live from 2026-05-05)."""
+
+        self.trades = TradesResource(http, base_path, allow_recent=False)
+        """Trade/fill history (Build+, from 2025-03-22). The spot backend does
+        not expose a ``/trades/{symbol}/recent`` endpoint; use ``list()`` with a
+        time range instead."""
+
+        self.orders = OrdersResource(http, base_path)
+        """L4 order lifecycle history (Pro+, live from 2026-05-05).
+
+        Note: spot exposes only ``history()``. Flow and TP/SL endpoints exist
+        on the resource but the spot backend does not implement them.
+        """
+
+        self.l4_orderbook = L4OrderBookResource(http, base_path)
+        """L4 order-level orderbook: full reconstruction (Pro+), raw diffs
+        (Pro+), and checkpoint history (Build+). Live from 2026-05-05."""
+
+        self.twap = SpotTwapResource(http, base_path)
+        """TWAP status records by pair or by user wallet (Build+)."""
+
+    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
+        """Convert timestamp to Unix milliseconds."""
+        if ts is None:
+            return None
+        if isinstance(ts, int):
+            return ts
+        if isinstance(ts, datetime):
+            return int(ts.timestamp() * 1000)
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                return int(dt.timestamp() * 1000)
+            except ValueError:
+                return int(ts)
+        return None
+
+    def get_freshness(self, symbol: str, **kwargs) -> SpotTableFreshness:
+        """
+        Get per-table freshness lag for a spot pair.
+
+        Returns lag for each backing table (``spot_orderbook_snapshots``,
+        ``spot_fills``, ``spot_orderbook_l4_diffs``, ``spot_orders``,
+        ``spot_twap``). Different shape from the perps freshness endpoint
+        because spot has no funding, OI, or liquidations.
+
+        Args:
+            symbol: Pair symbol in dashed canonical form (e.g. ``HYPE-USDC``).
+        """
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = self._http.get(f"/v1/hyperliquid/spot/freshness/{symbol.upper()}")
+        return SpotTableFreshness.model_validate(data["data"])
+
+    async def aget_freshness(self, symbol: str, **kwargs) -> SpotTableFreshness:
+        """Async version of get_freshness()."""
+        symbol = _resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(f"/v1/hyperliquid/spot/freshness/{symbol.upper()}")
+        return SpotTableFreshness.model_validate(data["data"])

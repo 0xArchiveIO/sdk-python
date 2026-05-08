@@ -5,6 +5,22 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-05-06
+
+### Added
+
+- **Hyperliquid spot support.** New top-level `client.spot` namespace under `/v1/hyperliquid/spot`. Symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format internally.
+  - REST resources: `pairs` (list and detail), `orderbook` (current and history, plus `l4`, `l4/diffs`, `l4/history`), `trades` (start/end/user query), `orders.history` (Pro+ lifecycle events), `twap.by_symbol` and `twap.by_user`, `get_freshness` (per-table lag).
+  - New types: `SpotPair`, `SpotTwapStatus`, `SpotTableFreshness`. All exported from `oxarchive`.
+  - New client class: `SpotClient` exported from `oxarchive`.
+- **Spot WebSocket channels.** `spot_orderbook`, `spot_trades`, `spot_twap` (Build+) and `spot_l4_diffs`, `spot_l4_orders` (Pro+, realtime only). Five new helpers each: `subscribe_spot_*` and `unsubscribe_spot_*`. The existing `on_orderbook` and `on_trades` typed callbacks now also fire for `spot_orderbook` and `spot_trades`, no fallback to `on_message` required.
+
+### Notes
+
+- Spot has no funding, no open interest, no liquidations, and no candles by design (perp-only constructs). Those endpoints are intentionally absent from `SpotClient`. `/v1/hyperliquid/spot/candles/{symbol}` returns 501.
+- Trades coverage goes back to 2025-03-22. Orderbook, L4, TWAP, and orders are live-only from 2026-05-05 (no historical backfill exists for these).
+- Use `client.spot.pairs.list()` for discovery: there are 294 spot pairs covered.
+
 ## [1.6.0] - 2026-05-04
 
 ### Added

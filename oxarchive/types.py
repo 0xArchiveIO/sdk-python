@@ -158,25 +158,35 @@ class Trade(BaseModel):
 
 
 class Instrument(BaseModel):
-    """Trading instrument specification (Hyperliquid)."""
+    """Trading instrument specification (Hyperliquid).
+
+    Accepts either snake_case (``sz_decimals``, ``is_active``) or camelCase
+    (``szDecimals``, ``isActive``) keys on the wire. Backend currently emits
+    snake_case but the upstream Hyperliquid meta endpoint and the TypeScript
+    SDK both use camelCase, so the model accepts both for compatibility.
+    """
 
     name: str
     """Instrument symbol (e.g., BTC)."""
 
-    sz_decimals: int
+    sz_decimals: int = Field(alias="szDecimals")
     """Size decimal precision."""
 
-    max_leverage: Optional[int] = None
+    max_leverage: Optional[int] = Field(default=None, alias="maxLeverage")
     """Maximum leverage allowed."""
 
-    only_isolated: Optional[bool] = None
+    only_isolated: Optional[bool] = Field(default=None, alias="onlyIsolated")
     """If true, only isolated margin mode is allowed."""
 
-    instrument_type: Optional[Literal["perp", "spot"]] = None
+    instrument_type: Optional[Literal["perp", "spot"]] = Field(
+        default=None, alias="instrumentType"
+    )
     """Type of instrument."""
 
-    is_active: bool = True
+    is_active: bool = Field(default=True, alias="isActive")
     """Whether the instrument is currently tradeable."""
+
+    model_config = {"populate_by_name": True}
 
 
 class Hip3Instrument(BaseModel):
@@ -361,6 +371,122 @@ class Hip4OpenInterestRecord(BaseModel):
     mid_price: Optional[str] = None
 
 
+class SpotPair(BaseModel):
+    """Hyperliquid spot trading pair metadata.
+
+    Returned by ``/v1/hyperliquid/spot/pairs`` and the per-pair detail endpoint.
+    Symbols are dashed canonical form (e.g. ``HYPE-USDC``, ``PURR-USDC``); the
+    server resolves dashed to wire format (``PURR/USDC`` or ``@107``) internally.
+    Spot has no funding, no open interest, no liquidations, and no candles by
+    design (perp-only constructs).
+
+    Backend wire shape includes both ``coin`` and ``symbol`` (same value, the
+    dashed canonical form), so either is populated. ``base`` / ``quote`` may be
+    derived server-side or omitted depending on the route; they are optional.
+    """
+
+    symbol: str
+    """Dashed canonical pair symbol (e.g. ``HYPE-USDC``)."""
+
+    coin: Optional[str] = None
+    """Same as symbol. Present in some backend responses for cross-resource
+    consistency with orderbook / trades payloads."""
+
+    base: Optional[str] = None
+    """Base asset (e.g. ``HYPE``). Present when the backend exposes the parsed
+    pair components."""
+
+    quote: Optional[str] = None
+    """Quote asset (typically ``USDC``)."""
+
+    asset_id: Optional[int] = None
+    """Hyperliquid spot asset id (10000 + index)."""
+
+    wire_name: Optional[str] = None
+    """Upstream wire form (e.g. ``PURR/USDC`` or ``@107``)."""
+
+    sz_decimals: Optional[int] = None
+    """Size decimal precision."""
+
+    px_decimals: Optional[int] = None
+    """Price decimal precision."""
+
+    is_active: bool = True
+    """Whether the pair is currently tradeable."""
+
+    model_config = {"extra": "ignore"}
+
+
+class SpotTwapStatus(BaseModel):
+    """Hyperliquid spot TWAP order status row.
+
+    TWAP (time-weighted average price) orders are sliced into child fills over
+    a window. Status records track the running execution of each TWAP.
+    """
+
+    coin: str
+    """Pair symbol in dashed canonical form (e.g. ``HYPE-USDC``)."""
+
+    timestamp: datetime
+    """Status update timestamp (UTC)."""
+
+    user: str
+    """User wallet address that placed the TWAP."""
+
+    twap_id: int
+    """TWAP execution id."""
+
+    side: Optional[Literal["A", "B"]] = None
+    """Side: ``B`` (buy) or ``A`` (sell)."""
+
+    status: Optional[str] = None
+    """Lifecycle status (e.g. ``activated``, ``finished``, ``terminated``)."""
+
+    executed_sz: Optional[str] = None
+    """Cumulative executed size."""
+
+    executed_ntl: Optional[str] = None
+    """Cumulative executed notional."""
+
+    minutes: Optional[int] = None
+    """Total TWAP duration in minutes."""
+
+    reduce_only: Optional[bool] = None
+    """Whether the TWAP is reduce-only."""
+
+    randomize: Optional[bool] = None
+    """Whether child slice timing is randomized."""
+
+
+class SpotTableFreshness(BaseModel):
+    """Per-table freshness lag for a spot pair.
+
+    Returned by ``/v1/hyperliquid/spot/freshness/{symbol}`` for each backing
+    table (``spot_orderbook_snapshots``, ``spot_fills``, ``spot_orderbook_l4_diffs``,
+    ``spot_orders``, ``spot_twap``). Mirrors the per-data-type shape used by
+    :class:`CoinFreshness` but keyed by table name rather than fixed channels.
+
+    The ``tables`` field accepts either fully-typed :class:`DataTypeFreshness`
+    objects or raw dicts so the model survives backend shape evolution. Each
+    entry typically has ``last_updated`` and ``lag_ms`` keys, both optional.
+    """
+
+    coin: Optional[str] = None
+    """Pair symbol in dashed canonical form."""
+
+    exchange: Optional[str] = None
+    """Exchange name (``hyperliquid_spot``)."""
+
+    measured_at: Optional[datetime] = None
+    """When this freshness was measured."""
+
+    tables: dict[str, Any] = Field(default_factory=dict)
+    """Per-table freshness lag, keyed by ClickHouse table name. Values are
+    typically ``{last_updated, lag_ms}`` dicts but the schema is permissive."""
+
+    model_config = {"extra": "allow"}
+
+
 class LighterInstrument(BaseModel):
     """Trading instrument specification (Lighter.xyz).
 
@@ -494,8 +620,10 @@ class Liquidation(BaseModel):
     size: str
     """Liquidation size."""
 
-    side: Literal["B", "S"]
-    """Side: 'B' (buy) or 'S' (sell)."""
+    side: Literal["A", "B"]
+    """Side: 'B' (buy) or 'A' (sell/ask). Mirrors the trade-side convention.
+    The backend liquidations endpoint emits 'A' for ask/sell, matching the
+    Hyperliquid wire convention used everywhere else in the SDK."""
 
     mark_price: Optional[str] = None
     """Mark price at time of liquidation."""
@@ -702,6 +830,7 @@ WsChannel = Literal[
     "hip4_l4_diffs", "hip4_l4_orders",
     "l4_diffs", "l4_orders",
     "hip3_l4_diffs", "hip3_l4_orders",
+    "spot_orderbook", "spot_trades", "spot_l4_diffs", "spot_l4_orders", "spot_twap",
 ]
 """Available WebSocket channels.
 
@@ -717,6 +846,9 @@ Notes:
   (realtime + replay; orderbook is Pro+, the rest is Build+).
 - hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (Pro+, realtime only).
 - HIP-4 has no funding / liquidations / candles by design.
+- spot_orderbook, spot_trades, spot_twap: Hyperliquid spot (Build+, realtime).
+- spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (Pro+, realtime only).
+- Spot has no funding / open interest / liquidations / candles by design.
 """
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]

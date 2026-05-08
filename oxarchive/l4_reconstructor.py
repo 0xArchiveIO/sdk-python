@@ -14,8 +14,7 @@ Ref: https://github.com/hyperliquid-dex/order_book_server
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -228,23 +227,31 @@ class L4OrderBookReconstructor:
             (bid_levels, ask_levels) — each sorted by price (bids descending, asks ascending).
             Each level has: px (price), sz (total size), n (number of orders).
         """
-        bid_agg: dict[float, list[float, int]] = {}
-        ask_agg: dict[float, list[float, int]] = {}
+        # Per-price (total_size, order_count). Plain ints + floats so the
+        # mypy strict pass doesn't complain about heterogenous list element
+        # types — a list cannot be `list[float, int]` in real typing.
+        bid_agg: dict[float, list[float]] = {}
+        ask_agg: dict[float, list[float]] = {}
 
         for o in self._orders.values():
             if o.size <= 0:
                 continue
             if o.side == "B":
                 if o.price not in bid_agg:
-                    bid_agg[o.price] = [0.0, 0]
+                    bid_agg[o.price] = [0.0, 0.0]
                 bid_agg[o.price][0] += o.size
-                bid_agg[o.price][1] += 1
+                bid_agg[o.price][1] += 1.0
             else:
                 if o.price not in ask_agg:
-                    ask_agg[o.price] = [0.0, 0]
+                    ask_agg[o.price] = [0.0, 0.0]
                 ask_agg[o.price][0] += o.size
-                ask_agg[o.price][1] += 1
+                ask_agg[o.price][1] += 1.0
 
-        l2_bids = [L2Level(px=px, sz=v[0], n=v[1]) for px, v in sorted(bid_agg.items(), reverse=True)]
-        l2_asks = [L2Level(px=px, sz=v[0], n=v[1]) for px, v in sorted(ask_agg.items())]
+        l2_bids = [
+            L2Level(px=px, sz=v[0], n=int(v[1]))
+            for px, v in sorted(bid_agg.items(), reverse=True)
+        ]
+        l2_asks = [
+            L2Level(px=px, sz=v[0], n=int(v[1])) for px, v in sorted(ask_agg.items())
+        ]
         return l2_bids, l2_asks
