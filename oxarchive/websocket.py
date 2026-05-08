@@ -37,8 +37,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Set, Union
+from dataclasses import dataclass
+from typing import Any, Callable, Literal, Optional, Set, Union
 
 try:
     from websockets.asyncio.client import connect as ws_connect, ClientConnection
@@ -236,10 +236,9 @@ def _transform_liquidation(coin: str, raw: dict) -> Liquidation:
     liquidated = users[0] if len(users) > 0 else (raw.get("liquidated_user") or "")
     liquidator = users[1] if len(users) > 1 else (raw.get("liquidator_user") or "")
 
-    side = raw.get("side", "B")
-    # Liquidation type uses 'B'/'S'; fills use 'A' for ask/sell, 'B' for buy.
-    if side == "A":
-        side = "S"
+    # Liquidation, like Trade, uses the Hyperliquid 'A'/'B' convention on the
+    # wire. Default to 'B' (buy) for any unexpected value rather than guessing.
+    side: Literal["A", "B"] = "A" if raw.get("side") == "A" else "B"
 
     return Liquidation(
         coin=raw.get("coin", coin),
@@ -248,7 +247,7 @@ def _transform_liquidation(coin: str, raw: dict) -> Liquidation:
         liquidator_user=liquidator,
         price=str(raw.get("px") or raw.get("price") or "0"),
         size=str(raw.get("sz") or raw.get("size") or "0"),
-        side=side,  # type: ignore[arg-type]
+        side=side,
         mark_price=raw.get("mark_price"),
         closed_pnl=raw.get("closedPnl") or raw.get("closed_pnl"),
         direction=raw.get("dir") or raw.get("direction"),
@@ -585,6 +584,56 @@ class OxArchiveWs:
     def unsubscribe_hip4_l4_orders(self, coin: str) -> None:
         """Unsubscribe from HIP-4 L4 order lifecycle events."""
         self.unsubscribe("hip4_l4_orders", coin)
+
+    # -- Hyperliquid spot ----------------------------------------------------
+
+    def subscribe_spot_orderbook(self, coin: str) -> None:
+        """Subscribe to live spot L2 orderbook for a pair (Build+).
+
+        ``coin`` is the dashed canonical symbol (e.g. ``"HYPE-USDC"``,
+        ``"PURR-USDC"``). The server resolves dashed to wire format internally.
+        """
+        self.subscribe("spot_orderbook", coin)
+
+    def unsubscribe_spot_orderbook(self, coin: str) -> None:
+        """Unsubscribe from live spot L2 orderbook for a pair."""
+        self.unsubscribe("spot_orderbook", coin)
+
+    def subscribe_spot_trades(self, coin: str) -> None:
+        """Subscribe to live spot trades for a pair (Build+)."""
+        self.subscribe("spot_trades", coin)
+
+    def unsubscribe_spot_trades(self, coin: str) -> None:
+        """Unsubscribe from live spot trades for a pair."""
+        self.unsubscribe("spot_trades", coin)
+
+    def subscribe_spot_l4_diffs(self, coin: str) -> None:
+        """Subscribe to spot L4 orderbook diffs (Pro+, realtime only).
+
+        On subscribe the server first pushes an initial L4 snapshot followed
+        by a stream of batched diff messages.
+        """
+        self.subscribe("spot_l4_diffs", coin)
+
+    def unsubscribe_spot_l4_diffs(self, coin: str) -> None:
+        """Unsubscribe from spot L4 orderbook diffs."""
+        self.unsubscribe("spot_l4_diffs", coin)
+
+    def subscribe_spot_l4_orders(self, coin: str) -> None:
+        """Subscribe to spot L4 order lifecycle events (Pro+, realtime only)."""
+        self.subscribe("spot_l4_orders", coin)
+
+    def unsubscribe_spot_l4_orders(self, coin: str) -> None:
+        """Unsubscribe from spot L4 order lifecycle events."""
+        self.unsubscribe("spot_l4_orders", coin)
+
+    def subscribe_spot_twap(self, coin: str) -> None:
+        """Subscribe to live spot TWAP status updates for a pair (Build+)."""
+        self.subscribe("spot_twap", coin)
+
+    def unsubscribe_spot_twap(self, coin: str) -> None:
+        """Unsubscribe from live spot TWAP status updates for a pair."""
+        self.unsubscribe("spot_twap", coin)
 
     # =========================================================================
     # Historical Replay (Option B) - Like Tardis.dev
@@ -1057,6 +1106,7 @@ class OxArchiveWs:
                     "hip3_orderbook",
                     "hip4_orderbook",
                     "lighter_orderbook",
+                    "spot_orderbook",
                 ) and self._on_orderbook:
                     # Transform raw Hyperliquid format to SDK OrderBook type
                     orderbook = _transform_orderbook(coin, raw_data)
@@ -1067,6 +1117,7 @@ class OxArchiveWs:
                     "hip3_trades",
                     "hip4_trades",
                     "lighter_trades",
+                    "spot_trades",
                 ) and self._on_trades:
                     # Transform raw Hyperliquid format to SDK Trade type
                     trades = _transform_trades(coin, raw_data)

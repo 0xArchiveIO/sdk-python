@@ -24,7 +24,7 @@ Example:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterator, Optional
 
@@ -124,7 +124,18 @@ class OrderBookReconstructor:
         self._bids.clear()
         self._asks.clear()
         self._coin = checkpoint.coin
-        self._last_timestamp = checkpoint.timestamp
+        # Normalize the checkpoint timestamp to an ISO string so the
+        # ReconstructedOrderBook always exposes the same wire shape regardless
+        # of whether deltas have been applied yet. ``checkpoint.timestamp`` is a
+        # ``datetime`` (timezone-aware after the API parse); ``apply_delta``
+        # also stores an ISO string, so we keep the two paths consistent.
+        ts = checkpoint.timestamp
+        if isinstance(ts, datetime):
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            self._last_timestamp = ts.isoformat().replace("+00:00", "Z")
+        else:
+            self._last_timestamp = str(ts)
         self._last_sequence = 0
 
         # Parse checkpoint bids

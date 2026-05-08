@@ -6,7 +6,7 @@ import os
 from typing import Optional
 
 from .http import HttpClient
-from .exchanges import HyperliquidClient, LighterClient
+from .exchanges import HyperliquidClient, LighterClient, SpotClient
 from .resources import (
     OrderBookResource,
     TradesResource,
@@ -26,10 +26,11 @@ class Client:
     """
     0xarchive API client.
 
-    Supports two top-level venue APIs:
+    Supports the following venue APIs:
     - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
       - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
       - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace
+    - `client.spot` - Hyperliquid spot pairs (trades from 2025-03-22, orderbook/L4/TWAP live from 2026-05-05)
     - `client.lighter` - Lighter.xyz perpetuals
 
     Example:
@@ -103,6 +104,10 @@ class Client:
         # Exchange-specific clients (recommended)
         self.hyperliquid = HyperliquidClient(self._http)
         """Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)"""
+
+        self.spot = SpotClient(self._http)
+        """Hyperliquid spot pairs. Trades from 2025-03-22; orderbook, L4, TWAP, orders live from 2026-05-05.
+        No funding, OI, liquidations, or candles by design."""
 
         self.lighter = LighterClient(self._http)
         """Lighter.xyz exchange data (August 2025+)"""

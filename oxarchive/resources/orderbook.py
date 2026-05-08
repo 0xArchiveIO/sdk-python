@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import AsyncIterator, Iterator, Optional, Union
+from typing import AsyncIterator, Iterator, Literal, Optional
 
 from ..http import HttpClient
-from typing import Literal
-
 from ..types import CursorResponse, OrderBook, Timestamp
 from ..orderbook_reconstructor import (
     OrderBookReconstructor,

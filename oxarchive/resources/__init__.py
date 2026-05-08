@@ -19,6 +19,7 @@ from .outcomes import Hip4OutcomesResource
 from .l4_orderbook import L4OrderBookResource
 from .l2_orderbook import L2OrderBookResource
 from .l3_orderbook import L3OrderBookResource
+from .spot import SpotPairsResource, SpotTwapResource
 
 __all__ = [
     "OrderBookResource",
@@ -38,4 +39,6 @@ __all__ = [
     "L4OrderBookResource",
     "L2OrderBookResource",
     "L3OrderBookResource",
+    "SpotPairsResource",
+    "SpotTwapResource",
 ]

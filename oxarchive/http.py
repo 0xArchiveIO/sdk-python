@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, TypeVar, Type
+from typing import Any, Optional
+
 import httpx
-from pydantic import BaseModel
 
 from .types import OxArchiveError
-
-T = TypeVar("T", bound=BaseModel)
 
 
 class HttpClient:
@@ -52,24 +50,35 @@ class HttpClient:
     def close(self) -> None:
         """Close the HTTP clients.
 
-        Note: This closes the sync client immediately. For the async client,
-        use aclose() instead, or call this from a sync context where you
-        don't need to await the async cleanup.
+        Closes the sync client immediately. For proper async client cleanup
+        prefer :meth:`aclose`. ``httpx.AsyncClient`` exposes only ``aclose()``,
+        so when no event loop is running we drain it on a private loop rather
+        than leaking the connection pool.
         """
         if self._client is not None:
             self._client.close()
             self._client = None
         if self._async_client is not None:
-            # Close async client synchronously (will log warning but works)
-            # For proper cleanup, use aclose() in async contexts
-            try:
-                import asyncio
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._async_client.aclose())
-            except RuntimeError:
-                # No running loop, close synchronously (httpx supports this)
-                self._async_client.close()
+            async_client = self._async_client
             self._async_client = None
+            import asyncio
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop is not None:
+                # In an async context, schedule the aclose without awaiting.
+                loop.create_task(async_client.aclose())
+            else:
+                # No running loop. Drain on a one-shot loop so the underlying
+                # connection pool is released cleanly.
+                new_loop = asyncio.new_event_loop()
+                try:
+                    new_loop.run_until_complete(async_client.aclose())
+                finally:
+                    new_loop.close()
 
     async def aclose(self) -> None:
         """Close the async HTTP client."""

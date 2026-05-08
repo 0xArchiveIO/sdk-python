@@ -1,10 +1,11 @@
 """
 oxarchive - Official Python SDK for 0xarchive
 
-Historical Market Data API for two top-level venue APIs:
+Historical Market Data API for the following venue APIs:
 - Hyperliquid (perpetuals data from April 2023)
 - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
 - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
+- Hyperliquid spot pairs under /v1/hyperliquid/spot and client.spot (trades from 2025-03-22, rest live from 2026-05-05)
 - Lighter.xyz (perpetuals data)
 
 Example:
@@ -22,12 +23,15 @@ Example:
     >>> # Hyperliquid HIP-3 data
     >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
     >>>
+    >>> # Hyperliquid spot data (dashed canonical symbols)
+    >>> spot_orderbook = client.spot.orderbook.get("HYPE-USDC")
+    >>>
     >>> # Get historical snapshots
     >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
 """
 
 from .client import Client
-from .exchanges import HyperliquidClient, Hip3Client, Hip4Client, LighterClient
+from .exchanges import HyperliquidClient, Hip3Client, Hip4Client, LighterClient, SpotClient
 from .resources.orderbook import LighterGranularity
 from .orderbook_reconstructor import (
     OrderBookReconstructor,
@@ -50,6 +54,9 @@ from .types import (
     Hip4SideSpec,
     Hip4AggregatedOi,
     Hip4OpenInterestRecord,
+    SpotPair,
+    SpotTwapStatus,
+    SpotTableFreshness,
     FundingRate,
     OpenInterest,
     Liquidation,
@@ -105,7 +112,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 __all__ = [
     # Client
@@ -115,6 +122,7 @@ __all__ = [
     "Hip3Client",
     "Hip4Client",
     "LighterClient",
+    "SpotClient",
     # WebSocket Client
     "OxArchiveWs",
     "WsOptions",
@@ -141,6 +149,9 @@ __all__ = [
     "Hip4SideSpec",
     "Hip4AggregatedOi",
     "Hip4OpenInterestRecord",
+    "SpotPair",
+    "SpotTwapStatus",
+    "SpotTableFreshness",
     "LighterGranularity",
     "FundingRate",
     "OpenInterest",
