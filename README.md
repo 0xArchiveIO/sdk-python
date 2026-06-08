@@ -2,7 +2,7 @@
 
 Python client for 0xArchive market data in notebooks, research scripts, and data pipelines.
 
-0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. HIP-3 builder perps live under the Hyperliquid namespace at `/v1/hyperliquid/hip3` and `client.hyperliquid.hip3`.
+0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. Hyperliquid includes core perps, HIP-3 builder perps, HIP-4 outcome markets, and Hyperliquid Spot. HIP-3, HIP-4, and Spot live under the Hyperliquid namespace (`/v1/hyperliquid/hip3`, `client.hyperliquid.hip3`, etc.). Lighter.xyz is the second top-level venue API.
 
 Use the Python SDK when the workflow already lives in Python and you want typed REST helpers, async support, WebSocket support, pagination, and reconstruction utilities before moving into a larger pipeline.
 
@@ -60,7 +60,7 @@ history = client.hyperliquid.orderbook.history(
 | --- | --- |
 | First authenticated route | [Quick Start](https://www.0xarchive.io/docs/quick-start) |
 | SDK install and route docs | [SDK docs](https://www.0xarchive.io/docs/sdks) |
-| Claude Code, GPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
+| Claude Code, ChatGPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
 | File-based historical pulls | [Data Catalog](https://www.0xarchive.io/data) |
 | Route contract and machine context | [OpenAPI](https://www.0xarchive.io/openapi.json), [llms.txt](https://www.0xarchive.io/llms.txt) |
 | Plans and limits | [Pricing](https://www.0xarchive.io/pricing) |
@@ -1678,6 +1678,16 @@ snapshots: list[ReconstructedOrderBook] = client.lighter.orderbook.history_recon
 ## Data Catalog
 
 For large-scale data exports (full order books, complete trade history, etc.), use the [Data Catalog](https://www.0xarchive.io/data). It lets you choose markets, datasets, and date ranges, see a live quote, and export zstd-compressed Parquet.
+
+## Links
+
+- [API Docs](https://www.0xarchive.io/docs)
+- [TypeScript SDK](https://npmjs.com/package/@0xarchive/sdk)
+- [Rust SDK](https://crates.io/crates/oxarchive)
+- [CLI](https://npmjs.com/package/@0xarchive/cli)
+- [MCP Server](https://npmjs.com/package/@0xarchive/mcp-server)
+- [0xArchive Skill](https://github.com/0xArchiveIO/0xarchive-skill)
+- [Examples](https://github.com/0xArchiveIO/examples)
 
 ## Requirements
 
