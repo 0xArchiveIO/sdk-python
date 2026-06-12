@@ -126,7 +126,7 @@ __all__ = [
     # WebSocket Client
     "OxArchiveWs",
     "WsOptions",
-    # Orderbook Reconstructor (Enterprise tier — Lighter)
+    # Orderbook Reconstructor (Lighter)
     "OrderBookReconstructor",
     "OrderbookDelta",
     "TickData",
@@ -134,7 +134,7 @@ __all__ = [
     "ReconstructOptions",
     "reconstruct_orderbook",
     "reconstruct_final",
-    # L4 Orderbook Reconstructor (Pro+ — Hyperliquid / HIP-3)
+    # L4 Orderbook Reconstructor (Hyperliquid / HIP-3)
     "L4OrderBookReconstructor",
     "L4Order",
     "L2Level",

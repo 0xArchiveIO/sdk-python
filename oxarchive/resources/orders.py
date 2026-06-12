@@ -21,7 +21,7 @@ class OrdersResource:
         >>> # Get order flow aggregation
         >>> flow = client.hyperliquid.orders.flow("BTC", start="2024-01-01", end="2024-01-02")
         >>>
-        >>> # Get TP/SL history (Pro+ tier)
+        >>> # Get TP/SL history
         >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start="2024-01-01", end="2024-01-02")
     """
 
@@ -60,7 +60,7 @@ class OrdersResource:
         **kwargs,
     ) -> CursorResponse:
         """
-        Get order history (Build+ tier).
+        Get order history.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
@@ -136,7 +136,7 @@ class OrdersResource:
         **kwargs,
     ) -> CursorResponse:
         """
-        Get order flow aggregation (Build+ tier).
+        Get order flow aggregation.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
@@ -202,7 +202,7 @@ class OrdersResource:
         **kwargs,
     ) -> CursorResponse:
         """
-        Get TP/SL history (Pro+ tier).
+        Get TP/SL history.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')

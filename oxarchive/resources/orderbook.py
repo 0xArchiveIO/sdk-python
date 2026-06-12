@@ -131,7 +131,7 @@ class OrderBookResource:
             depth: Number of price levels per side
             granularity: Data resolution for Lighter orderbook (Lighter.xyz only, ignored for Hyperliquid).
                 Options: 'checkpoint' (1min, default), '30s', '10s', '1s', 'tick'.
-                Tier restrictions apply. Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
+                Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
 
         Returns:
             CursorResponse with order book snapshots and next_cursor for pagination
@@ -145,7 +145,7 @@ class OrderBookResource:
             ...     )
             ...     snapshots.extend(result.data)
             >>>
-            >>> # Lighter.xyz with 10s granularity (Build+ tier)
+            >>> # Lighter.xyz with 10s granularity
             >>> result = client.lighter.orderbook.history(
             ...     "BTC", start=start, end=end, granularity="10s"
             ... )
@@ -207,7 +207,7 @@ class OrderBookResource:
         **kwargs,
     ) -> TickData:
         """
-        Get raw tick-level orderbook data (Enterprise tier only).
+        Get raw tick-level orderbook data.
 
         Returns a checkpoint (full orderbook state) and array of deltas.
         Use this when you want to implement custom reconstruction logic
@@ -253,8 +253,8 @@ class OrderBookResource:
         tick_data = response.get("data", {})
         if not isinstance(tick_data, dict) or "checkpoint" not in tick_data or tick_data.get("checkpoint") is None:
             error_msg = response.get("error") or response.get("message") or (
-                "Tick-level orderbook data requires Enterprise tier. "
-                "Upgrade your subscription or use a different granularity."
+                "Tick-level orderbook data was not returned for this request. "
+                "Check the symbol and time range, or use a different granularity."
             )
             raise ValueError(error_msg)
 
@@ -297,8 +297,8 @@ class OrderBookResource:
         tick_data = response.get("data", {})
         if not isinstance(tick_data, dict) or "checkpoint" not in tick_data or tick_data.get("checkpoint") is None:
             error_msg = response.get("error") or response.get("message") or (
-                "Tick-level orderbook data requires Enterprise tier. "
-                "Upgrade your subscription or use a different granularity."
+                "Tick-level orderbook data was not returned for this request. "
+                "Check the symbol and time range, or use a different granularity."
             )
             raise ValueError(error_msg)
 
@@ -327,7 +327,7 @@ class OrderBookResource:
         **kwargs,
     ) -> list[ReconstructedOrderBook]:
         """
-        Get reconstructed tick-level orderbook history (Enterprise tier only).
+        Get reconstructed tick-level orderbook history.
 
         Fetches raw tick data and reconstructs full orderbook state at each delta.
         All reconstruction happens client-side for optimal server performance.
@@ -458,7 +458,7 @@ class OrderBookResource:
         **kwargs,
     ) -> Iterator[ReconstructedOrderBook]:
         """
-        Iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
+        Iterate over tick-level orderbook history with automatic pagination.
 
         This generator automatically handles pagination, fetching up to 1,000 deltas
         per API request and yielding reconstructed orderbook snapshots one at a time.
@@ -539,7 +539,7 @@ class OrderBookResource:
         **kwargs,
     ) -> AsyncIterator[ReconstructedOrderBook]:
         """
-        Async iterate over tick-level orderbook history with automatic pagination (Enterprise tier only).
+        Async iterate over tick-level orderbook history with automatic pagination.
 
         This async generator automatically handles pagination, fetching up to 1,000 deltas
         per API request and yielding reconstructed orderbook snapshots one at a time.

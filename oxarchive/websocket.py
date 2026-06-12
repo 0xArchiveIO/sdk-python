@@ -538,7 +538,7 @@ class OxArchiveWs:
     # -- HIP-4 outcome markets -----------------------------------------------
 
     def subscribe_hip4_orderbook(self, coin: str) -> None:
-        """Subscribe to live HIP-4 L2 orderbook for a per-side coin (Pro+).
+        """Subscribe to live HIP-4 L2 orderbook for a per-side coin.
 
         ``coin`` should be the on-chain ``#N`` form (e.g. ``"#0"``). The raw
         ``#`` is sent in the JSON body — only the REST path strips it.
@@ -550,7 +550,7 @@ class OxArchiveWs:
         self.unsubscribe("hip4_orderbook", coin)
 
     def subscribe_hip4_trades(self, coin: str) -> None:
-        """Subscribe to live HIP-4 trades for a per-side coin (Build+)."""
+        """Subscribe to live HIP-4 trades for a per-side coin."""
         self.subscribe("hip4_trades", coin)
 
     def unsubscribe_hip4_trades(self, coin: str) -> None:
@@ -558,7 +558,7 @@ class OxArchiveWs:
         self.unsubscribe("hip4_trades", coin)
 
     def subscribe_hip4_open_interest(self, coin: str) -> None:
-        """Subscribe to live HIP-4 per-side open-interest ticks (Build+)."""
+        """Subscribe to live HIP-4 per-side open-interest ticks."""
         self.subscribe("hip4_open_interest", coin)
 
     def unsubscribe_hip4_open_interest(self, coin: str) -> None:
@@ -566,7 +566,7 @@ class OxArchiveWs:
         self.unsubscribe("hip4_open_interest", coin)
 
     def subscribe_hip4_l4_diffs(self, coin: str) -> None:
-        """Subscribe to HIP-4 L4 orderbook diffs (Pro+, realtime only).
+        """Subscribe to HIP-4 L4 orderbook diffs (realtime only).
 
         On subscribe the server first pushes an ``l4_snapshot`` followed by a
         stream of ``l4_batch`` messages.
@@ -578,7 +578,7 @@ class OxArchiveWs:
         self.unsubscribe("hip4_l4_diffs", coin)
 
     def subscribe_hip4_l4_orders(self, coin: str) -> None:
-        """Subscribe to HIP-4 L4 order lifecycle events (Pro+, realtime only)."""
+        """Subscribe to HIP-4 L4 order lifecycle events (realtime only)."""
         self.subscribe("hip4_l4_orders", coin)
 
     def unsubscribe_hip4_l4_orders(self, coin: str) -> None:
@@ -588,7 +588,7 @@ class OxArchiveWs:
     # -- Hyperliquid spot ----------------------------------------------------
 
     def subscribe_spot_orderbook(self, coin: str) -> None:
-        """Subscribe to live spot L2 orderbook for a pair (Build+).
+        """Subscribe to live spot L2 orderbook for a pair.
 
         ``coin`` is the dashed canonical symbol (e.g. ``"HYPE-USDC"``,
         ``"PURR-USDC"``). The server resolves dashed to wire format internally.
@@ -600,7 +600,7 @@ class OxArchiveWs:
         self.unsubscribe("spot_orderbook", coin)
 
     def subscribe_spot_trades(self, coin: str) -> None:
-        """Subscribe to live spot trades for a pair (Build+)."""
+        """Subscribe to live spot trades for a pair."""
         self.subscribe("spot_trades", coin)
 
     def unsubscribe_spot_trades(self, coin: str) -> None:
@@ -608,7 +608,7 @@ class OxArchiveWs:
         self.unsubscribe("spot_trades", coin)
 
     def subscribe_spot_l4_diffs(self, coin: str) -> None:
-        """Subscribe to spot L4 orderbook diffs (Pro+, realtime only).
+        """Subscribe to spot L4 orderbook diffs (realtime only).
 
         On subscribe the server first pushes an initial L4 snapshot followed
         by a stream of batched diff messages.
@@ -620,7 +620,7 @@ class OxArchiveWs:
         self.unsubscribe("spot_l4_diffs", coin)
 
     def subscribe_spot_l4_orders(self, coin: str) -> None:
-        """Subscribe to spot L4 order lifecycle events (Pro+, realtime only)."""
+        """Subscribe to spot L4 order lifecycle events (realtime only)."""
         self.subscribe("spot_l4_orders", coin)
 
     def unsubscribe_spot_l4_orders(self, coin: str) -> None:
@@ -628,7 +628,7 @@ class OxArchiveWs:
         self.unsubscribe("spot_l4_orders", coin)
 
     def subscribe_spot_twap(self, coin: str) -> None:
-        """Subscribe to live spot TWAP status updates for a pair (Build+)."""
+        """Subscribe to live spot TWAP status updates for a pair."""
         self.subscribe("spot_twap", coin)
 
     def unsubscribe_spot_twap(self, coin: str) -> None:
