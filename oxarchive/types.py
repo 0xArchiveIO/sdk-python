@@ -840,14 +840,14 @@ Notes:
   Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
 - open_interest, funding, lighter_open_interest, lighter_funding,
   hip3_open_interest, hip3_funding are historical only (replay/stream).
-- l4_diffs, l4_orders: Hyperliquid L4 order-level data (Pro+, realtime only).
-- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (Pro+, realtime only).
+- l4_diffs, l4_orders: Hyperliquid L4 order-level data (realtime only).
+- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (realtime only).
 - hip4_orderbook, hip4_trades, hip4_open_interest: HIP-4 outcome markets
-  (realtime + replay; orderbook is Pro+, the rest is Build+).
-- hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (Pro+, realtime only).
+  (realtime + replay).
+- hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (realtime only).
 - HIP-4 has no funding / liquidations / candles by design.
-- spot_orderbook, spot_trades, spot_twap: Hyperliquid spot (Build+, realtime).
-- spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (Pro+, realtime only).
+- spot_orderbook, spot_trades, spot_twap: Hyperliquid spot (realtime).
+- spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (realtime only).
 - Spot has no funding / open interest / liquidations / candles by design.
 """
 

@@ -70,8 +70,8 @@ history = client.hyperliquid.orderbook.history(
 | Venue | Coverage | Notes |
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Perpetuals across the full venue |
-| Hyperliquid HIP-3 | February 2026+ | Free tier: `km:US500`. Build+: all HIP-3 symbols. Pro+: orderbook history. |
-| Hyperliquid HIP-4 | May 2026+ | Outcome markets. Build+ for trades/OI, Pro+ for orderbook and L4. No funding/liquidations/candles by design. |
+| Hyperliquid HIP-3 | February 2026+ | All HIP-3 symbols, orderbook, and history on every tier. |
+| Hyperliquid HIP-4 | May 2026+ | Outcome markets. All schemas on every tier. No funding/liquidations/candles by design. |
 | Hyperliquid Spot | Trades from 2025-03-22; orderbook, L4, TWAP, orders live from 2026-05-05 | 294 dashed canonical pairs (`HYPE-USDC`, `PURR-USDC`). No funding/OI/liquidations/candles by design. |
 | Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
 
@@ -162,33 +162,26 @@ history = await client.hyperliquid.orderbook.ahistory("BTC", start=..., end=...)
 hip3_ob = await client.hyperliquid.hip3.orderbook.aget("km:US500")
 ```
 
-#### Orderbook Depth Limits
+#### Orderbook Depth
 
-The `depth` parameter controls how many price levels are returned per side. Tier-based limits apply:
+The `depth` parameter controls how many price levels are returned per side. Full orderbook depth is available on every tier.
 
-| Tier | Max Depth |
-|------|-----------|
-| Free | 20 |
-| Build | 200 |
-| Pro | Full Depth |
-| Enterprise | Full Depth |
-
-**Note:** Hyperliquid L2 source data contains 20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth on Pro+. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
+**Note:** Hyperliquid L2 source data contains ~20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
 
 #### Lighter Orderbook Granularity
 
-Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions. Tier restrictions apply.
+Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions.
 
-| Granularity | Interval | Tier Required | Credit Multiplier |
-|-------------|----------|---------------|-------------------|
-| `checkpoint` | ~60s | Free+ | 1x |
-| `30s` | 30s | Build+ | 2x |
-| `10s` | 10s | Build+ | 3x |
-| `1s` | 1s | Pro+ | 10x |
-| `tick` | tick-level | Enterprise | 20x |
+| Granularity | Interval | Credit Multiplier |
+|-------------|----------|-------------------|
+| `checkpoint` | ~60s | 1x |
+| `30s` | 30s | 2x |
+| `10s` | 10s | 3x |
+| `1s` | 1s | 10x |
+| `tick` | tick-level | 20x |
 
 ```python
-# Get Lighter orderbook history with 10s resolution (Build+ tier)
+# Get Lighter orderbook history with 10s resolution
 history = client.lighter.orderbook.history(
     "BTC",
     start="2024-01-01",
@@ -196,7 +189,7 @@ history = client.lighter.orderbook.history(
     granularity="10s"
 )
 
-# Get 1-second resolution (Pro+ tier)
+# Get 1-second resolution
 history = client.lighter.orderbook.history(
     "BTC",
     start="2024-01-01",
@@ -204,7 +197,7 @@ history = client.lighter.orderbook.history(
     granularity="1s"
 )
 
-# Tick-level data (Enterprise tier) - returns checkpoint + raw deltas
+# Tick-level data - returns checkpoint + raw deltas
 history = client.lighter.orderbook.history(
     "BTC",
     start="2024-01-01",
@@ -215,7 +208,7 @@ history = client.lighter.orderbook.history(
 
 **Note:** The `granularity` parameter is ignored for Hyperliquid orderbook history.
 
-#### Orderbook Reconstruction (Enterprise Tier)
+#### Orderbook Reconstruction
 
 For tick-level data, the SDK provides client-side orderbook reconstruction. This efficiently reconstructs full orderbook state from a checkpoint and incremental deltas.
 
@@ -387,7 +380,7 @@ eth = await client.lighter.instruments.aget("ETH")
 HIP-3 instruments are derived from live market data and include mark price, open interest, and mid price:
 
 ```python
-# List all HIP-3 instruments (no tier restriction)
+# List all HIP-3 instruments
 hip3_instruments = client.hyperliquid.hip3.instruments.list()
 for inst in hip3_instruments:
     print(f"{inst.coin} ({inst.namespace}:{inst.ticker}): mark={inst.mark_price}, OI={inst.open_interest}")
@@ -433,7 +426,7 @@ result = client.hyperliquid.hip4.list_outcomes(slug="btc-above-78213-yes-may-04-
 yes = client.hyperliquid.hip4.instruments.get("0")     # bare, recommended
 no_ = client.hyperliquid.hip4.instruments.get("#1")    # also works
 
-# Market data (Pro+ for orderbook & L4; Build+ for trades/OI).
+# Market data.
 ob = client.hyperliquid.hip4.get_orderbook("0")
 trades = client.hyperliquid.hip4.get_trades_recent("0", limit=50)
 oi = client.hyperliquid.hip4.get_open_interest_current("0")  # mark_price is in [0, 1]
@@ -452,7 +445,7 @@ pairs = client.spot.pairs.list()
 hype = client.spot.pairs.get("HYPE-USDC")
 print(f"{hype.symbol}: base={hype.base} quote={hype.quote} asset_id={hype.asset_id}")
 
-# Current orderbook (Build+)
+# Current orderbook
 ob = client.spot.orderbook.get("HYPE-USDC")
 print(f"HYPE-USDC mid: {ob.mid_price}, spread bps: {ob.spread_bps}")
 
@@ -462,12 +455,12 @@ history = client.spot.orderbook.history("HYPE-USDC", start="2026-05-05", end="20
 # Trades by time window
 trades = client.spot.trades.list("HYPE-USDC", start="2025-04-01", end="2025-04-02", limit=1000)
 
-# L4 endpoints (Pro+ for full reconstruction and raw diffs, Build+ for checkpoint history)
+# L4 endpoints (full reconstruction, raw diffs, and checkpoint history)
 snapshot = client.spot.l4_orderbook.get("HYPE-USDC")
 diffs = client.spot.l4_orderbook.diffs("HYPE-USDC", start=..., end=...)
 checkpoints = client.spot.l4_orderbook.history("HYPE-USDC", start=..., end=...)
 
-# L4 order lifecycle (Pro+)
+# L4 order lifecycle
 orders = client.spot.orders.history("HYPE-USDC", start=..., end=...)
 
 # TWAP statuses, by symbol or by user wallet
@@ -905,14 +898,14 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 Get L2 full-depth orderbook derived from L4 data. Available for Hyperliquid and HIP-3.
 
 ```python
-# L2 full-depth orderbook (Build+ tier)
+# L2 full-depth orderbook
 l2 = client.hyperliquid.l2_orderbook.get("BTC")
 l2_historical = client.hyperliquid.l2_orderbook.get("BTC", timestamp=1711900800000)
 
-# L2 orderbook history (Build+ tier)
+# L2 orderbook history
 l2_history = client.hyperliquid.l2_orderbook.history("BTC", start=start, end=end)
 
-# L2 tick-level diffs (Pro+ tier)
+# L2 tick-level diffs
 l2_diffs = client.hyperliquid.l2_orderbook.diffs("BTC", start=start, end=end)
 
 # HIP-3 L2 orderbook
@@ -937,7 +930,7 @@ l2_diffs = await client.hyperliquid.l2_orderbook.adiffs("BTC", start=..., end=..
 Get L4 order history, order flow aggregation, and TP/SL data. Available for Hyperliquid and HIP-3.
 
 ```python
-# Get order history (Build+ tier)
+# Get order history
 result = client.hyperliquid.orders.history(
     "BTC",
     start="2024-01-01",
@@ -955,7 +948,7 @@ result = client.hyperliquid.orders.history(
     order_type="limit"
 )
 
-# Get order flow aggregation (Build+ tier)
+# Get order flow aggregation
 flow = client.hyperliquid.orders.flow(
     "BTC",
     start="2024-01-01",
@@ -963,7 +956,7 @@ flow = client.hyperliquid.orders.flow(
     interval="1h"
 )
 
-# Get TP/SL history (Pro+ tier)
+# Get TP/SL history
 tpsl = client.hyperliquid.orders.tpsl(
     "BTC",
     start="2024-01-01",
@@ -986,11 +979,11 @@ hip3_orders = await client.hyperliquid.hip3.orders.ahistory("km:US500", start=..
 
 **Methods:**
 
-| Method | Description | Tier |
-|--------|-------------|------|
-| `history(symbol, *, start, end, user, status, order_type, cursor, limit)` | Get order history | Build+ |
-| `flow(symbol, *, start, end, interval, limit)` | Get order flow aggregation | Build+ |
-| `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history | Pro+ |
+| Method | Description |
+|--------|-------------|
+| `history(symbol, *, start, end, user, status, order_type, cursor, limit)` | Get order history |
+| `flow(symbol, *, start, end, interval, limit)` | Get order flow aggregation |
+| `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history |
 
 ### Data Quality Monitoring
 
@@ -1285,7 +1278,7 @@ async def main():
         speed=10                                     # Optional, defaults to 1x
     )
 
-    # Lighter.xyz replay with granularity (tier restrictions apply)
+    # Lighter.xyz replay with granularity
     await ws.replay(
         "orderbook", "BTC",
         start=int(time.time() * 1000) - 86400000,
@@ -1293,7 +1286,7 @@ async def main():
         granularity="10s"  # Options: 'checkpoint', '30s', '10s', '1s', 'tick'
     )
 
-    # Handle tick-level data (granularity='tick', Enterprise tier)
+    # Handle tick-level data (granularity='tick')
     ws.on_historical_tick_data(lambda coin, checkpoint, deltas:
         print(f"Checkpoint: {len(checkpoint['bids'])} bids, Deltas: {len(deltas)}")
     )
@@ -1371,8 +1364,8 @@ ws = OxArchiveWs(WsOptions(
 | `funding` | Funding rate records | Yes | Yes (replay only) |
 | `ticker` | Price and 24h volume | Yes | Real-time only |
 | `all_tickers` | All market tickers | No | Real-time only |
-| `l4_diffs` | L4 orderbook diffs with user attribution (Pro+) | Yes | Real-time only |
-| `l4_orders` | Order lifecycle events with user attribution (Pro+) | Yes | Real-time only |
+| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Real-time only |
+| `l4_orders` | Order lifecycle events with user attribution | Yes | Real-time only |
 
 > **Note:** ``liquidations`` and ``hip3_liquidations`` now stream live. Each item shares the trades wire shape (a fill row with ``is_liquidation: true``). The SDK exposes a typed ``on_liquidations`` callback that decodes them into :class:`Liquidation` records.
 
@@ -1386,8 +1379,8 @@ ws = OxArchiveWs(WsOptions(
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes (replay only) |
 | `hip3_funding` | HIP-3 funding rate records | Yes | Yes (replay only) |
 | `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | **Yes (realtime + replay)** |
-| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs (Pro+) | Yes | Real-time only |
-| `hip3_l4_orders` | HIP-3 order lifecycle events (Pro+) | Yes | Real-time only |
+| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Real-time only |
+| `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Real-time only |
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -1395,11 +1388,11 @@ ws = OxArchiveWs(WsOptions(
 
 | Channel | Description | Requires Coin | Historical Support |
 |---------|-------------|---------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots (Pro+) | Yes | Yes |
-| `hip4_trades` | HIP-4 trade/fill updates (Build+) | Yes | Yes |
-| `hip4_open_interest` | HIP-4 per-side OI ticks (Build+) | Yes | Yes (replay only) |
-| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs (Pro+) | Yes | Real-time only |
-| `hip4_l4_orders` | HIP-4 order lifecycle events (Pro+) | Yes | Real-time only |
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Yes |
+| `hip4_trades` | HIP-4 trade/fill updates | Yes | Yes |
+| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | Yes (replay only) |
+| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Real-time only |
+| `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Real-time only |
 
 HIP-4 has **no funding, no liquidations, and no candles by design**. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
 
@@ -1417,11 +1410,11 @@ ws.subscribe_hip4_trades("#0")
 
 | Channel | Description | Requires Coin | Historical Support |
 |---------|-------------|---------------|-------------------|
-| `spot_orderbook` | Spot L2 order book snapshots (Build+) | Yes | Real-time only |
-| `spot_trades` | Spot trade/fill updates (Build+) | Yes | Real-time only |
-| `spot_twap` | Spot TWAP status updates (Build+) | Yes | Real-time only |
-| `spot_l4_diffs` | Spot L4 orderbook diffs (Pro+) | Yes | Real-time only |
-| `spot_l4_orders` | Spot L4 order lifecycle events (Pro+) | Yes | Real-time only |
+| `spot_orderbook` | Spot L2 order book snapshots | Yes | Real-time only |
+| `spot_trades` | Spot trade/fill updates | Yes | Real-time only |
+| `spot_twap` | Spot TWAP status updates | Yes | Real-time only |
+| `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Real-time only |
+| `spot_l4_orders` | Spot L4 order lifecycle events | Yes | Real-time only |
 
 > **Note:** Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format internally. The existing `on_orderbook` and `on_trades` typed callbacks fire for `spot_orderbook` and `spot_trades`.
 
@@ -1442,7 +1435,7 @@ ws.subscribe_spot_trades("HYPE-USDC")
 | `lighter_candles` | Lighter OHLCV candle data | Yes | Yes |
 | `lighter_open_interest` | Lighter open interest snapshots | Yes | Yes (replay only) |
 | `lighter_funding` | Lighter funding rate records | Yes | Yes (replay only) |
-| `lighter_l3_orderbook` | Lighter L3 order-level orderbook (Pro+) | Yes | Yes |
+| `lighter_l3_orderbook` | Lighter L3 order-level orderbook | Yes | Yes |
 
 #### Candle Replay
 
@@ -1650,7 +1643,7 @@ from oxarchive.types import (
 )
 from oxarchive.resources.trades import CursorResponse
 
-# Orderbook reconstruction types (Enterprise)
+# Orderbook reconstruction types
 from oxarchive import (
     OrderBookReconstructor,
     OrderbookDelta,
@@ -1670,7 +1663,7 @@ recent: list[Trade] = client.lighter.trades.recent("BTC")
 # Lighter granularity type hint
 granularity: LighterGranularity = "10s"
 
-# Orderbook reconstruction (Enterprise)
+# Orderbook reconstruction
 tick_data: TickData = client.lighter.orderbook.history_tick("BTC", start=..., end=...)
 snapshots: list[ReconstructedOrderBook] = client.lighter.orderbook.history_reconstructed("BTC", start=..., end=...)
 ```

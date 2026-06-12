@@ -325,7 +325,7 @@ class Hip3Client:
     HIP-3 builder-deployed perpetuals client.
 
     Access Hyperliquid HIP-3 builder perps data through the 0xarchive API.
-    Free: km:US500 only. Build+: all coins. Orderbook: Pro+.
+    All HIP-3 coins and orderbook available on every tier.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -521,7 +521,6 @@ class Hip4Client:
     HIP-4 outcome markets client.
 
     Access Hyperliquid HIP-4 binary-outcome market data through the 0xarchive API.
-    Build+ for metadata/trades/OI; Pro+ for orderbook and L4. Server enforces tiers.
 
     Coin format: ``#<10*outcome_id + side>`` (e.g. ``#0`` = outcome 0 / Yes,
     ``#1`` = outcome 0 / No). The SDK accepts either the bare numeric form
@@ -554,19 +553,19 @@ class Hip4Client:
         """HIP-4 outcome-level metadata (one row per outcome_id)."""
 
         self.orderbook = OrderBookResource(http, base_path, coin_transform=_hip4_encode)
-        """L2 order book snapshots (Pro+)."""
+        """L2 order book snapshots."""
 
         self.trades = TradesResource(http, base_path, coin_transform=_hip4_encode)
-        """Trade/fill history (Build+)."""
+        """Trade/fill history."""
 
         self.open_interest = OpenInterestResource(http, base_path, coin_transform=_hip4_encode)
-        """Per-side open interest (Build+). For paired/aggregated OI use ``outcomes.get()``."""
+        """Per-side open interest. For paired/aggregated OI use ``outcomes.get()``."""
 
         self.orders = OrdersResource(http, base_path, coin_transform=_hip4_encode)
-        """L4 order history, flow, and TP/SL (Pro+)."""
+        """L4 order history, flow, and TP/SL."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path, coin_transform=_hip4_encode)
-        """L4 order-level orderbook data (Pro+)."""
+        """L4 order-level orderbook data."""
 
         self.l2_orderbook = L2OrderBookResource(http, base_path, coin_transform=_hip4_encode)
         """L2 full-depth orderbook (derived from L4)."""
@@ -675,7 +674,7 @@ class Hip4Client:
         return await self.orderbook.aget(symbol, **kwargs)
 
     def get_orderbook_history(self, symbol: str, **kwargs):
-        """Get L2 orderbook history (Pro+)."""
+        """Get L2 orderbook history."""
         return self.orderbook.history(symbol, **kwargs)
 
     async def aget_orderbook_history(self, symbol: str, **kwargs):
@@ -683,7 +682,7 @@ class Hip4Client:
         return await self.orderbook.ahistory(symbol, **kwargs)
 
     def get_trades(self, symbol: str, **kwargs):
-        """Get full trade/fill history with cursor pagination (Build+)."""
+        """Get full trade/fill history with cursor pagination."""
         return self.trades.list(symbol, **kwargs)
 
     async def aget_trades(self, symbol: str, **kwargs):
@@ -699,7 +698,7 @@ class Hip4Client:
         return await self.trades.arecent(symbol, limit=limit, **kwargs)
 
     def get_open_interest(self, symbol: str, **kwargs):
-        """Get per-side OI history (Build+). Use get_outcome() for paired aggregates."""
+        """Get per-side OI history. Use get_outcome() for paired aggregates."""
         return self.open_interest.history(symbol, **kwargs)
 
     async def aget_open_interest(self, symbol: str, **kwargs):
@@ -797,7 +796,7 @@ class Hip4Client:
         )
 
     def get_order_history(self, symbol: str, **kwargs):
-        """Get order lifecycle history (Pro+)."""
+        """Get order lifecycle history."""
         return self.orders.history(symbol, **kwargs)
 
     async def aget_order_history(self, symbol: str, **kwargs):
@@ -805,7 +804,7 @@ class Hip4Client:
         return await self.orders.ahistory(symbol, **kwargs)
 
     def get_order_flow(self, symbol: str, **kwargs):
-        """Get time-bucketed order-flow aggregates (Pro+)."""
+        """Get time-bucketed order-flow aggregates."""
         return self.orders.flow(symbol, **kwargs)
 
     async def aget_order_flow(self, symbol: str, **kwargs):
@@ -813,7 +812,7 @@ class Hip4Client:
         return await self.orders.aflow(symbol, **kwargs)
 
     def get_tpsl(self, symbol: str, **kwargs):
-        """Get TP/SL orders (Pro+)."""
+        """Get TP/SL orders."""
         return self.orders.tpsl(symbol, **kwargs)
 
     async def aget_tpsl(self, symbol: str, **kwargs):
@@ -821,7 +820,7 @@ class Hip4Client:
         return await self.orders.atpsl(symbol, **kwargs)
 
     def get_l4_orderbook(self, symbol: str, **kwargs):
-        """Get full L4 reconstruction (current) (Pro+)."""
+        """Get full L4 reconstruction (current)."""
         return self.l4_orderbook.get(symbol, **kwargs)
 
     async def aget_l4_orderbook(self, symbol: str, **kwargs):
@@ -829,7 +828,7 @@ class Hip4Client:
         return await self.l4_orderbook.aget(symbol, **kwargs)
 
     def get_l4_diffs(self, symbol: str, **kwargs):
-        """Get L4 diffs (event stream) with cursor pagination (Pro+)."""
+        """Get L4 diffs (event stream) with cursor pagination."""
         return self.l4_orderbook.diffs(symbol, **kwargs)
 
     async def aget_l4_diffs(self, symbol: str, **kwargs):
@@ -837,7 +836,7 @@ class Hip4Client:
         return await self.l4_orderbook.adiffs(symbol, **kwargs)
 
     def get_l4_history(self, symbol: str, **kwargs):
-        """Get L4 checkpoint history (Build+, hard cap limit=10)."""
+        """Get L4 checkpoint history (hard cap limit=10)."""
         return self.l4_orderbook.history(symbol, **kwargs)
 
     async def aget_l4_history(self, symbol: str, **kwargs):
@@ -1025,10 +1024,6 @@ class SpotClient:
     design (perp-only constructs). Trades go back to 2025-03-22; orderbook,
     L4, TWAP, and orders are live-only from 2026-05-05.
 
-    Tier mapping:
-      * Build+: orderbook, trades, TWAP, L4 checkpoint history.
-      * Pro+: full L4 reconstruction, raw L4 diffs, order lifecycle history.
-
     Example:
         >>> client = oxarchive.Client(api_key="...")
         >>> ob = client.spot.orderbook.get("HYPE-USDC")
@@ -1044,26 +1039,26 @@ class SpotClient:
         """Spot pair metadata (list and per-pair detail)."""
 
         self.orderbook = OrderBookResource(http, base_path)
-        """L2 orderbook snapshots (Build+, live from 2026-05-05)."""
+        """L2 orderbook snapshots (live from 2026-05-05)."""
 
         self.trades = TradesResource(http, base_path, allow_recent=False)
-        """Trade/fill history (Build+, from 2025-03-22). The spot backend does
+        """Trade/fill history (from 2025-03-22). The spot backend does
         not expose a ``/trades/{symbol}/recent`` endpoint; use ``list()`` with a
         time range instead."""
 
         self.orders = OrdersResource(http, base_path)
-        """L4 order lifecycle history (Pro+, live from 2026-05-05).
+        """L4 order lifecycle history (live from 2026-05-05).
 
         Note: spot exposes only ``history()``. Flow and TP/SL endpoints exist
         on the resource but the spot backend does not implement them.
         """
 
         self.l4_orderbook = L4OrderBookResource(http, base_path)
-        """L4 order-level orderbook: full reconstruction (Pro+), raw diffs
-        (Pro+), and checkpoint history (Build+). Live from 2026-05-05."""
+        """L4 order-level orderbook: full reconstruction, raw diffs,
+        and checkpoint history. Live from 2026-05-05."""
 
         self.twap = SpotTwapResource(http, base_path)
-        """TWAP status records by pair or by user wallet (Build+)."""
+        """TWAP status records by pair or by user wallet."""
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
