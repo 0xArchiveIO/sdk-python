@@ -5,6 +5,10 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-06-29
+
+- Remove tier-gating language from doc comments, open-catalog rollout.
+
 ## [1.7.0] - 2026-05-06
 
 ### Added
