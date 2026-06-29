@@ -710,7 +710,7 @@ hip3_summary = await client.hyperliquid.hip3.aget_summary("km:US500")
 Get mark, oracle, and mid price history over time. Supports aggregation intervals. Data projected from open interest records.
 
 ```python
-# Hyperliquid — available from May 2023
+# Hyperliquid: available from April 2023
 prices = client.hyperliquid.get_price_history(
     "BTC",
     start="2026-01-01",
