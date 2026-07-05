@@ -1,5 +1,8 @@
 # oxarchive
 
+[![PyPI version](https://img.shields.io/pypi/v/oxarchive.svg)](https://pypi.org/project/oxarchive/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 Python client for 0xArchive market data in notebooks, research scripts, and data pipelines.
 
 0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. Hyperliquid includes core perps, HIP-3 builder perps, HIP-4 outcome markets, and Hyperliquid Spot. HIP-3, HIP-4, and Spot live under the Hyperliquid namespace (`/v1/hyperliquid/hip3`, `client.hyperliquid.hip3`, etc.). Lighter.xyz is the second top-level venue API.
