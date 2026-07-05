@@ -1067,7 +1067,7 @@ client = Client(
 
 ### Web3 Authentication
 
-Get API keys programmatically using an Ethereum wallet — no browser or email required.
+Get API keys programmatically using an Ethereum wallet. No browser or email required.
 
 #### Free Tier (SIWE)
 
