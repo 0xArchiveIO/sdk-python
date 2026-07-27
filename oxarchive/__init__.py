@@ -61,6 +61,12 @@ from .types import (
     OpenInterest,
     Liquidation,
     LiquidationVolume,
+    LiquidationLevelBucket,
+    LiquidationLevels,
+    LiquidationLevelsHistoryItem,
+    TriggerLevelBucket,
+    TriggerLevels,
+    TriggerLevelsHistoryItem,
     DataTypeFreshness,
     CoinFreshness,
     CoinSummary,
@@ -112,7 +118,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.7.1"
+__version__ = "1.8.0"
 
 __all__ = [
     # Client
@@ -157,6 +163,12 @@ __all__ = [
     "OpenInterest",
     "Liquidation",
     "LiquidationVolume",
+    "LiquidationLevelBucket",
+    "LiquidationLevels",
+    "LiquidationLevelsHistoryItem",
+    "TriggerLevelBucket",
+    "TriggerLevels",
+    "TriggerLevelsHistoryItem",
     "DataTypeFreshness",
     "CoinFreshness",
     "CoinSummary",

@@ -1041,10 +1041,8 @@ class SpotClient:
         self.orderbook = OrderBookResource(http, base_path)
         """L2 orderbook snapshots (live from 2026-05-05)."""
 
-        self.trades = TradesResource(http, base_path, allow_recent=False)
-        """Trade/fill history (from 2025-03-22). The spot backend does
-        not expose a ``/trades/{symbol}/recent`` endpoint; use ``list()`` with a
-        time range instead."""
+        self.trades = TradesResource(http, base_path)
+        """Trade/fill history (from 2025-03-22), including ``recent()``."""
 
         self.orders = OrdersResource(http, base_path)
         """L4 order lifecycle history (live from 2026-05-05).
