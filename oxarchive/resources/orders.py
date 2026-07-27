@@ -6,7 +6,12 @@ from datetime import datetime
 from typing import Optional
 
 from ..http import HttpClient
-from ..types import CursorResponse, Timestamp
+from ..types import (
+    CursorResponse,
+    Timestamp,
+    TriggerLevels,
+    TriggerLevelsHistoryItem,
+)
 
 
 class OrdersResource:
@@ -260,6 +265,129 @@ class OrdersResource:
         )
         return CursorResponse(
             data=data["data"],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+
+    def trigger_levels(
+        self,
+        symbol: str,
+        *,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        **kwargs,
+    ) -> TriggerLevels:
+        """
+        Get the pending trigger-order map for a symbol.
+
+        Currently pending stop-loss and take-profit trigger orders grouped
+        into price buckets near the current mid/mark price. Voluntary trigger
+        orders, not projected forced liquidations (see
+        ``liquidations.levels`` for those). The response's ``as_of`` is the
+        server read time.
+
+        Args:
+            symbol: The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
+            range_pct: Percentage range around the mid price (1-50, default 10)
+            buckets: Number of price buckets (10-200, default 50)
+            side: Side filter ('bid'/'buy'/'B' keeps bids, 'ask'/'sell'/'A' keeps asks)
+        """
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = self._http.get(
+            f"{self._base_path}/orders/{self._coin_transform(symbol)}/trigger-levels",
+            params={"range_pct": range_pct, "buckets": buckets, "side": side},
+        )
+        return TriggerLevels.model_validate(data["data"])
+
+    async def atrigger_levels(
+        self,
+        symbol: str,
+        *,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        **kwargs,
+    ) -> TriggerLevels:
+        """Async version of trigger_levels()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(
+            f"{self._base_path}/orders/{self._coin_transform(symbol)}/trigger-levels",
+            params={"range_pct": range_pct, "buckets": buckets, "side": side},
+        )
+        return TriggerLevels.model_validate(data["data"])
+
+    def trigger_levels_history(
+        self,
+        symbol: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        summary: Optional[bool] = None,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        **kwargs,
+    ) -> CursorResponse[list[TriggerLevelsHistoryItem]]:
+        """
+        Get historical trigger-levels snapshots with cursor pagination.
+
+        Ascending by snapshot time (15-minute cadence, retained from
+        2026-07-27). Pass ``summary=True`` to list snapshots without
+        histograms. Follow ``next_cursor`` as ``cursor`` for the next page.
+        """
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = self._http.get(
+            f"{self._base_path}/orders/{self._coin_transform(symbol)}/trigger-levels/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "cursor": cursor,
+                "limit": limit,
+                "summary": summary,
+                "range_pct": range_pct,
+                "buckets": buckets,
+                "side": side,
+            },
+        )
+        return CursorResponse(
+            data=[TriggerLevelsHistoryItem.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def atrigger_levels_history(
+        self,
+        symbol: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        summary: Optional[bool] = None,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        **kwargs,
+    ) -> CursorResponse[list[TriggerLevelsHistoryItem]]:
+        """Async version of trigger_levels_history()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(
+            f"{self._base_path}/orders/{self._coin_transform(symbol)}/trigger-levels/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "cursor": cursor,
+                "limit": limit,
+                "summary": summary,
+                "range_pct": range_pct,
+                "buckets": buckets,
+                "side": side,
+            },
+        )
+        return CursorResponse(
+            data=[TriggerLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 

@@ -381,8 +381,7 @@ class SpotPair(BaseModel):
     design (perp-only constructs).
 
     Backend wire shape includes both ``coin`` and ``symbol`` (same value, the
-    dashed canonical form), so either is populated. ``base`` / ``quote`` may be
-    derived server-side or omitted depending on the route; they are optional.
+    dashed canonical form).
     """
 
     symbol: str
@@ -392,27 +391,51 @@ class SpotPair(BaseModel):
     """Same as symbol. Present in some backend responses for cross-resource
     consistency with orderbook / trades payloads."""
 
-    base: Optional[str] = None
-    """Base asset (e.g. ``HYPE``). Present when the backend exposes the parsed
-    pair components."""
+    pair_index: Optional[int] = None
+    """Hyperliquid spot pair index (wire format ``@<index>``)."""
 
-    quote: Optional[str] = None
-    """Quote asset (typically ``USDC``)."""
+    name: Optional[str] = None
+    """Hyperliquid wire name (e.g. ``PURR/USDC``)."""
 
-    asset_id: Optional[int] = None
-    """Hyperliquid spot asset id (10000 + index)."""
+    is_canonical: Optional[bool] = None
+    """Whether this is the canonical pair for the base token."""
 
-    wire_name: Optional[str] = None
-    """Upstream wire form (e.g. ``PURR/USDC`` or ``@107``)."""
+    base_token_id: Optional[int] = None
+    """Base token id in the Hyperliquid spot token registry."""
 
-    sz_decimals: Optional[int] = None
-    """Size decimal precision."""
+    quote_token_id: Optional[int] = None
+    """Quote token id (0 = USDC)."""
 
-    px_decimals: Optional[int] = None
-    """Price decimal precision."""
+    base_token_name: Optional[str] = None
+    """Base token name (e.g. ``HYPE``, ``PURR``)."""
 
-    is_active: bool = True
-    """Whether the pair is currently tradeable."""
+    quote_token_name: Optional[str] = None
+    """Quote token name (typically ``USDC``)."""
+
+    base_sz_decimals: Optional[int] = None
+    """Base token size decimals."""
+
+    base_wei_decimals: Optional[int] = None
+    """Base token wei decimals."""
+
+    quote_sz_decimals: Optional[int] = None
+    """Quote token size decimals."""
+
+    quote_wei_decimals: Optional[int] = None
+    """Quote token wei decimals."""
+
+    base_token_address: Optional[str] = None
+    """Base token EVM address."""
+
+    deployer_fee_share: Optional[float] = None
+    """Deployer fee share for the pair."""
+
+    first_seen_at: Optional[datetime] = None
+    """First time the pair appeared in the metadata table (table rebuilds can
+    reset this; do not treat it as the listing date)."""
+
+    last_updated_at: Optional[datetime] = None
+    """Last metadata update time."""
 
     model_config = {"extra": "ignore"}
 
@@ -430,10 +453,10 @@ class SpotTwapStatus(BaseModel):
     timestamp: datetime
     """Status update timestamp (UTC)."""
 
-    user: str
+    user_address: Optional[str] = None
     """User wallet address that placed the TWAP."""
 
-    twap_id: int
+    twap_id: Optional[int] = None
     """TWAP execution id."""
 
     side: Optional[Literal["A", "B"]] = None
@@ -442,10 +465,13 @@ class SpotTwapStatus(BaseModel):
     status: Optional[str] = None
     """Lifecycle status (e.g. ``activated``, ``finished``, ``terminated``)."""
 
-    executed_sz: Optional[str] = None
+    size: Optional[float] = None
+    """Total TWAP order size."""
+
+    executed_size: Optional[float] = None
     """Cumulative executed size."""
 
-    executed_ntl: Optional[str] = None
+    executed_notional: Optional[float] = None
     """Cumulative executed notional."""
 
     minutes: Optional[int] = None
@@ -456,6 +482,17 @@ class SpotTwapStatus(BaseModel):
 
     randomize: Optional[bool] = None
     """Whether child slice timing is randomized."""
+
+    block_number: Optional[int] = None
+    """Block number the status was observed at."""
+
+    block_time: Optional[datetime] = None
+    """Block time of the status event (UTC)."""
+
+    started_at: Optional[datetime] = None
+    """When the TWAP started (UTC)."""
+
+    model_config = {"extra": "ignore"}
 
 
 class SpotTableFreshness(BaseModel):
@@ -672,6 +709,139 @@ class LiquidationVolume(BaseModel):
 
     short_count: int
     """Number of short liquidations."""
+
+
+# =============================================================================
+# Liquidation Levels Types (projected forced-liquidation levels)
+# =============================================================================
+
+
+class LiquidationLevelBucket(BaseModel):
+    """One price bucket of projected forced-liquidation exposure."""
+
+    price: float
+    """Bucket center price."""
+
+    long_notional: float
+    """USD notional of long positions projected to liquidate in this bucket."""
+
+    short_notional: float
+    """USD notional of short positions projected to liquidate in this bucket."""
+
+    long_count: int
+    """Number of long positions in this bucket."""
+
+    short_count: int
+    """Number of short positions in this bucket."""
+
+
+class LiquidationLevels(BaseModel):
+    """Projected forced-liquidation levels for one snapshot.
+
+    Computed from clearinghouse positions and margin state, bucketed around
+    the snapshot mark price. Snapshots refresh roughly every 45 minutes;
+    ``snapshot_ts`` identifies the snapshot served.
+    """
+
+    mid_price: float
+    """Mark price at the snapshot, center of the requested range."""
+
+    snapshot_ts: str
+    """UTC snapshot time the levels reflect."""
+
+    block_number: int
+    """Hyperliquid block height the snapshot reflects."""
+
+    total_long: float
+    """Total long notional at risk across the whole book."""
+
+    total_short: float
+    """Total short notional at risk across the whole book."""
+
+    flagged_notional: float
+    """Notional computed approximately or not bucketed (HIP-3 cross-margin
+    exposure)."""
+
+    levels: list[LiquidationLevelBucket]
+    """Price buckets inside the requested range."""
+
+
+class LiquidationLevelsHistoryItem(BaseModel):
+    """One historical liquidation-levels snapshot.
+
+    ``levels`` is ``None`` when the history was requested with
+    ``summary=True``.
+    """
+
+    snapshot_ts: str
+    block_number: int
+    mid_price: float
+    total_long: float
+    total_short: float
+    flagged_notional: float
+    levels: Optional[list[LiquidationLevelBucket]] = None
+
+
+# =============================================================================
+# Trigger Levels Types (pending stop-loss / take-profit orders)
+# =============================================================================
+
+
+class TriggerLevelBucket(BaseModel):
+    """Aggregated currently open trigger orders at one rounded price bucket."""
+
+    price_bucket: float
+    """Rounded trigger price bucket."""
+
+    bid_count: int
+    """Number of bid-side trigger orders in the bucket."""
+
+    bid_size: float
+    """Bid-side trigger size in the bucket."""
+
+    ask_count: int
+    """Number of ask-side trigger orders in the bucket."""
+
+    ask_size: float
+    """Ask-side trigger size in the bucket."""
+
+
+class TriggerLevels(BaseModel):
+    """Currently pending stop-loss and take-profit trigger orders.
+
+    Grouped into price buckets near the current mid/mark price. Voluntary
+    trigger orders, not projected forced liquidations; use
+    :class:`LiquidationLevels` for those.
+    """
+
+    mid_price: float
+    """Current mid/mark price, center of the requested range."""
+
+    as_of: str
+    """UTC RFC3339 server time the pending-trigger state was read."""
+
+    total_bid_size: float
+    """Total pending bid size across the returned window."""
+
+    total_ask_size: float
+    """Total pending ask size across the returned window."""
+
+    levels: list[TriggerLevelBucket]
+    """Price buckets inside the requested range."""
+
+
+class TriggerLevelsHistoryItem(BaseModel):
+    """One historical trigger-levels snapshot (15-minute cadence).
+
+    ``levels`` is ``None`` when the history was requested with
+    ``summary=True``.
+    """
+
+    snapshot_ts: str
+    mid_price: float
+    total_bid_size: float
+    total_ask_size: float
+    levels: Optional[list[TriggerLevelBucket]] = None
 
 
 # =============================================================================

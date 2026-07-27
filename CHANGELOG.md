@@ -5,6 +5,44 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-07-27
+
+### Added
+- **Liquidation levels**: `liquidations.levels()` / `alevels()` and
+  `levels_history()` / `alevels_history()` on the Hyperliquid and HIP-3
+  clients. Projected forced-liquidation levels computed from clearinghouse
+  positions and margin state (~45-minute snapshots, `at=` point-in-time
+  reads, `side=` filter, cursor-paginated history with `summary=True`
+  discovery mode). History retained from 2026-07-27.
+- **Trigger levels**: `orders.trigger_levels()` and
+  `trigger_levels_history()` (+ async variants): the pending stop-loss /
+  take-profit map with 15-minute snapshot history.
+- New pydantic models exported at package root: `LiquidationLevels`,
+  `LiquidationLevelBucket`, `LiquidationLevelsHistoryItem`,
+  `TriggerLevels`, `TriggerLevelBucket`, `TriggerLevelsHistoryItem`.
+- **WebSocket L4 frames**: `on_l4_snapshot()` and `on_l4_batch()` handlers.
+  Previously `l4_snapshot` / `l4_batch` server messages were silently
+  dropped, so L4 channel subscribers received nothing.
+
+### Fixed
+- `spot.trades.recent()` was blocked client-side claiming the endpoint does
+  not exist; it exists and serves data. Unblocked. (The Hyperliquid perp
+  mount's block remains: that backend really has no `/recent`.)
+- `SpotTwapStatus` required `user` and modeled `executed_sz`/`executed_ntl`;
+  the wire sends `user_address` and `executed_size`/`executed_notional`, so
+  every spot TWAP call raised `ValidationError`. Fields renamed to the wire
+  names, plus `size`, `block_number`, `block_time`, `started_at`.
+- `SpotPair` rewritten to the actual wire shape (pair_index, name,
+  is_canonical, token ids/names/decimals, base_token_address,
+  deployer_fee_share, first/last timestamps). The old base/quote/asset_id/
+  wire_name/sz_decimals/px_decimals fields never arrived, and `is_active`
+  always defaulted to `True` regardless of state.
+
+### Changed
+- The server-side `/liquidations/{symbol}/levels` endpoints now serve
+  projected forced-liquidation levels; the pending trigger-order map moved
+  to `/orders/{symbol}/trigger-levels`.
+
 ## [1.7.1] - 2026-06-29
 
 - Remove tier-gating language from doc comments, open-catalog rollout.

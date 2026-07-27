@@ -6,7 +6,14 @@ from datetime import datetime
 from typing import Optional
 
 from ..http import HttpClient
-from ..types import CursorResponse, Liquidation, LiquidationVolume, Timestamp
+from ..types import (
+    CursorResponse,
+    Liquidation,
+    LiquidationLevels,
+    LiquidationLevelsHistoryItem,
+    LiquidationVolume,
+    Timestamp,
+)
 
 
 class LiquidationsResource:
@@ -303,6 +310,145 @@ class LiquidationsResource:
         )
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+
+    def levels(
+        self,
+        symbol: str,
+        *,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        at: Optional[int] = None,
+        **kwargs,
+    ) -> LiquidationLevels:
+        """
+        Get projected forced-liquidation levels for a symbol.
+
+        Computed from clearinghouse positions and margin state, bucketed
+        around the snapshot mark price. Snapshots refresh roughly every 45
+        minutes; pass ``at`` (epoch ms) for a point-in-time read. History
+        begins 2026-07-27.
+
+        These are projected forced liquidations, not the pending
+        trigger-order map (see ``orders.trigger_levels`` for that).
+
+        Args:
+            symbol: The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
+            range_pct: Percentage range around the mark price (1-50, default 10)
+            buckets: Number of price buckets (10-200, default 50)
+            side: Side filter ('bid'/'buy'/'B' keeps longs, 'ask'/'sell'/'A' keeps shorts)
+            at: Point-in-time read, epoch ms (newest snapshot at or before)
+        """
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = self._http.get(
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels",
+            params={"range_pct": range_pct, "buckets": buckets, "side": side, "at": at},
+        )
+        return LiquidationLevels.model_validate(data["data"])
+
+    async def alevels(
+        self,
+        symbol: str,
+        *,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        at: Optional[int] = None,
+        **kwargs,
+    ) -> LiquidationLevels:
+        """Async version of levels()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels",
+            params={"range_pct": range_pct, "buckets": buckets, "side": side, "at": at},
+        )
+        return LiquidationLevels.model_validate(data["data"])
+
+    def levels_history(
+        self,
+        symbol: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        summary: Optional[bool] = None,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        **kwargs,
+    ) -> CursorResponse[list[LiquidationLevelsHistoryItem]]:
+        """
+        Get historical liquidation-levels snapshots with cursor pagination.
+
+        Ascending by snapshot time (about every 45 minutes, retained from
+        2026-07-27). Pass ``summary=True`` to list snapshots without
+        histograms. Follow ``next_cursor`` as ``cursor`` for the next page.
+
+        Args:
+            symbol: The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)
+            start: Range start (default: 24h before end)
+            end: Range end (default: now)
+            cursor: Cursor from the previous page's next_cursor (exclusive)
+            limit: Snapshots per page (1-100, default 24)
+            summary: When True, items omit the levels array
+            range_pct: Percentage range around each snapshot's mid
+            buckets: Number of price buckets
+            side: Side filter; the other side is zeroed
+        """
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = self._http.get(
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "cursor": cursor,
+                "limit": limit,
+                "summary": summary,
+                "range_pct": range_pct,
+                "buckets": buckets,
+                "side": side,
+            },
+        )
+        return CursorResponse(
+            data=[LiquidationLevelsHistoryItem.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def alevels_history(
+        self,
+        symbol: str,
+        *,
+        start: Optional[Timestamp] = None,
+        end: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        summary: Optional[bool] = None,
+        range_pct: Optional[float] = None,
+        buckets: Optional[int] = None,
+        side: Optional[str] = None,
+        **kwargs,
+    ) -> CursorResponse[list[LiquidationLevelsHistoryItem]]:
+        """Async version of levels_history()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
+        data = await self._http.aget(
+            f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "cursor": cursor,
+                "limit": limit,
+                "summary": summary,
+                "range_pct": range_pct,
+                "buckets": buckets,
+                "side": side,
+            },
+        )
+        return CursorResponse(
+            data=[LiquidationLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 
