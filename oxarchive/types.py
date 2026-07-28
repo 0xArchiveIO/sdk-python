@@ -22,6 +22,12 @@ class ApiMeta(BaseModel):
     next_cursor: Optional[str] = None
     request_id: str
 
+    coverage_from: Optional[str] = None
+    """Coverage start date (ISO 8601), present when the requested window ends before the symbol's coverage begins."""
+
+    notice: Optional[str] = None
+    """Advisory notice explaining an empty response (e.g. window predates coverage)."""
+
 
 class ApiResponse(BaseModel, Generic[T]):
     """Standard API response wrapper."""
