@@ -1695,11 +1695,12 @@ class WebSocketLatency(BaseModel):
     current_ms: int
     """Current latency."""
 
-    avg_1h_ms: int
-    """1-hour average latency."""
+    avg_1h_ms: Optional[int] = None
+    """1-hour average latency. Omitted until the platform has a real sample
+    source for this venue; never fabricated."""
 
-    avg_24h_ms: int
-    """24-hour average latency."""
+    avg_24h_ms: Optional[int] = None
+    """24-hour average latency. Omitted when unavailable."""
 
     p99_24h_ms: Optional[int] = None
     """24-hour P99 latency."""
@@ -1708,14 +1709,14 @@ class WebSocketLatency(BaseModel):
 class ApiLatency(BaseModel):
     """REST API latency metrics."""
 
-    current_ms: int
+    current_ms: Optional[int] = None
     """Current latency."""
 
-    avg_1h_ms: int
-    """1-hour average latency."""
+    avg_1h_ms: Optional[int] = None
+    """1-hour average latency. Omitted until samples accrue for this venue."""
 
-    avg_24h_ms: int
-    """24-hour average latency."""
+    avg_24h_ms: Optional[int] = None
+    """24-hour average latency. Omitted when unavailable."""
 
 
 class DataFreshness(BaseModel):
@@ -1776,7 +1777,7 @@ class CompletenessMetrics(BaseModel):
     orderbook: float
     """Orderbook completeness percentage."""
 
-    fills: float
+    fills: Optional[float] = None
     """Fills completeness percentage."""
 
     funding: float
