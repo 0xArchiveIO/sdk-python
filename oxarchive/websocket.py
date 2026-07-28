@@ -357,6 +357,8 @@ class OxArchiveWs:
         self._on_orderbook: Optional[OrderbookHandler] = None
         self._on_trades: Optional[TradesHandler] = None
         self._on_liquidations: Optional[LiquidationsHandler] = None
+        self._on_l4_snapshot: Optional[Callable[[str, str, dict], None]] = None
+        self._on_l4_batch: Optional[Callable[[str, str, list], None]] = None
         self._on_outcome_settled: Optional[OutcomeSettledHandler] = None
         self._on_state_change: Optional[StateHandler] = None
         self._on_error: Optional[ErrorHandler] = None
@@ -857,6 +859,26 @@ class OxArchiveWs:
         """
         self._on_liquidations = handler
 
+    def on_l4_snapshot(self, handler: Callable[[str, str, dict], None]) -> None:
+        """Set handler for the initial L4 orderbook snapshot.
+
+        Sent once after subscribing to an ``l4_diffs``-family channel, before
+        the batch stream begins. The callback receives
+        ``(channel, coin, message)`` where ``message`` is the full raw dict:
+        ``message["data"]`` holds the book (``bids``/``asks``),
+        ``message["last_block_number"]`` the block of the last applied diff.
+        Large symbols can be tens of MB of JSON.
+        """
+        self._on_l4_snapshot = handler
+
+    def on_l4_batch(self, handler: Callable[[str, str, list], None]) -> None:
+        """Set handler for batched L4 data (~100ms windows).
+
+        The callback receives ``(channel, coin, records)`` where each record
+        is one raw diff or order event dict.
+        """
+        self._on_l4_batch = handler
+
     def on_outcome_settled(self, handler: OutcomeSettledHandler) -> None:
         """Set handler for HIP-4 ``outcome_settled`` events.
 
@@ -1131,6 +1153,22 @@ class OxArchiveWs:
                     # sharing the trades wire shape.
                     liqs = _transform_liquidations(coin, raw_data)
                     self._on_liquidations(coin, liqs)
+
+            # L4 channel frames: initial snapshot then ~100ms batches.
+            # Previously unhandled and silently dropped.
+            elif msg_type == "l4_snapshot":
+                if self._on_l4_snapshot:
+                    self._on_l4_snapshot(
+                        data.get("channel", ""), data.get("coin", ""), data
+                    )
+
+            elif msg_type == "l4_batch":
+                if self._on_l4_batch:
+                    self._on_l4_batch(
+                        data.get("channel", ""),
+                        data.get("coin", ""),
+                        data.get("data", []),
+                    )
 
             # Replay messages (Option B)
             elif msg_type == "replay_started" and self._on_replay_start:
