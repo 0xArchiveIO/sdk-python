@@ -23,6 +23,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **WebSocket L4 frames**: `on_l4_snapshot()` and `on_l4_batch()` handlers.
   Previously `l4_snapshot` / `l4_batch` server messages were silently
   dropped, so L4 channel subscribers received nothing.
+- **`meta.coverage_from` / `meta.notice`**: empty responses for range windows
+  that end before a symbol's coverage begins now carry the coverage start
+  date and an advisory notice.
 
 ### Fixed
 - `spot.trades.recent()` was blocked client-side claiming the endpoint does
