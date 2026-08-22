@@ -29,7 +29,7 @@ class SpotPairsResource:
         >>>
         >>> # Get a specific pair (dashed canonical form)
         >>> hype = client.spot.pairs.get("HYPE-USDC")
-        >>> print(f"HYPE-USDC asset_id: {hype.asset_id}")
+        >>> print(f"{hype.symbol}: {hype.base_token_name}/{hype.quote_token_name}")
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1/hyperliquid/spot"):

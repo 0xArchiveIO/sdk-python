@@ -11,6 +11,7 @@ from .http import HttpClient
 from .resources import (
     CandlesResource,
     FundingResource,
+    Hip3CandlesResource,
     Hip3InstrumentsResource,
     Hip4CandlesResource,
     Hip4InstrumentsResource,
@@ -356,8 +357,8 @@ class Hip3Client:
         self.open_interest = OpenInterestResource(http, base_path, coin_transform=coin_transform)
         """Open interest"""
 
-        self.candles = CandlesResource(http, base_path, coin_transform=coin_transform)
-        """OHLCV candle data"""
+        self.candles = Hip3CandlesResource(http, base_path, coin_transform=coin_transform)
+        """OHLCV candle data (max 1,000 rows per page)"""
 
         self.liquidations = LiquidationsResource(http, base_path, coin_transform=coin_transform)
         """Liquidation events"""

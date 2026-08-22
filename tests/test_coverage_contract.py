@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from oxarchive.exchanges import Hip4Client, LighterClient, SpotClient
+from oxarchive.exchanges import Hip3Client, Hip4Client, LighterClient, SpotClient
 from oxarchive.http import HttpClient
 from oxarchive.resources.l3_orderbook import L3OrderBookResource
 from oxarchive.types import CandleInterval, Hip4OpenInterestRecord, OpenInterest
@@ -237,6 +237,8 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "hype.pair_index" in readme
     assert "hype.base}" not in readme
     assert "hype.asset_id" not in readme
+    assert "hype.asset_id" not in spot_resource
+    assert "Hip3CandlesResource" in exchanges
 
 
 def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilities() -> None:
@@ -273,6 +275,22 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
             limit=1001,
         )
     assert len(http.calls) == 1
+
+
+def test_hip3_candles_enforce_the_1000_row_route_cap() -> None:
+    http = FakeHttp()
+    client = Hip3Client(cast(HttpClient, http))
+
+    with pytest.raises(ValueError, match="limit must be between 1 and 1000 for HIP-3 candles"):
+        client.candles.history(
+            "xyz:XYZ100",
+            start="2026-02-01T00:00:00Z",
+            end="2026-02-02T00:00:00Z",
+            interval="1h",
+            limit=1001,
+        )
+
+    assert http.calls == []
 
 
 def test_spot_candle_history_supports_all_verified_intervals_and_async() -> None:
