@@ -452,7 +452,10 @@ Trade history goes back to 2025-03-22. Orderbook, L4, TWAP, and order lifecycle 
 # Pair discovery
 pairs = client.spot.pairs.list()
 hype = client.spot.pairs.get("HYPE-USDC")
-print(f"{hype.symbol}: base={hype.base} quote={hype.quote} asset_id={hype.asset_id}")
+print(
+    f"{hype.symbol}: base={hype.base_token_name} "
+    f"quote={hype.quote_token_name} pair_index={hype.pair_index}"
+)
 
 # Current orderbook
 ob = client.spot.orderbook.get("HYPE-USDC")

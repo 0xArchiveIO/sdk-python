@@ -232,6 +232,11 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "returns 501" not in readme
     assert "SpotCandlesResource" in exchanges
     assert "no funding, no open interest, no liquidations, and no candles" not in spot_resource
+    assert "hype.base_token_name" in readme
+    assert "hype.quote_token_name" in readme
+    assert "hype.pair_index" in readme
+    assert "hype.base}" not in readme
+    assert "hype.asset_id" not in readme
 
 
 def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilities() -> None:
