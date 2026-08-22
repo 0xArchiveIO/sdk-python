@@ -9,6 +9,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 - HIP-4 candle history at `client.hyperliquid.hip4.candles.history()` and its async equivalent.
+- **Hyperliquid Spot candle history.** Added `client.spot.candles.history()` and `ahistory()` for `/v1/hyperliquid/spot/candles/{symbol}`. Coverage starts at `2025-03-22T10:50:22Z`; supported intervals are `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, with opaque cursor pagination and a 1,000-row page cap.
 
 ### Changed
 - Coverage copy now states HIP-4 outcome-side OI at roughly 10-second cadence, Lighter L3 at 250 orders per side from March 5, 2026, and Lighter per-fill trade history from August 27, 2025.
@@ -72,8 +73,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Notes
 
-- Spot has no funding, no open interest, no liquidations, and no candles by design (perp-only constructs). Those endpoints are intentionally absent from `SpotClient`. `/v1/hyperliquid/spot/candles/{symbol}` returns 501.
-- Trades coverage goes back to 2025-03-22. Orderbook, L4, TWAP, and orders are live-only from 2026-05-05 (no historical backfill exists for these).
+- Spot has no funding, no open interest, or liquidations. Candle history is served by `/v1/hyperliquid/spot/candles/{symbol}` from `2025-03-22T10:50:22Z` with a 1,000-row page cap; trades coverage goes back to 2025-03-22.
+- Orderbook, L4, TWAP, and orders are live-only from 2026-05-05 (no historical backfill exists for these).
 - Use `client.spot.pairs.list()` for discovery: there are 294 spot pairs covered.
 
 ## [1.6.0] - 2026-05-04

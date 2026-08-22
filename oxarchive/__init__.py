@@ -5,7 +5,8 @@ Historical Market Data API for the following venue APIs:
 - Hyperliquid (perpetuals data from April 2023)
 - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
 - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
-- Hyperliquid spot pairs under /v1/hyperliquid/spot and client.spot (trades from 2025-03-22, rest live from 2026-05-05)
+- Hyperliquid spot pairs under /v1/hyperliquid/spot and client.spot (trades and candles
+  from 2025-03-22, candle floor 2025-03-22T10:50:22Z, rest live from 2026-05-05)
 - Lighter.xyz (perpetuals data)
 
 Example:

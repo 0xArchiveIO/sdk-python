@@ -9,23 +9,26 @@ from urllib.parse import quote
 
 from .http import HttpClient
 from .resources import (
-    OrderBookResource,
-    TradesResource,
-    InstrumentsResource,
-    LighterInstrumentsResource,
-    Hip3InstrumentsResource,
-    Hip4InstrumentsResource,
-    FundingResource,
-    OpenInterestResource,
     CandlesResource,
-    LiquidationsResource,
-    OrdersResource,
+    FundingResource,
+    Hip3InstrumentsResource,
+    Hip4CandlesResource,
+    Hip4InstrumentsResource,
+    Hip4OpenInterestResource,
     Hip4OutcomesResource,
-    L4OrderBookResource,
+    InstrumentsResource,
     L2OrderBookResource,
     L3OrderBookResource,
+    L4OrderBookResource,
+    LighterInstrumentsResource,
+    LiquidationsResource,
+    OpenInterestResource,
+    OrderBookResource,
+    OrdersResource,
+    SpotCandlesResource,
     SpotPairsResource,
     SpotTwapResource,
+    TradesResource,
 )
 from .types import (
     CoinFreshness,
@@ -560,10 +563,12 @@ class Hip4Client:
         self.trades = TradesResource(http, base_path, coin_transform=_hip4_encode)
         """Trade/fill history."""
 
-        self.candles = CandlesResource(http, base_path, coin_transform=_hip4_encode)
-        """Implied-probability OHLCV candles."""
+        self.candles = Hip4CandlesResource(http, base_path, coin_transform=_hip4_encode)
+        """Implied-probability OHLCV candles (max 1,000 rows per page)."""
 
-        self.open_interest = OpenInterestResource(http, base_path, coin_transform=_hip4_encode)
+        self.open_interest = Hip4OpenInterestResource(
+            http, base_path, coin_transform=_hip4_encode
+        )
         """Per-side open interest. For paired/aggregated OI use ``outcomes.get()``."""
 
         self.orders = OrdersResource(http, base_path, coin_transform=_hip4_encode)
@@ -1033,9 +1038,9 @@ class SpotClient:
     ``HYPE-USDC``, ``PURR-USDC``); the server resolves dashed to wire format
     (``PURR/USDC`` or ``@107``) internally.
 
-    Spot has no funding, no open interest, no liquidations, and no candles by
-    design (perp-only constructs). Trades go back to 2025-03-22; orderbook,
-    L4, TWAP, and orders are live-only from 2026-05-05.
+    Spot has no funding, no open interest, or liquidations. Candle history is
+    served from ``2025-03-22T10:50:22Z``; orderbook, L4, TWAP, and orders are
+    live-only from 2026-05-05. Candle pages are capped at 1,000 rows.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -1056,6 +1061,9 @@ class SpotClient:
 
         self.trades = TradesResource(http, base_path)
         """Trade/fill history (from 2025-03-22), including ``recent()``."""
+
+        self.candles = SpotCandlesResource(http, base_path)
+        """OHLCV candle history (from 2025-03-22T10:50:22Z; max 1,000 rows)."""
 
         self.orders = OrdersResource(http, base_path)
         """L4 order lifecycle history (live from 2026-05-05).

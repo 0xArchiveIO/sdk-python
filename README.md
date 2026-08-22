@@ -75,7 +75,7 @@ history = client.hyperliquid.orderbook.history(
 | Hyperliquid | April 2023+ | Core perpetuals; coverage varies by schema and route. |
 | Hyperliquid HIP-3 | February 2026+ for served history | Builder perps; funding and OI update at roughly 10 seconds. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side OI are served from 2026-05-02; OI updates at ~10s. No funding or liquidations. |
-| Hyperliquid Spot | Trades from 2025-03-22; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). No funding/OI/liquidations/candles. |
+| Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and opaque cursors. No funding/OI/liquidations. |
 | Lighter.xyz | Observed global per-fill trade floor August 27, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
 
 ## Async Support
@@ -405,7 +405,7 @@ us500 = await client.hyperliquid.hip3.instruments.aget("km:US500")
 
 #### HIP-4 Outcome Markets
 
-HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 serves candles and outcome-side OI from 2026-05-02, with raw OI updates at ~10s. HIP-4 has **no funding and no liquidations**. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
+HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 serves candles and outcome-side OI from 2026-05-02, with raw OI updates at ~10s. HIP-4 candle pages are capped at 1,000 rows. Lighter candle pages remain capped at 10,000 rows, matching Hyperliquid core candles. HIP-4 has **no funding and no liquidations**. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
 
 ```python
 # Outcome-level metadata (one row per outcome_id; sides folded into side_specs).
@@ -444,7 +444,7 @@ summary = client.hyperliquid.hip4.get_summary("0")           # mark_price is in 
 
 #### Hyperliquid Spot
 
-Hyperliquid spot pairs live at `/v1/hyperliquid/spot` and are accessible via `client.spot`. Symbols use dashed canonical form (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format (`PURR/USDC` or `@107`) internally. Spot has **no funding, no open interest, no liquidations, and no candles by design** (perp-only constructs). The `/spot/candles/{symbol}` endpoint returns 501.
+Hyperliquid spot pairs live at `/v1/hyperliquid/spot` and are accessible via `client.spot`. Symbols use dashed canonical form (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format (`PURR/USDC` or `@107`) internally. Spot has **no funding, no open interest, or liquidations**. Candle history is served at `/v1/hyperliquid/spot/candles/{symbol}` from exactly `2025-03-22T10:50:22Z`, supports `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, and accepts a maximum of 1,000 rows per page with opaque cursors.
 
 Trade history goes back to 2025-03-22. Orderbook, L4, TWAP, and order lifecycle are live-only from 2026-05-05.
 
@@ -463,6 +463,15 @@ history = client.spot.orderbook.history("HYPE-USDC", start="2026-05-05", end="20
 
 # Trades by time window
 trades = client.spot.trades.list("HYPE-USDC", start="2025-04-01", end="2025-04-02", limit=1000)
+
+# Candle history (coverage starts at 2025-03-22T10:50:22Z)
+spot_candles = client.spot.candles.history(
+    "HYPE-USDC",
+    start="2025-03-22T10:50:22Z",
+    end="2025-03-23T00:00:00Z",
+    interval="1h",
+    limit=1000,
+)
 
 # L4 endpoints (full reconstruction, raw diffs, and checkpoint history)
 snapshot = client.spot.l4_orderbook.get("HYPE-USDC")
@@ -569,7 +578,7 @@ hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 | `coin` | `str` | Yes | Coin symbol (e.g., `'BTC'`, `'ETH'`) |
 | `start` | `Timestamp` | Yes | Start timestamp |
 | `end` | `Timestamp` | Yes | End timestamp |
-| `cursor` | `Timestamp` | No | Cursor from previous response for pagination |
+| `cursor` | `str` | No | Opaque cursor from the previous response for pagination |
 | `limit` | `int` | No | Max results (default: 100, max: 1000) |
 | `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: HIP-3, HIP-4 outcome-side OI, and Lighter update at ~10s. |
 
@@ -752,7 +761,7 @@ hip3_prices = await client.hyperliquid.hip3.aget_price_history("km:US500", start
 
 ### Candles (OHLCV)
 
-Get historical OHLCV candle data aggregated from trades.
+Get historical OHLCV candle data aggregated from trades. Core Hyperliquid and Lighter candle pages accept up to 10,000 rows; HIP-4 and Hyperliquid Spot candle pages accept up to 1,000 rows. Hyperliquid Spot candle coverage starts exactly at `2025-03-22T10:50:22Z`. Candle pagination cursors are opaque strings. Pass ``result.next_cursor`` back unchanged.
 
 ```python
 # Get candle history (start is required)
@@ -792,9 +801,21 @@ hip3_candles = client.hyperliquid.hip3.candles.history(
     interval="1h"
 )
 
+# Hyperliquid Spot candles (dashed canonical symbols; max 1,000 rows)
+spot_candles = client.spot.candles.history(
+    "HYPE-USDC",
+    start="2025-03-22T10:50:22Z",
+    end="2025-03-23T00:00:00Z",
+    interval="1h",
+    limit=1000,
+)
+
 # Async versions
 candles = await client.hyperliquid.candles.ahistory("BTC", start=..., end=..., interval="1h")
 hip3_candles = await client.hyperliquid.hip3.candles.ahistory("km:US500", start=..., end=..., interval="1h")
+spot_candles = await client.spot.candles.ahistory(
+    "HYPE-USDC", start="2025-03-22T10:50:22Z", end="2025-03-23T00:00:00Z", interval="1h"
+)
 ```
 
 #### Available Intervals
