@@ -20,7 +20,9 @@ class L3OrderBookResource:
         >>> snapshot = client.lighter.l3_orderbook.get("BTC")
         >>>
         >>> # Get L3 orderbook history
-        >>> history = client.lighter.l3_orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> history = client.lighter.l3_orderbook.history(
+        ...     "BTC", start="2026-03-05", end="2026-03-06"
+        ... )
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
@@ -44,6 +46,12 @@ class L3OrderBookResource:
                 return int(ts)
         return None
 
+    @staticmethod
+    def _validate_depth(depth: Optional[int]) -> None:
+        """Validate the Lighter L3 individual-order cap per side."""
+        if depth is not None and not 1 <= depth <= 250:
+            raise ValueError("depth must be between 1 and 250 orders per side")
+
     def get(
         self,
         symbol: str,
@@ -58,12 +66,13 @@ class L3OrderBookResource:
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             timestamp: Optional timestamp to get historical snapshot
-            depth: Number of price levels to return per side
+            depth: Maximum individual resting orders per side (1 to 250)
 
         Returns:
             L3 order book snapshot (dict)
         """
         symbol = self._resolve_symbol(symbol, kwargs)
+        self._validate_depth(depth)
         data = self._http.get(
             f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}",
             params={
@@ -83,6 +92,7 @@ class L3OrderBookResource:
     ) -> dict:
         """Async version of get()."""
         symbol = self._resolve_symbol(symbol, kwargs)
+        self._validate_depth(depth)
         data = await self._http.aget(
             f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}",
             params={
@@ -112,12 +122,13 @@ class L3OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
-            depth: Number of price levels per side
+            depth: Maximum individual resting orders per side (1 to 250)
 
         Returns:
             CursorResponse with L3 orderbook snapshots and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
+        self._validate_depth(depth)
         data = self._http.get(
             f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}/history",
             params={
@@ -146,6 +157,7 @@ class L3OrderBookResource:
     ) -> CursorResponse:
         """Async version of history()."""
         symbol = self._resolve_symbol(symbol, kwargs)
+        self._validate_depth(depth)
         data = await self._http.aget(
             f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}/history",
             params={

@@ -5,6 +5,17 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-08-22
+
+### Added
+- HIP-4 candle history at `client.hyperliquid.hip4.candles.history()` and its async equivalent.
+- **Hyperliquid Spot candle history.** Added `client.spot.candles.history()` and `ahistory()` for `/v1/hyperliquid/spot/candles/{symbol}`. Coverage starts at `2025-03-22T10:50:22Z`; supported intervals are `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, with opaque cursor pagination and a 1,000-row page cap.
+
+### Changed
+- Coverage copy now states HIP-4 outcome-side OI at roughly 10-second cadence, Lighter L3 at 250 orders per side from March 5, 2026, and Lighter per-fill trade history from August 27, 2025.
+- HIP-4 WebSocket docs now distinguish live trades/L4/settlement delivery from stored-replay-only L2 and OI while those live bridges are paused.
+- Lighter L3 `depth` now means individual resting orders per side and is validated from 1 through 250.
+
 ## [1.8.0] - 2026-07-27
 
 ### Added
@@ -62,8 +73,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Notes
 
-- Spot has no funding, no open interest, no liquidations, and no candles by design (perp-only constructs). Those endpoints are intentionally absent from `SpotClient`. `/v1/hyperliquid/spot/candles/{symbol}` returns 501.
-- Trades coverage goes back to 2025-03-22. Orderbook, L4, TWAP, and orders are live-only from 2026-05-05 (no historical backfill exists for these).
+- Spot has no funding, no open interest, or liquidations. Candle history is served by `/v1/hyperliquid/spot/candles/{symbol}` from `2025-03-22T10:50:22Z` with a 1,000-row page cap; trades coverage goes back to 2025-03-22.
+- Orderbook, L4, TWAP, and orders are live-only from 2026-05-05 (no historical backfill exists for these).
 - Use `client.spot.pairs.list()` for discovery: there are 294 spot pairs covered.
 
 ## [1.6.0] - 2026-05-04
@@ -73,8 +84,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Real-time WebSocket support for liquidations.** Both `liquidations` (Hyperliquid) and `hip3_liquidations` (HIP-3 nodes) now stream live in addition to historical replay. Each item shares the trades wire shape (a fill row with `is_liquidation: true`).
   - New typed callback `OxArchiveWs.on_liquidations(handler)` decodes incoming frames into `Liquidation` records and invokes `handler(coin, [Liquidation, ...])`.
   - New helpers `subscribe_liquidations` / `unsubscribe_liquidations` and `subscribe_hip3_liquidations` / `unsubscribe_hip3_liquidations`.
-- **Full HIP-4 outcome-market WebSocket surface.**
-  - New channels in `WsChannel`: `hip4_orderbook`, `hip4_trades`, `hip4_open_interest` (realtime + replay), `hip4_l4_diffs`, `hip4_l4_orders` (realtime only, Pro+).
+- **HIP-4 outcome-market WebSocket channel helpers.**
+  - New channels in `WsChannel`: `hip4_trades` (live + replay), `hip4_orderbook` and `hip4_open_interest` (stored replay; live bridges currently paused), plus `hip4_l4_diffs` and `hip4_l4_orders` (live only).
   - New helpers: `subscribe_hip4_orderbook`, `subscribe_hip4_trades`, `subscribe_hip4_open_interest`, `subscribe_hip4_l4_diffs`, `subscribe_hip4_l4_orders` (and matching `unsubscribe_*`).
   - WebSocket subscribes use the raw `#N` coin form in the JSON body.
 - **HIP-4 settlement event.** New `WsOutcomeSettled` type and `OxArchiveWs.on_outcome_settled(handler)` callback. The server pushes `outcome_settled` once per `(outcome_id, side)` when a market resolves and proactively unsubscribes the client from every `hip4_*` channel for the settled coin. The SDK mirrors that locally so resubscribes after a reconnect do not try to re-arm a settled market.
@@ -91,5 +102,5 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Notes
 
 - HIP-4 `mark_price` (returned on OI/summary/prices responses) is an **implied probability in `[0, 1]`**, not a USD price. Field name mirrors upstream Hyperliquid `markPx`.
-- HIP-4 has no funding, no liquidations, and no candles by design (fully collateralized binary outcomes, no oracle feed). Those endpoints return 404.
+- HIP-4 has no funding or liquidations. Candle history and outcome-side OI are served from May 2, 2026.
 - Outcome detail (`get_outcome` / `get_outcome_by_slug`) returns `aggregated_oi` with `side0_open_interest_contracts`, `side1_open_interest_contracts`, `outcome_display_open_interest_contracts`, `paired_set_supply_contracts`, `side_supply_parity`, `currency`, `as_of`. The list endpoint omits `aggregated_oi`.

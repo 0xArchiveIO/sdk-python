@@ -72,11 +72,11 @@ history = client.hyperliquid.orderbook.history(
 
 | Venue | Coverage | Notes |
 | --- | --- | --- |
-| Hyperliquid | April 2023+ | Perpetuals across the full venue |
-| Hyperliquid HIP-3 | February 2026+ | All HIP-3 symbols, orderbook, and history on every tier. |
-| Hyperliquid HIP-4 | May 2026+ | Outcome markets. All schemas on every tier. No funding/liquidations/candles by design. |
-| Hyperliquid Spot | Trades from 2025-03-22; orderbook, L4, TWAP, orders live from 2026-05-05 | 294 dashed canonical pairs (`HYPE-USDC`, `PURR-USDC`). No funding/OI/liquidations/candles by design. |
-| Lighter.xyz | August 2025+ for fills; January 2026+ for orderbooks, open interest, funding rates | Perpetuals |
+| Hyperliquid | April 2023+ | Core perpetuals; coverage varies by schema and route. |
+| Hyperliquid HIP-3 | February 2026+ for served history | Builder perps; funding and OI update at roughly 10 seconds. |
+| Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side OI are served from 2026-05-02; OI updates at ~10s. No funding or liquidations. |
+| Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and opaque cursors. No funding/OI/liquidations. |
+| Lighter.xyz | Observed global per-fill trade floor August 27, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
 
 ## Async Support
 
@@ -167,9 +167,9 @@ hip3_ob = await client.hyperliquid.hip3.orderbook.aget("km:US500")
 
 #### Orderbook Depth
 
-The `depth` parameter controls how many price levels are returned per side. Full orderbook depth is available on every tier.
+The `depth` parameter is route-specific. Hyperliquid-family native L2 is capped at 20 levels per side. Lighter native L2 includes all served levels, and Lighter L3 is capped at 250 orders per side.
 
-**Note:** Hyperliquid L2 source data contains ~20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
+**Note:** Hyperliquid native L2 source data contains 20 levels per side. Dedicated L2 routes derived from L4 return all served levels where supported. Lighter native L2 also includes all served levels; Lighter L3 returns up to 250 individual resting orders per side.
 
 #### Lighter Orderbook Granularity
 
@@ -405,7 +405,7 @@ us500 = await client.hyperliquid.hip3.instruments.aget("km:US500")
 
 #### HIP-4 Outcome Markets
 
-HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 has **no funding, no liquidations, and no candles by design**. Those endpoints return 404. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
+HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 serves candles and outcome-side OI from 2026-05-02, with raw OI updates at ~10s. HIP-4 candle pages are capped at 1,000 rows. Lighter candle pages remain capped at 10,000 rows, matching Hyperliquid core candles. HIP-4 has **no funding and no liquidations**. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
 
 ```python
 # Outcome-level metadata (one row per outcome_id; sides folded into side_specs).
@@ -432,13 +432,19 @@ no_ = client.hyperliquid.hip4.instruments.get("#1")    # also works
 # Market data.
 ob = client.hyperliquid.hip4.get_orderbook("0")
 trades = client.hyperliquid.hip4.get_trades_recent("0", limit=50)
+candles = client.hyperliquid.hip4.candles.history(
+    "0",
+    start="2026-05-02T00:00:00Z",
+    end="2026-05-03T00:00:00Z",
+    interval="1h",
+)
 oi = client.hyperliquid.hip4.get_open_interest_current("0")  # mark_price is in [0, 1]
 summary = client.hyperliquid.hip4.get_summary("0")           # mark_price is in [0, 1]
 ```
 
 #### Hyperliquid Spot
 
-Hyperliquid spot pairs live at `/v1/hyperliquid/spot` and are accessible via `client.spot`. Symbols use dashed canonical form (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format (`PURR/USDC` or `@107`) internally. Spot has **no funding, no open interest, no liquidations, and no candles by design** (perp-only constructs). The `/spot/candles/{symbol}` endpoint returns 501.
+Hyperliquid spot pairs live at `/v1/hyperliquid/spot` and are accessible via `client.spot`. Symbols use dashed canonical form (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format (`PURR/USDC` or `@107`) internally. Spot has **no funding, no open interest, or liquidations**. Candle history is served at `/v1/hyperliquid/spot/candles/{symbol}` from exactly `2025-03-22T10:50:22Z`, supports `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, and accepts a maximum of 1,000 rows per page with opaque cursors.
 
 Trade history goes back to 2025-03-22. Orderbook, L4, TWAP, and order lifecycle are live-only from 2026-05-05.
 
@@ -446,7 +452,10 @@ Trade history goes back to 2025-03-22. Orderbook, L4, TWAP, and order lifecycle 
 # Pair discovery
 pairs = client.spot.pairs.list()
 hype = client.spot.pairs.get("HYPE-USDC")
-print(f"{hype.symbol}: base={hype.base} quote={hype.quote} asset_id={hype.asset_id}")
+print(
+    f"{hype.symbol}: base={hype.base_token_name} "
+    f"quote={hype.quote_token_name} pair_index={hype.pair_index}"
+)
 
 # Current orderbook
 ob = client.spot.orderbook.get("HYPE-USDC")
@@ -457,6 +466,15 @@ history = client.spot.orderbook.history("HYPE-USDC", start="2026-05-05", end="20
 
 # Trades by time window
 trades = client.spot.trades.list("HYPE-USDC", start="2025-04-01", end="2025-04-02", limit=1000)
+
+# Candle history (coverage starts at 2025-03-22T10:50:22Z)
+spot_candles = client.spot.candles.history(
+    "HYPE-USDC",
+    start="2025-03-22T10:50:22Z",
+    end="2025-03-23T00:00:00Z",
+    interval="1h",
+    limit=1000,
+)
 
 # L4 endpoints (full reconstruction, raw diffs, and checkpoint history)
 snapshot = client.spot.l4_orderbook.get("HYPE-USDC")
@@ -523,7 +541,7 @@ hip3_current = await client.hyperliquid.hip3.funding.acurrent("km:US500")
 | `end` | `Timestamp` | Yes | End timestamp |
 | `cursor` | `Timestamp` | No | Cursor from previous response for pagination |
 | `limit` | `int` | No | Max results (default: 100, max: 1000) |
-| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
+| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: Hyperliquid core funding is ~1 min; HIP-3 and Lighter funding are ~10s. HIP-4 has no funding. |
 
 ### Open Interest
 
@@ -563,9 +581,9 @@ hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 | `coin` | `str` | Yes | Coin symbol (e.g., `'BTC'`, `'ETH'`) |
 | `start` | `Timestamp` | Yes | Start timestamp |
 | `end` | `Timestamp` | Yes | End timestamp |
-| `cursor` | `Timestamp` | No | Cursor from previous response for pagination |
+| `cursor` | `str` | No | Opaque cursor from the previous response for pagination |
 | `limit` | `int` | No | Max results (default: 100, max: 1000) |
-| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. When omitted, raw ~1 min data is returned. |
+| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: HIP-3, HIP-4 outcome-side OI, and Lighter update at ~10s. |
 
 ### Liquidations
 
@@ -746,7 +764,7 @@ hip3_prices = await client.hyperliquid.hip3.aget_price_history("km:US500", start
 
 ### Candles (OHLCV)
 
-Get historical OHLCV candle data aggregated from trades.
+Get historical OHLCV candle data aggregated from trades. Core Hyperliquid and Lighter candle pages accept up to 10,000 rows; HIP-4 and Hyperliquid Spot candle pages accept up to 1,000 rows. Hyperliquid Spot candle coverage starts exactly at `2025-03-22T10:50:22Z`. Candle pagination cursors are opaque strings. Pass ``result.next_cursor`` back unchanged.
 
 ```python
 # Get candle history (start is required)
@@ -786,9 +804,21 @@ hip3_candles = client.hyperliquid.hip3.candles.history(
     interval="1h"
 )
 
+# Hyperliquid Spot candles (dashed canonical symbols; max 1,000 rows)
+spot_candles = client.spot.candles.history(
+    "HYPE-USDC",
+    start="2025-03-22T10:50:22Z",
+    end="2025-03-23T00:00:00Z",
+    interval="1h",
+    limit=1000,
+)
+
 # Async versions
 candles = await client.hyperliquid.candles.ahistory("BTC", start=..., end=..., interval="1h")
 hip3_candles = await client.hyperliquid.hip3.candles.ahistory("km:US500", start=..., end=..., interval="1h")
+spot_candles = await client.spot.candles.ahistory(
+    "HYPE-USDC", start="2025-03-22T10:50:22Z", end="2025-03-23T00:00:00Z", interval="1h"
+)
 ```
 
 #### Available Intervals
@@ -855,7 +885,7 @@ hip3_snapshot = await client.hyperliquid.hip3.l4_orderbook.aget("km:US500")
 
 ### L3 Orderbook (Lighter.xyz Only)
 
-Get L3 individual order-level orderbook data. Available for Lighter.xyz only.
+Get Lighter L3 individual order-level snapshots from March 5, 2026, capped at 250 orders per side.
 
 ```python
 # Get current L3 orderbook snapshot
@@ -868,9 +898,9 @@ historical = client.lighter.l3_orderbook.get("BTC", timestamp=1704067200000)
 # Get L3 orderbook history
 history = client.lighter.l3_orderbook.history(
     "BTC",
-    start="2024-01-01",
-    end="2024-01-02",
-    depth=20,
+    start="2026-03-05",
+    end="2026-03-06",
+    depth=250,
     limit=100
 )
 
@@ -878,8 +908,8 @@ history = client.lighter.l3_orderbook.history(
 while history.next_cursor:
     history = client.lighter.l3_orderbook.history(
         "BTC",
-        start="2024-01-01",
-        end="2024-01-02",
+        start="2026-03-05",
+        end="2026-03-06",
         cursor=history.next_cursor,
         limit=100
     )
@@ -893,8 +923,8 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 
 | Method | Description |
 |--------|-------------|
-| `get(symbol, *, timestamp, depth)` | Get L3 orderbook snapshot |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get L3 orderbook history |
+| `get(symbol, *, timestamp, depth)` | Get an L3 snapshot, up to 250 orders per side |
+| `history(symbol, *, start, end, cursor, limit, depth)` | Get tick-level L3 history from March 5, 2026, up to 250 orders per side |
 
 ### L2 Orderbook (Full-Depth)
 
@@ -1391,13 +1421,13 @@ ws = OxArchiveWs(WsOptions(
 
 | Channel | Description | Requires Coin | Historical Support |
 |---------|-------------|---------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Yes |
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Stored replay only; live bridge paused |
 | `hip4_trades` | HIP-4 trade/fill updates | Yes | Yes |
-| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | Yes (replay only) |
+| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | Stored replay only; live bridge paused |
 | `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Real-time only |
 | `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Real-time only |
 
-HIP-4 has **no funding, no liquidations, and no candles by design**. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
+HIP-4 has no funding or liquidation channels. HIP-4 candles and current outcome-side OI are available over REST; the live HIP-4 order-book and OI bridges are paused, while stored replay remains available. This HIP-4 channel set has no dedicated candle channel. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
 
 ```python
 def on_settled(msg):
@@ -1673,7 +1703,7 @@ snapshots: list[ReconstructedOrderBook] = client.lighter.orderbook.history_recon
 
 ## Data Catalog
 
-For large-scale data exports (full order books, complete trade history, etc.), use the [Data Catalog](https://www.0xarchive.io/data). It lets you choose markets, datasets, and date ranges, see a live quote, and export zstd-compressed Parquet.
+For large-scale data exports (route-specific order books, fill-level trade history, and other retained datasets), use the [Data Catalog](https://www.0xarchive.io/data). It lets you choose markets, datasets, and date ranges, see a live quote, and export zstd-compressed Parquet.
 
 ## Links
 

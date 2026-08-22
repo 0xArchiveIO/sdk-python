@@ -9,23 +9,27 @@ from urllib.parse import quote
 
 from .http import HttpClient
 from .resources import (
-    OrderBookResource,
-    TradesResource,
-    InstrumentsResource,
-    LighterInstrumentsResource,
-    Hip3InstrumentsResource,
-    Hip4InstrumentsResource,
-    FundingResource,
-    OpenInterestResource,
     CandlesResource,
-    LiquidationsResource,
-    OrdersResource,
+    FundingResource,
+    Hip3CandlesResource,
+    Hip3InstrumentsResource,
+    Hip4CandlesResource,
+    Hip4InstrumentsResource,
+    Hip4OpenInterestResource,
     Hip4OutcomesResource,
-    L4OrderBookResource,
+    InstrumentsResource,
     L2OrderBookResource,
     L3OrderBookResource,
+    L4OrderBookResource,
+    LighterInstrumentsResource,
+    LiquidationsResource,
+    OpenInterestResource,
+    OrderBookResource,
+    OrdersResource,
+    SpotCandlesResource,
     SpotPairsResource,
     SpotTwapResource,
+    TradesResource,
 )
 from .types import (
     CoinFreshness,
@@ -353,8 +357,8 @@ class Hip3Client:
         self.open_interest = OpenInterestResource(http, base_path, coin_transform=coin_transform)
         """Open interest"""
 
-        self.candles = CandlesResource(http, base_path, coin_transform=coin_transform)
-        """OHLCV candle data"""
+        self.candles = Hip3CandlesResource(http, base_path, coin_transform=coin_transform)
+        """OHLCV candle data (max 1,000 rows per page)"""
 
         self.liquidations = LiquidationsResource(http, base_path, coin_transform=coin_transform)
         """Liquidation events"""
@@ -496,7 +500,7 @@ class Hip3Client:
         )
 
 
-def _hip4_encode(symbol: str) -> str:
+def _hip4_encode(symbol: str | int) -> str:
     """Normalize a HIP-4 coin symbol for REST paths.
 
     The backend now accepts the bare numeric form (``/hip4/orderbook/0``) and
@@ -508,12 +512,13 @@ def _hip4_encode(symbol: str) -> str:
     Note: WebSocket subscribes still use the raw ``#N`` form in the JSON body —
     only the REST path is normalized here.
     """
-    s = symbol.lstrip("#")
+    symbol_text = str(symbol)
+    s = symbol_text.lstrip("#")
     # Numeric (bare or ``#N``) → bare numeric. Anything else (defensive: future
     # non-numeric coin formats) → URL-encode to keep ``#`` safe in path.
     if s.isdigit():
         return s
-    return quote(symbol, safe="")
+    return quote(symbol_text, safe="")
 
 
 class Hip4Client:
@@ -529,8 +534,9 @@ class Hip4Client:
     bare form is the recommended primary in examples. WebSocket ``subscribe``
     payloads still use the raw ``#N`` form (passed through as-is in JSON).
 
-    Note: HIP-4 has no funding, no liquidations, no candles by design (fully
-    collateralized binary outcomes), and no oracle feed for outcomes.
+    Note: HIP-4 has candles and outcome-side open interest from May 2, 2026.
+    Raw OI updates arrive at roughly 10-second cadence. HIP-4 has no funding,
+    no liquidations, and no oracle feed for outcomes.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -558,7 +564,12 @@ class Hip4Client:
         self.trades = TradesResource(http, base_path, coin_transform=_hip4_encode)
         """Trade/fill history."""
 
-        self.open_interest = OpenInterestResource(http, base_path, coin_transform=_hip4_encode)
+        self.candles = Hip4CandlesResource(http, base_path, coin_transform=_hip4_encode)
+        """Implied-probability OHLCV candles (max 1,000 rows per page)."""
+
+        self.open_interest = Hip4OpenInterestResource(
+            http, base_path, coin_transform=_hip4_encode
+        )
         """Per-side open interest. For paired/aggregated OI use ``outcomes.get()``."""
 
         self.orders = OrdersResource(http, base_path, coin_transform=_hip4_encode)
@@ -696,6 +707,14 @@ class Hip4Client:
     async def aget_trades_recent(self, symbol: str, limit: Optional[int] = None, **kwargs):
         """Async version of get_trades_recent()."""
         return await self.trades.arecent(symbol, limit=limit, **kwargs)
+
+    def get_candles(self, symbol: str, **kwargs):
+        """Get implied-probability OHLCV candle history."""
+        return self.candles.history(symbol, **kwargs)
+
+    async def aget_candles(self, symbol: str, **kwargs):
+        """Async version of get_candles()."""
+        return await self.candles.ahistory(symbol, **kwargs)
 
     def get_open_interest(self, symbol: str, **kwargs):
         """Get per-side OI history. Use get_outcome() for paired aggregates."""
@@ -1020,9 +1039,9 @@ class SpotClient:
     ``HYPE-USDC``, ``PURR-USDC``); the server resolves dashed to wire format
     (``PURR/USDC`` or ``@107``) internally.
 
-    Spot has no funding, no open interest, no liquidations, and no candles by
-    design (perp-only constructs). Trades go back to 2025-03-22; orderbook,
-    L4, TWAP, and orders are live-only from 2026-05-05.
+    Spot has no funding, no open interest, or liquidations. Candle history is
+    served from ``2025-03-22T10:50:22Z``; orderbook, L4, TWAP, and orders are
+    live-only from 2026-05-05. Candle pages are capped at 1,000 rows.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -1043,6 +1062,9 @@ class SpotClient:
 
         self.trades = TradesResource(http, base_path)
         """Trade/fill history (from 2025-03-22), including ``recent()``."""
+
+        self.candles = SpotCandlesResource(http, base_path)
+        """OHLCV candle history (from 2025-03-22T10:50:22Z; max 1,000 rows)."""
 
         self.orders = OrdersResource(http, base_path)
         """L4 order lifecycle history (live from 2026-05-05).
