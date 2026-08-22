@@ -30,7 +30,8 @@ class Client:
     - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
       - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
       - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace
-    - `client.spot` - Hyperliquid spot pairs (trades from 2025-03-22, orderbook/L4/TWAP live from 2026-05-05)
+    - `client.spot` - Hyperliquid spot pairs (trades and candles from 2025-03-22,
+      orderbook/L4/TWAP live from 2026-05-05; no funding, OI, or liquidations)
     - `client.lighter` - Lighter.xyz perpetuals
 
     Example:
@@ -106,8 +107,8 @@ class Client:
         """Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)"""
 
         self.spot = SpotClient(self._http)
-        """Hyperliquid spot pairs. Trades from 2025-03-22; orderbook, L4, TWAP, orders live from 2026-05-05.
-        No funding, OI, liquidations, or candles by design."""
+        """Hyperliquid spot pairs. Trades and candles from 2025-03-22; orderbook, L4,
+        TWAP, and orders live from 2026-05-05. No funding, OI, or liquidations."""
 
         self.lighter = LighterClient(self._http)
         """Lighter.xyz exchange data (August 2025+)"""

@@ -63,7 +63,8 @@ class FundingResource:
             cursor: Cursor from previous response's next_cursor (timestamp)
             limit: Maximum number of results (default: 100, max: 1000)
             interval: Aggregation interval (e.g., '5m', '15m', '30m', '1h', '4h', '1d').
-                When omitted, raw ~1 min data is returned.
+                Raw cadence is route-specific: Hyperliquid core is roughly one
+                minute; HIP-3 and Lighter are roughly 10 seconds. HIP-4 has no funding.
 
         Returns:
             CursorResponse with funding rate records and next_cursor for pagination
@@ -142,7 +143,9 @@ class FundingResource:
     async def acurrent(self, symbol: str, **kwargs) -> FundingRate:
         """Async version of current()."""
         symbol = self._resolve_symbol(symbol, kwargs)
-        data = await self._http.aget(f"{self._base_path}/funding/{self._coin_transform(symbol)}/current")
+        data = await self._http.aget(
+            f"{self._base_path}/funding/{self._coin_transform(symbol)}/current"
+        )
         return FundingRate.model_validate(data["data"])
 
     @staticmethod

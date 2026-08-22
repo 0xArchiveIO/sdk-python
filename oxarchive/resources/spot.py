@@ -5,9 +5,9 @@ Spot lives at ``/v1/hyperliquid/spot`` and uses dashed canonical symbols
 format (``PURR/USDC`` or ``@107``) internally, so SDK callers always pass
 the dashed form.
 
-Spot has no funding, no open interest, no liquidations, and no candles by
-design. Trades go back to 2025-03-22; orderbook / L4 / TWAP / orders are
-live-only from 2026-05-05.
+Spot has no funding, no open interest, or liquidations. Candle history is served
+from ``2025-03-22T10:50:22Z`` with 1,000-row pages; trades go back to
+2025-03-22. Orderbook / L4 / TWAP / orders are live-only from 2026-05-05.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ class SpotPairsResource:
         >>>
         >>> # Get a specific pair (dashed canonical form)
         >>> hype = client.spot.pairs.get("HYPE-USDC")
-        >>> print(f"HYPE-USDC asset_id: {hype.asset_id}")
+        >>> print(f"{hype.symbol}: {hype.base_token_name}/{hype.quote_token_name}")
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1/hyperliquid/spot"):

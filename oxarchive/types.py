@@ -383,8 +383,8 @@ class SpotPair(BaseModel):
     Returned by ``/v1/hyperliquid/spot/pairs`` and the per-pair detail endpoint.
     Symbols are dashed canonical form (e.g. ``HYPE-USDC``, ``PURR-USDC``); the
     server resolves dashed to wire format (``PURR/USDC`` or ``@107``) internally.
-    Spot has no funding, no open interest, no liquidations, and no candles by
-    design (perp-only constructs).
+    Spot has no funding, no open interest, or liquidations. Candle history is
+    served from ``2025-03-22T10:50:22Z`` with 1,000-row pages.
 
     Backend wire shape includes both ``coin`` and ``symbol`` (same value, the
     dashed canonical form).
@@ -1018,13 +1018,15 @@ Notes:
   hip3_open_interest, hip3_funding are historical only (replay/stream).
 - l4_diffs, l4_orders: Hyperliquid L4 order-level data (realtime only).
 - hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (realtime only).
-- hip4_orderbook, hip4_trades, hip4_open_interest: HIP-4 outcome markets
-  (realtime + replay).
+- hip4_trades: HIP-4 outcome-market fills (realtime + replay).
+- hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused.
 - hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (realtime only).
-- HIP-4 has no funding / liquidations / candles by design.
+- HIP-4 has no funding or liquidation channels. Candles are served through REST.
 - spot_orderbook, spot_trades, spot_twap: Hyperliquid spot (realtime).
 - spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (realtime only).
-- Spot has no funding / open interest / liquidations / candles by design.
+- Spot has no funding / open interest / liquidations WebSocket channels.
+  Candle history is REST-only; subscribe to the supported ``spot_*`` realtime
+  channels for live spot streams.
 """
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]

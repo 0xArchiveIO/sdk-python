@@ -17,12 +17,17 @@ class CandlesResource:
         >>> # Get candle history
         >>> result = client.candles.history("BTC", start=start, end=end, interval="1h")
         >>> for candle in result.data:
-        ...     print(f"{candle.timestamp}: O={candle.open} H={candle.high} L={candle.low} C={candle.close}")
+        ...     print(
+        ...         f"{candle.timestamp}: O={candle.open} H={candle.high} "
+        ...         f"L={candle.low} C={candle.close}"
+        ...     )
         >>>
         >>> # Paginate through large datasets
         >>> all_candles = result.data
         >>> while result.next_cursor:
-        ...     result = client.candles.history("BTC", start=start, end=end, cursor=result.next_cursor)
+        ...     result = client.candles.history(
+        ...         "BTC", start=start, end=end, cursor=result.next_cursor
+        ...     )
         ...     all_candles.extend(result.data)
     """
 
@@ -30,6 +35,15 @@ class CandlesResource:
         self._http = http
         self._base_path = base_path
         self._coin_transform = coin_transform
+        self._max_limit = 10000
+        self._limit_label = "candles"
+
+    def _validate_limit(self, limit: Optional[int]) -> None:
+        """Validate the route-specific candle page limit."""
+        if limit is not None and not 1 <= limit <= self._max_limit:
+            raise ValueError(
+                f"limit must be between 1 and {self._max_limit} for {self._limit_label}"
+            )
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -54,7 +68,7 @@ class CandlesResource:
         start: Timestamp,
         end: Timestamp,
         interval: Optional[CandleInterval] = None,
-        cursor: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse[list[Candle]]:
@@ -66,29 +80,35 @@ class CandlesResource:
             start: Start timestamp (required)
             end: End timestamp (required)
             interval: Candle interval (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w). Default: 1h
-            cursor: Cursor from previous response's next_cursor
-            limit: Maximum number of results (default: 100, max: 10000 for candles)
+            cursor: Opaque cursor string from the previous response's next_cursor
+            limit: Maximum number of results (default: 100, max: 10000 for
+                Hyperliquid core and Lighter candles; HIP-3, HIP-4, and Spot
+                have a max of 1000)
 
         Returns:
             CursorResponse with candle records and next_cursor for pagination
 
         Example:
-            >>> result = client.candles.history("BTC", start=start, end=end, interval="1h", limit=10000)
+            >>> result = client.candles.history(
+            ...     "BTC", start=start, end=end, interval="1h", limit=10000
+            ... )
             >>> candles = result.data
             >>> while result.next_cursor:
             ...     result = client.candles.history(
-            ...         "BTC", start=start, end=end, interval="1h", cursor=result.next_cursor, limit=10000
+            ...         "BTC", start=start, end=end, interval="1h",
+            ...         cursor=result.next_cursor, limit=10000
             ...     )
             ...     candles.extend(result.data)
         """
         symbol = self._resolve_symbol(symbol, kwargs)
+        self._validate_limit(limit)
         data = self._http.get(
             f"{self._base_path}/candles/{self._coin_transform(symbol)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
                 "interval": interval,
-                "cursor": self._convert_timestamp(cursor),
+                "cursor": cursor,
                 "limit": limit,
             },
         )
@@ -104,19 +124,20 @@ class CandlesResource:
         start: Timestamp,
         end: Timestamp,
         interval: Optional[CandleInterval] = None,
-        cursor: Optional[Timestamp] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse[list[Candle]]:
         """Async version of history(). start and end are required."""
         symbol = self._resolve_symbol(symbol, kwargs)
+        self._validate_limit(limit)
         data = await self._http.aget(
             f"{self._base_path}/candles/{self._coin_transform(symbol)}",
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
                 "interval": interval,
-                "cursor": self._convert_timestamp(cursor),
+                "cursor": cursor,
                 "limit": limit,
             },
         )
@@ -140,3 +161,49 @@ class CandlesResource:
             else:
                 kwargs.pop("coin")
         return symbol
+
+
+class Hip3CandlesResource(CandlesResource):
+    """HIP-3 OHLCV candles with a 1,000-row page cap."""
+
+    def __init__(
+        self,
+        http: HttpClient,
+        base_path: str = "/v1/hyperliquid/hip3",
+        coin_transform=lambda coin: coin,
+    ):
+        super().__init__(http, base_path, coin_transform)
+        self._max_limit = 1000
+        self._limit_label = "HIP-3 candles"
+
+
+class Hip4CandlesResource(CandlesResource):
+    """HIP-4 implied-probability candles with a 1,000-row page cap."""
+
+    def __init__(
+        self,
+        http: HttpClient,
+        base_path: str = "/v1/hyperliquid/hip4",
+        coin_transform=str.upper,
+    ):
+        super().__init__(http, base_path, coin_transform)
+        self._max_limit = 1000
+        self._limit_label = "HIP-4 candles"
+
+
+class SpotCandlesResource(CandlesResource):
+    """Hyperliquid Spot OHLCV candles with a 1,000-row page cap.
+
+    Spot candle coverage starts at ``2025-03-22T10:50:22Z``. Supported intervals
+    are ``1m``, ``5m``, ``15m``, ``30m``, ``1h``, ``4h``, ``1d``, and ``1w``.
+    """
+
+    def __init__(
+        self,
+        http: HttpClient,
+        base_path: str = "/v1/hyperliquid/spot",
+        coin_transform=str.upper,
+    ) -> None:
+        super().__init__(http, base_path, coin_transform)
+        self._max_limit = 1000
+        self._limit_label = "Hyperliquid Spot candles"

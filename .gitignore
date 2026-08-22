@@ -1,5 +1,6 @@
 # Tests (internal only, not published)
-tests/
+tests/*
+!tests/test_coverage_contract.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
