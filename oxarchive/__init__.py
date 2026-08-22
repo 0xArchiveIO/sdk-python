@@ -118,7 +118,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.8.0"
+__version__ = "1.9.0"
 
 __all__ = [
     # Client

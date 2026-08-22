@@ -496,7 +496,7 @@ class Hip3Client:
         )
 
 
-def _hip4_encode(symbol: str) -> str:
+def _hip4_encode(symbol: str | int) -> str:
     """Normalize a HIP-4 coin symbol for REST paths.
 
     The backend now accepts the bare numeric form (``/hip4/orderbook/0``) and
@@ -508,12 +508,13 @@ def _hip4_encode(symbol: str) -> str:
     Note: WebSocket subscribes still use the raw ``#N`` form in the JSON body —
     only the REST path is normalized here.
     """
-    s = symbol.lstrip("#")
+    symbol_text = str(symbol)
+    s = symbol_text.lstrip("#")
     # Numeric (bare or ``#N``) → bare numeric. Anything else (defensive: future
     # non-numeric coin formats) → URL-encode to keep ``#`` safe in path.
     if s.isdigit():
         return s
-    return quote(symbol, safe="")
+    return quote(symbol_text, safe="")
 
 
 class Hip4Client:
@@ -529,8 +530,9 @@ class Hip4Client:
     bare form is the recommended primary in examples. WebSocket ``subscribe``
     payloads still use the raw ``#N`` form (passed through as-is in JSON).
 
-    Note: HIP-4 has no funding, no liquidations, no candles by design (fully
-    collateralized binary outcomes), and no oracle feed for outcomes.
+    Note: HIP-4 has candles and outcome-side open interest from May 2, 2026.
+    Raw OI updates arrive at roughly 10-second cadence. HIP-4 has no funding,
+    no liquidations, and no oracle feed for outcomes.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -557,6 +559,9 @@ class Hip4Client:
 
         self.trades = TradesResource(http, base_path, coin_transform=_hip4_encode)
         """Trade/fill history."""
+
+        self.candles = CandlesResource(http, base_path, coin_transform=_hip4_encode)
+        """Implied-probability OHLCV candles."""
 
         self.open_interest = OpenInterestResource(http, base_path, coin_transform=_hip4_encode)
         """Per-side open interest. For paired/aggregated OI use ``outcomes.get()``."""
@@ -696,6 +701,14 @@ class Hip4Client:
     async def aget_trades_recent(self, symbol: str, limit: Optional[int] = None, **kwargs):
         """Async version of get_trades_recent()."""
         return await self.trades.arecent(symbol, limit=limit, **kwargs)
+
+    def get_candles(self, symbol: str, **kwargs):
+        """Get implied-probability OHLCV candle history."""
+        return self.candles.history(symbol, **kwargs)
+
+    async def aget_candles(self, symbol: str, **kwargs):
+        """Async version of get_candles()."""
+        return await self.candles.ahistory(symbol, **kwargs)
 
     def get_open_interest(self, symbol: str, **kwargs):
         """Get per-side OI history. Use get_outcome() for paired aggregates."""

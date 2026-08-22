@@ -540,15 +540,17 @@ class OxArchiveWs:
     # -- HIP-4 outcome markets -----------------------------------------------
 
     def subscribe_hip4_orderbook(self, coin: str) -> None:
-        """Subscribe to live HIP-4 L2 orderbook for a per-side coin.
+        """Subscribe to HIP-4 L2 replay for a per-side coin.
 
-        ``coin`` should be the on-chain ``#N`` form (e.g. ``"#0"``). The raw
-        ``#`` is sent in the JSON body — only the REST path strips it.
+        Live delivery is paused. Use REST for current books and WebSocket replay
+        for stored history. ``coin`` should be the on-chain ``#N`` form (e.g.
+        ``"#0"``). The raw ``#`` is sent in the JSON body; only the REST path
+        strips it.
         """
         self.subscribe("hip4_orderbook", coin)
 
     def unsubscribe_hip4_orderbook(self, coin: str) -> None:
-        """Unsubscribe from live HIP-4 L2 orderbook for a per-side coin."""
+        """Unsubscribe from HIP-4 L2 orderbook replay for a per-side coin."""
         self.unsubscribe("hip4_orderbook", coin)
 
     def subscribe_hip4_trades(self, coin: str) -> None:
@@ -560,7 +562,10 @@ class OxArchiveWs:
         self.unsubscribe("hip4_trades", coin)
 
     def subscribe_hip4_open_interest(self, coin: str) -> None:
-        """Subscribe to live HIP-4 per-side open-interest ticks."""
+        """Subscribe to HIP-4 OI; live delivery is paused.
+
+        Use REST for current OI and WebSocket replay for stored history.
+        """
         self.subscribe("hip4_open_interest", coin)
 
     def unsubscribe_hip4_open_interest(self, coin: str) -> None:
