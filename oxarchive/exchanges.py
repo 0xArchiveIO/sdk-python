@@ -358,7 +358,7 @@ class Hip3Client:
         """Open interest"""
 
         self.candles = Hip3CandlesResource(http, base_path, coin_transform=coin_transform)
-        """OHLCV candle data (max 1,000 rows per page)"""
+        """OHLCV candle data (max 10,000 rows per page)"""
 
         self.liquidations = LiquidationsResource(http, base_path, coin_transform=coin_transform)
         """Liquidation events"""

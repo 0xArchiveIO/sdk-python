@@ -24,7 +24,7 @@ class FakeHttp:
                     "volume": 10,
                 }
             ],
-            "meta": {"next_cursor": "next-cursor"},
+            "meta": {"next_cursor": "1777708800000"},
         }
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -50,7 +50,7 @@ def test_hip4_exposes_candle_history_without_funding() -> None:
     params = http.calls[0][1]
     assert params is not None
     assert params["interval"] == "1m"
-    assert result.next_cursor == "next-cursor"
+    assert result.next_cursor == "1777708800000"
     assert result.data[0].close == 0.25
     assert not hasattr(client, "funding")
     assert type(client.candles).__name__ == "Hip4CandlesResource"
@@ -87,7 +87,7 @@ def test_hip4_accepts_advertised_integer_symbols() -> None:
     assert http.calls[0][0] == "/v1/hyperliquid/hip4/candles/0"
 
 
-def test_hip4_candle_cursor_is_forwarded_opaque_and_limit_is_capped() -> None:
+def test_hip4_candle_cursor_is_forwarded_as_a_numeric_string_and_limit_is_capped() -> None:
     http = FakeHttp()
     client = Hip4Client(cast(HttpClient, http))
 
@@ -106,15 +106,15 @@ def test_hip4_candle_cursor_is_forwarded_opaque_and_limit_is_capped() -> None:
         start="2026-05-02T08:00:00Z",
         end="2026-05-02T09:00:00Z",
         limit=1000,
-        cursor="opaque:hip4:candle:page-2",
+        cursor="1777712400000",
     )
 
     assert http.calls[0][1] is not None
-    assert http.calls[0][1]["cursor"] == "opaque:hip4:candle:page-2"
+    assert http.calls[0][1]["cursor"] == "1777712400000"
     assert http.calls[0][1]["limit"] == 1000
 
 
-def test_lighter_candles_keep_the_10000_limit_and_opaque_cursor() -> None:
+def test_lighter_candles_keep_the_10000_limit_and_numeric_timestamp_cursor() -> None:
     http = FakeHttp()
     client = LighterClient(cast(HttpClient, http))
 
@@ -123,13 +123,13 @@ def test_lighter_candles_keep_the_10000_limit_and_opaque_cursor() -> None:
         start="2025-08-01T00:00:00Z",
         end="2025-08-01T01:00:00Z",
         limit=10000,
-        cursor="opaque:lighter:candle:page-2",
+        cursor="1754010000000",
     )
 
     assert result.data[0].close == 0.25
     assert http.calls[0][0] == "/v1/lighter/candles/BTC"
     assert http.calls[0][1] is not None
-    assert http.calls[0][1]["cursor"] == "opaque:lighter:candle:page-2"
+    assert http.calls[0][1]["cursor"] == "1754010000000"
     assert http.calls[0][1]["limit"] == 10000
 
 
@@ -145,7 +145,7 @@ def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> No
             "mark_price": "0.6502",
             "mid_price": "0.65038",
         },
-        "meta": {"next_cursor": "opaque:hip4:oi:page-2"},
+        "meta": {"next_cursor": "1777708800000"},
     }
     http = FakeHttp(response)
     client = Hip4Client(cast(HttpClient, http))
@@ -165,7 +165,7 @@ def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> No
     )
     assert isinstance(history.data[0], Hip4OpenInterestRecord)
     assert history.data[0].symbol == "#0"
-    assert history.next_cursor == "opaque:hip4:oi:page-2"
+    assert history.next_cursor == "1777708800000"
 
     client.open_interest.history(
         "#0",
@@ -174,7 +174,7 @@ def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> No
         cursor=history.next_cursor,
     )
     assert http.calls[-1][1] is not None
-    assert http.calls[-1][1]["cursor"] == "opaque:hip4:oi:page-2"
+    assert http.calls[-1][1]["cursor"] == "1777708800000"
 
 
 def test_non_hip4_open_interest_keeps_the_generic_model() -> None:
@@ -225,7 +225,8 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "price levels per side" not in l3_resource
     assert "self.candles = CandlesResource" in exchanges
     assert "HIP-4 candle pages are capped at 1,000" in readme
-    assert "Lighter candle pages remain capped at 10,000" in readme
+    assert "HIP-3 and Lighter candle pages accept up to 10,000 rows" in readme
+    assert "Candle pagination cursors are numeric timestamp strings" in readme
     assert "client.spot.candles.history" in readme
     assert "2025-03-22T10:50:22Z" in readme
     assert "1m/5m/15m/30m/1h/4h/1d/1w" in readme
@@ -251,7 +252,7 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
         end="2025-03-22T11:50:22Z",
         interval="5m",
         limit=1000,
-        cursor="opaque:spot:candle:page-2",
+        cursor="1742644222000",
     )
 
     assert type(client.candles).__name__ == "SpotCandlesResource"
@@ -260,9 +261,9 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
     assert params is not None
     assert params["interval"] == "5m"
     assert params["limit"] == 1000
-    assert params["cursor"] == "opaque:spot:candle:page-2"
+    assert params["cursor"] == "1742644222000"
     assert result.data[0].close == 0.25
-    assert result.next_cursor == "next-cursor"
+    assert result.next_cursor == "1777708800000"
     assert not hasattr(client, "funding")
     assert not hasattr(client, "open_interest")
     assert not hasattr(client, "liquidations")
@@ -277,20 +278,30 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
     assert len(http.calls) == 1
 
 
-def test_hip3_candles_enforce_the_1000_row_route_cap() -> None:
+def test_hip3_candles_enforce_the_10000_row_route_cap() -> None:
     http = FakeHttp()
     client = Hip3Client(cast(HttpClient, http))
 
-    with pytest.raises(ValueError, match="limit must be between 1 and 1000 for HIP-3 candles"):
+    client.candles.history(
+        "xyz:XYZ100",
+        start="2026-02-01T00:00:00Z",
+        end="2026-02-02T00:00:00Z",
+        interval="1h",
+        limit=10000,
+    )
+    assert http.calls[-1][1] is not None
+    assert http.calls[-1][1]["limit"] == 10000
+
+    with pytest.raises(ValueError, match="limit must be between 1 and 10000 for HIP-3 candles"):
         client.candles.history(
             "xyz:XYZ100",
             start="2026-02-01T00:00:00Z",
             end="2026-02-02T00:00:00Z",
             interval="1h",
-            limit=1001,
+            limit=10001,
         )
 
-    assert http.calls == []
+    assert len(http.calls) == 1
 
 
 def test_spot_candle_history_supports_all_verified_intervals_and_async() -> None:
@@ -315,9 +326,9 @@ def test_spot_candle_history_supports_all_verified_intervals_and_async() -> None
             start="2025-03-22T10:50:22Z",
             end="2025-03-22T11:50:22Z",
             interval="1d",
-            cursor="opaque:spot:candle:async-page-2",
+            cursor="1742644222000",
         )
     )
     assert result.data[0].open == 0.2
     assert http.calls[-1][1] is not None
-    assert http.calls[-1][1]["cursor"] == "opaque:spot:candle:async-page-2"
+    assert http.calls[-1][1]["cursor"] == "1742644222000"
