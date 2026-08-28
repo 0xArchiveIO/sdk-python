@@ -1016,6 +1016,8 @@ Notes:
   Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
 - open_interest, funding, lighter_open_interest, lighter_funding,
   hip3_open_interest, hip3_funding are historical only (replay/stream).
+- all six ``lighter_*`` channels support historical replay, not live
+  subscriptions. Use Lighter REST for current data.
 - l4_diffs, l4_orders: Hyperliquid L4 order-level data (realtime only).
 - hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (realtime only).
 - hip4_trades: HIP-4 outcome-market fills (realtime + replay).

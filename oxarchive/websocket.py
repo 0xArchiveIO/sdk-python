@@ -88,6 +88,30 @@ DEFAULT_PING_INTERVAL = 30
 DEFAULT_RECONNECT_DELAY = 1.0
 DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
 
+LIGHTER_REPLAY_CHANNELS: frozenset[str] = frozenset(
+    {
+        "lighter_orderbook",
+        "lighter_trades",
+        "lighter_candles",
+        "lighter_open_interest",
+        "lighter_funding",
+        "lighter_l3_orderbook",
+    }
+)
+"""Lighter channels available through historical replay, not live subscription."""
+
+LIGHTER_SUBSCRIPTION_ERROR = (
+    "Lighter WebSocket channels support replay, not live subscriptions. "
+    "Use REST for current data or a replay request for stored history."
+)
+
+
+def _validate_live_subscription(channel: WsChannel) -> None:
+    """Reject live subscriptions for channels that only support replay."""
+    if channel in LIGHTER_REPLAY_CHANNELS:
+        raise ValueError(LIGHTER_SUBSCRIPTION_ERROR)
+
+
 # Server idle timeout is 60 seconds. The SDK sends pings every 30 seconds
 # to keep the connection alive. The websockets library also automatically
 # responds to WebSocket protocol-level ping frames from the server.
@@ -335,7 +359,7 @@ def _transform_orderbook(coin: str, raw: dict) -> OrderBook:
 
 
 class OxArchiveWs:
-    """WebSocket client for real-time data streaming."""
+    """WebSocket client for supported live data and historical replay."""
 
     def __init__(self, options: WsOptions):
         """Initialize the WebSocket client.
@@ -446,12 +470,17 @@ class OxArchiveWs:
             self._ws = None
 
     def subscribe(self, channel: WsChannel, coin: Optional[str] = None) -> None:
-        """Subscribe to a channel.
+        """Subscribe to a supported live channel.
 
         Args:
             channel: Channel type
             coin: Coin symbol (required for coin-specific channels)
+
+        Raises:
+            ValueError: If ``channel`` is a Lighter channel. Lighter supports
+                replay over WebSocket and current data through REST instead.
         """
+        _validate_live_subscription(channel)
         key = self._subscription_key(channel, coin)
         self._subscriptions.add(key)
 
@@ -459,7 +488,12 @@ class OxArchiveWs:
             asyncio.create_task(self._send_subscribe(channel, coin))
 
     async def subscribe_async(self, channel: WsChannel, coin: Optional[str] = None) -> None:
-        """Subscribe to a channel (async version)."""
+        """Subscribe asynchronously to a supported live channel.
+
+        Lighter channels are replay-only over WebSocket; use REST for current
+        data or :meth:`replay` for stored history.
+        """
+        _validate_live_subscription(channel)
         key = self._subscription_key(channel, coin)
         self._subscriptions.add(key)
 
@@ -657,6 +691,9 @@ class OxArchiveWs:
         interval: Optional[str] = None,
     ) -> None:
         """Start historical replay with timing preserved.
+
+        All six ``lighter_*`` channels support bounded historical replay. They
+        do not support live subscriptions; use Lighter REST for current data.
 
         Args:
             channel: Data channel to replay

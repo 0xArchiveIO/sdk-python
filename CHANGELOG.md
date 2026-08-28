@@ -5,6 +5,13 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - Unreleased
+
+### Changed
+- Lighter WebSocket channels now support bounded historical replay without
+  live subscriptions. Current Lighter data remains available through REST;
+  live subscription calls fail fast with guidance to REST or replay.
+
 ## [1.9.0] - 2026-08-22
 
 ### Added
