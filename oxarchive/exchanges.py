@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from .http import HttpClient
 from .resources import (
+    BreadthResource,
     CandlesResource,
     FundingResource,
     Hip3CandlesResource,
@@ -344,6 +345,9 @@ class Hip3Client:
 
         self.instruments = Hip3InstrumentsResource(http, base_path, coin_transform=coin_transform)
         """HIP-3 instruments with latest market data"""
+
+        self.breadth = BreadthResource(http, base_path)
+        """Percent of eligible instruments above current UTC-session VWAP."""
 
         self.orderbook = OrderBookResource(http, base_path, coin_transform=coin_transform)
         """Order book snapshots (February 2026+)"""

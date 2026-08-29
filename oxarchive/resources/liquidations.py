@@ -328,8 +328,8 @@ class LiquidationsResource:
         Get projected forced-liquidation levels for a symbol.
 
         Computed from clearinghouse positions and margin state, bucketed
-        around the snapshot mark price. Snapshots refresh roughly every 45
-        minutes; pass ``at`` (epoch ms) for a point-in-time read. History
+        around the snapshot mark price. Snapshots refresh approximately every
+        five minutes; pass ``at`` (epoch ms) for a point-in-time read. History
         begins 2026-07-27.
 
         These are projected forced liquidations, not the pending
@@ -384,7 +384,7 @@ class LiquidationsResource:
         """
         Get historical liquidation-levels snapshots with cursor pagination.
 
-        Ascending by snapshot time (about every 45 minutes, retained from
+        Ascending by snapshot time (approximately every five minutes, retained from
         2026-07-27). Pass ``summary=True`` to list snapshots without
         histograms. Follow ``next_cursor`` as ``cursor`` for the next page.
 

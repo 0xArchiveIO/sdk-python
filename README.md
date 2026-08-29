@@ -403,6 +403,32 @@ us500 = await client.hyperliquid.hip3.instruments.aget("km:US500")
 | xyz (Hyperliquid) | `xyz:XYZ100` |
 | km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
 
+#### HIP-3 Market Breadth
+
+HIP-3 breadth reports the percentage of eligible instruments trading above their current UTC-session VWAP. The current snapshot is available from `client.hyperliquid.hip3.breadth.current()`, and history is cursor-paginated through `client.hyperliquid.hip3.breadth.history()`:
+
+```python
+current = client.hyperliquid.hip3.breadth.current()
+print(f"{current.value_pct}% above VWAP ({current.counts.eligible} eligible)")
+
+history = client.hyperliquid.hip3.breadth.history(
+    start="2026-08-28T00:00:00Z",
+    end="2026-08-29T00:00:00Z",
+    interval="5m",  # 5m, 1h, 1d
+    limit=1000,
+)
+while history.next_cursor:
+    history = client.hyperliquid.hip3.breadth.history(
+        start="2026-08-28T00:00:00Z",
+        end="2026-08-29T00:00:00Z",
+        interval="5m",
+        cursor=history.next_cursor,
+        limit=1000,
+    )
+```
+
+The session resets at 00:00 UTC and compares the close of the most recently completed one-minute candle with session VWAP. Instruments without session volume or with a completed candle older than five minutes are excluded, so `coverage_ratio` varies with market hours. `value_pct` is `None`, not zero, when no instrument is eligible. History begins on 2026-08-28; the SDK does not imply synthetic pre-launch history. Interval downsampling uses the last snapshot in each bucket, never an average of percentages.
+
 #### HIP-4 Outcome Markets
 
 HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 serves candles and outcome-side OI from 2026-05-02, with raw OI updates at ~10s. HIP-3 and Lighter candle pages accept up to 10,000 rows; HIP-4 candle pages are capped at 1,000 rows. HIP-4 has **no funding and no liquidations**. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
@@ -532,6 +558,8 @@ history = await client.hyperliquid.funding.ahistory("ETH", start=..., end=...)
 hip3_current = await client.hyperliquid.hip3.funding.acurrent("km:US500")
 ```
 
+**Unit note:** `funding_rate` is a fractional, non-annualized rate. For example, `0.0001` means `0.01%` for the funding interval. This is a breaking normalization for Lighter consumers that previously compensated for percent units; do not apply a second percent conversion.
+
 #### Funding History Parameters
 
 | Parameter | Type | Required | Description |
@@ -587,7 +615,7 @@ hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 
 ### Liquidations
 
-Get historical liquidation events. Available for Hyperliquid (May 2025+) and HIP-3.
+Get historical liquidation events. Available for Hyperliquid (May 2025+) and HIP-3. The projected forced-liquidation price-level endpoints refresh about every five minutes. This is a measured cadence, not an exact five-minute guarantee.
 
 ```python
 # Get liquidation history for a coin (Hyperliquid)
@@ -1337,6 +1365,28 @@ async def main():
 asyncio.run(main())
 ```
 
+#### Hyperliquid Core L4 Replay
+
+Historical replay for Hyperliquid core `l4_diffs` and `l4_orders` begins with one typed `WsL4Snapshot` message and continues with ordered `WsL4Batch` messages. Apply each batch in the order received; use the snapshot's `last_block_number` with each event's block/sequence fields as the checkpoint boundary. The dedicated `on_l4_snapshot` and `on_l4_batch` callbacks keep their raw payload shapes; `on_message` receives the typed envelopes.
+
+```python
+from oxarchive import WsL4Batch, WsL4Snapshot
+
+
+def on_message(message):
+    if isinstance(message, WsL4Snapshot):
+        rebuild_book_from_snapshot(message.data)
+    elif isinstance(message, WsL4Batch):
+        for event in message.data:
+            apply_l4_event(event)
+
+
+ws.on_message(on_message)
+await ws.replay("l4_diffs", "BTC", start=..., end=..., speed=10)
+```
+
+HIP-3, HIP-4, and Hyperliquid Spot L4 channels remain live-only. They accept live subscriptions and do not accept historical replay.
+
 ### Gap Detection
 
 During historical replay, the server automatically detects gaps in the data and notifies the client. This helps identify periods where data may be missing.
@@ -1401,8 +1451,10 @@ ws = OxArchiveWs(WsOptions(
 | `funding` | Funding rate records | Yes | No | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
 | `all_tickers` | All market tickers | No | Yes | No |
-| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | No |
-| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | No |
+| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
+| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
+
+Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. Their sequence is `l4_snapshot` followed by ordered `l4_batch` events. HIP-3, HIP-4, and Hyperliquid Spot L4 remain live-only.
 
 > **Note:** ``liquidations`` and ``hip3_liquidations`` now stream live. Each item shares the trades wire shape (a fill row with ``is_liquidation: true``). The SDK exposes a typed ``on_liquidations`` callback that decodes them into :class:`Liquidation` records.
 
