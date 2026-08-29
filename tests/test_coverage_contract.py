@@ -432,6 +432,21 @@ def test_hip3_breadth_exposes_typed_current_and_history_contract() -> None:
     assert len(http.calls) == 2
 
 
+@pytest.mark.parametrize("interval", ["5m", "15m", "30m", "1h", "4h", "1d"])
+def test_hip3_breadth_accepts_every_served_history_interval(interval: str) -> None:
+    response = {
+        "data": [_breadth_snapshot()],
+        "meta": {"count": 1, "request_id": "breadth-history", "next_cursor": None},
+    }
+    http = FakeHttp(response)
+    client = Hip3Client(cast(HttpClient, http))
+
+    client.breadth.history(interval=cast(Any, interval))
+
+    assert http.calls[0][1] is not None
+    assert http.calls[0][1]["interval"] == interval
+
+
 def test_hip3_breadth_supports_async_methods_and_null_is_not_zero() -> None:
     empty_snapshot = _breadth_snapshot(value_pct=None)
     empty_snapshot["coverage_ratio"] = 0.0

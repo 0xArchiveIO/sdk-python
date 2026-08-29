@@ -11,7 +11,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - HIP-3 breadth above current UTC-session VWAP via
   `client.hyperliquid.hip3.breadth.current()` and cursor-paginated
   `.history()`; collection begins on 2026-08-28 and `value_pct` remains null
-  when no instrument is eligible.
+  when no instrument is eligible. History accepts `5m`, `15m`, `30m`, `1h`,
+  `4h`, and `1d` downsampling intervals.
 - Typed Hyperliquid core L4 replay frames: `l4_snapshot` is followed by
   ordered `l4_batch` events for `l4_diffs` and `l4_orders`. HIP-3, HIP-4, and
   Hyperliquid Spot L4 remain live-only.

@@ -414,7 +414,7 @@ print(f"{current.value_pct}% above VWAP ({current.counts.eligible} eligible)")
 history = client.hyperliquid.hip3.breadth.history(
     start="2026-08-28T00:00:00Z",
     end="2026-08-29T00:00:00Z",
-    interval="5m",  # 5m, 1h, 1d
+    interval="5m",  # 5m, 15m, 30m, 1h, 4h, 1d
     limit=1000,
 )
 while history.next_cursor:
