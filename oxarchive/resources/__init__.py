@@ -1,5 +1,6 @@
 """Resource modules."""
 
+from .breadth import BreadthResource
 from .candles import CandlesResource, Hip3CandlesResource, Hip4CandlesResource, SpotCandlesResource
 from .data_quality import DataQualityResource
 from .funding import FundingResource
@@ -29,6 +30,7 @@ __all__ = [
     "Hip3InstrumentsResource",
     "Hip4InstrumentsResource",
     "FundingResource",
+    "BreadthResource",
     "OpenInterestResource",
     "Hip4OpenInterestResource",
     "CandlesResource",

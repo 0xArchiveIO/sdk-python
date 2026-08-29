@@ -5,11 +5,35 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - Unreleased
+
+### Added
+- HIP-3 breadth above current UTC-session VWAP via
+  `client.hyperliquid.hip3.breadth.current()` and cursor-paginated
+  `.history()`; collection begins on 2026-08-28 and `value_pct` remains null
+  when no instrument is eligible. History accepts `5m`, `15m`, `30m`, `1h`,
+  `4h`, and `1d` downsampling intervals.
+- Typed Hyperliquid core L4 replay frames: `l4_snapshot` is followed by
+  ordered `l4_batch` events for `l4_diffs` and `l4_orders`. HIP-3, HIP-4, and
+  Hyperliquid Spot L4 remain live-only.
+
+### Changed
+- Lighter WebSocket channels now support bounded historical replay without
+  live subscriptions. Current Lighter data remains available through REST;
+  live subscription calls fail fast with guidance to REST or replay.
+- Projected forced-liquidation price-level endpoints refresh about every five
+  minutes. This is a measured cadence, not an exact five-minute guarantee.
+
+### Breaking
+- Lighter `funding_rate` is now a fractional, non-annualized rate. Consumers
+  that compensated for the former percent units must remove that conversion;
+  do not apply a second percent conversion.
+
 ## [1.9.0] - 2026-08-22
 
 ### Added
 - HIP-4 candle history at `client.hyperliquid.hip4.candles.history()` and its async equivalent.
-- **Hyperliquid Spot candle history.** Added `client.spot.candles.history()` and `ahistory()` for `/v1/hyperliquid/spot/candles/{symbol}`. Coverage starts at `2025-03-22T10:50:22Z`; supported intervals are `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, with opaque cursor pagination and a 1,000-row page cap.
+- **Hyperliquid Spot candle history.** Added `client.spot.candles.history()` and `ahistory()` for `/v1/hyperliquid/spot/candles/{symbol}`. Coverage starts at `2025-03-22T10:50:22Z`; supported intervals are `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, with numeric timestamp-string cursor pagination and a 1,000-row page cap.
 
 ### Changed
 - Coverage copy now states HIP-4 outcome-side OI at roughly 10-second cadence, Lighter L3 at 250 orders per side from March 5, 2026, and Lighter per-fill trade history from August 27, 2025.
@@ -22,9 +46,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Liquidation levels**: `liquidations.levels()` / `alevels()` and
   `levels_history()` / `alevels_history()` on the Hyperliquid and HIP-3
   clients. Projected forced-liquidation levels computed from clearinghouse
-  positions and margin state (~45-minute snapshots, `at=` point-in-time
-  reads, `side=` filter, cursor-paginated history with `summary=True`
-  discovery mode). History retained from 2026-07-27.
+  positions and margin state (snapshots approximately every five minutes,
+  `at=` point-in-time reads, `side=` filter, cursor-paginated history with
+  `summary=True` discovery mode). History retained from 2026-07-27.
 - **Trigger levels**: `orders.trigger_levels()` and
   `trigger_levels_history()` (+ async variants): the pending stop-loss /
   take-profit map with 15-minute snapshot history.

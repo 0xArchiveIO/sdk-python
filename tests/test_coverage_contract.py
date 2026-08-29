@@ -7,7 +7,12 @@ import pytest
 from oxarchive.exchanges import Hip3Client, Hip4Client, LighterClient, SpotClient
 from oxarchive.http import HttpClient
 from oxarchive.resources.l3_orderbook import L3OrderBookResource
-from oxarchive.types import CandleInterval, Hip4OpenInterestRecord, OpenInterest
+from oxarchive.types import (
+    BreadthSnapshot,
+    CandleInterval,
+    Hip4OpenInterestRecord,
+    OpenInterest,
+)
 
 
 class FakeHttp:
@@ -24,7 +29,7 @@ class FakeHttp:
                     "volume": 10,
                 }
             ],
-            "meta": {"next_cursor": "next-cursor"},
+            "meta": {"next_cursor": "1777708800000"},
         }
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -50,7 +55,7 @@ def test_hip4_exposes_candle_history_without_funding() -> None:
     params = http.calls[0][1]
     assert params is not None
     assert params["interval"] == "1m"
-    assert result.next_cursor == "next-cursor"
+    assert result.next_cursor == "1777708800000"
     assert result.data[0].close == 0.25
     assert not hasattr(client, "funding")
     assert type(client.candles).__name__ == "Hip4CandlesResource"
@@ -87,7 +92,7 @@ def test_hip4_accepts_advertised_integer_symbols() -> None:
     assert http.calls[0][0] == "/v1/hyperliquid/hip4/candles/0"
 
 
-def test_hip4_candle_cursor_is_forwarded_opaque_and_limit_is_capped() -> None:
+def test_hip4_candle_cursor_is_forwarded_as_a_numeric_string_and_limit_is_capped() -> None:
     http = FakeHttp()
     client = Hip4Client(cast(HttpClient, http))
 
@@ -106,15 +111,15 @@ def test_hip4_candle_cursor_is_forwarded_opaque_and_limit_is_capped() -> None:
         start="2026-05-02T08:00:00Z",
         end="2026-05-02T09:00:00Z",
         limit=1000,
-        cursor="opaque:hip4:candle:page-2",
+        cursor="1777712400000",
     )
 
     assert http.calls[0][1] is not None
-    assert http.calls[0][1]["cursor"] == "opaque:hip4:candle:page-2"
+    assert http.calls[0][1]["cursor"] == "1777712400000"
     assert http.calls[0][1]["limit"] == 1000
 
 
-def test_lighter_candles_keep_the_10000_limit_and_opaque_cursor() -> None:
+def test_lighter_candles_keep_the_10000_limit_and_numeric_timestamp_cursor() -> None:
     http = FakeHttp()
     client = LighterClient(cast(HttpClient, http))
 
@@ -123,13 +128,13 @@ def test_lighter_candles_keep_the_10000_limit_and_opaque_cursor() -> None:
         start="2025-08-01T00:00:00Z",
         end="2025-08-01T01:00:00Z",
         limit=10000,
-        cursor="opaque:lighter:candle:page-2",
+        cursor="1754010000000",
     )
 
     assert result.data[0].close == 0.25
     assert http.calls[0][0] == "/v1/lighter/candles/BTC"
     assert http.calls[0][1] is not None
-    assert http.calls[0][1]["cursor"] == "opaque:lighter:candle:page-2"
+    assert http.calls[0][1]["cursor"] == "1754010000000"
     assert http.calls[0][1]["limit"] == 10000
 
 
@@ -145,7 +150,7 @@ def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> No
             "mark_price": "0.6502",
             "mid_price": "0.65038",
         },
-        "meta": {"next_cursor": "opaque:hip4:oi:page-2"},
+        "meta": {"next_cursor": "1777708800000"},
     }
     http = FakeHttp(response)
     client = Hip4Client(cast(HttpClient, http))
@@ -165,7 +170,7 @@ def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> No
     )
     assert isinstance(history.data[0], Hip4OpenInterestRecord)
     assert history.data[0].symbol == "#0"
-    assert history.next_cursor == "opaque:hip4:oi:page-2"
+    assert history.next_cursor == "1777708800000"
 
     client.open_interest.history(
         "#0",
@@ -174,7 +179,7 @@ def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> No
         cursor=history.next_cursor,
     )
     assert http.calls[-1][1] is not None
-    assert http.calls[-1][1]["cursor"] == "opaque:hip4:oi:page-2"
+    assert http.calls[-1][1]["cursor"] == "1777708800000"
 
 
 def test_non_hip4_open_interest_keeps_the_generic_model() -> None:
@@ -225,7 +230,8 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "price levels per side" not in l3_resource
     assert "self.candles = CandlesResource" in exchanges
     assert "HIP-4 candle pages are capped at 1,000" in readme
-    assert "Lighter candle pages remain capped at 10,000" in readme
+    assert "HIP-3 and Lighter candle pages accept up to 10,000 rows" in readme
+    assert "Candle pagination cursors are numeric timestamp strings" in readme
     assert "client.spot.candles.history" in readme
     assert "2025-03-22T10:50:22Z" in readme
     assert "1m/5m/15m/30m/1h/4h/1d/1w" in readme
@@ -251,7 +257,7 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
         end="2025-03-22T11:50:22Z",
         interval="5m",
         limit=1000,
-        cursor="opaque:spot:candle:page-2",
+        cursor="1742644222000",
     )
 
     assert type(client.candles).__name__ == "SpotCandlesResource"
@@ -260,9 +266,9 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
     assert params is not None
     assert params["interval"] == "5m"
     assert params["limit"] == 1000
-    assert params["cursor"] == "opaque:spot:candle:page-2"
+    assert params["cursor"] == "1742644222000"
     assert result.data[0].close == 0.25
-    assert result.next_cursor == "next-cursor"
+    assert result.next_cursor == "1777708800000"
     assert not hasattr(client, "funding")
     assert not hasattr(client, "open_interest")
     assert not hasattr(client, "liquidations")
@@ -277,20 +283,30 @@ def test_spot_exposes_verified_candle_history_and_preserves_negative_capabilitie
     assert len(http.calls) == 1
 
 
-def test_hip3_candles_enforce_the_1000_row_route_cap() -> None:
+def test_hip3_candles_enforce_the_10000_row_route_cap() -> None:
     http = FakeHttp()
     client = Hip3Client(cast(HttpClient, http))
 
-    with pytest.raises(ValueError, match="limit must be between 1 and 1000 for HIP-3 candles"):
+    client.candles.history(
+        "xyz:XYZ100",
+        start="2026-02-01T00:00:00Z",
+        end="2026-02-02T00:00:00Z",
+        interval="1h",
+        limit=10000,
+    )
+    assert http.calls[-1][1] is not None
+    assert http.calls[-1][1]["limit"] == 10000
+
+    with pytest.raises(ValueError, match="limit must be between 1 and 10000 for HIP-3 candles"):
         client.candles.history(
             "xyz:XYZ100",
             start="2026-02-01T00:00:00Z",
             end="2026-02-02T00:00:00Z",
             interval="1h",
-            limit=1001,
+            limit=10001,
         )
 
-    assert http.calls == []
+    assert len(http.calls) == 1
 
 
 def test_spot_candle_history_supports_all_verified_intervals_and_async() -> None:
@@ -315,9 +331,160 @@ def test_spot_candle_history_supports_all_verified_intervals_and_async() -> None
             start="2025-03-22T10:50:22Z",
             end="2025-03-22T11:50:22Z",
             interval="1d",
-            cursor="opaque:spot:candle:async-page-2",
+            cursor="1742644222000",
         )
     )
     assert result.data[0].open == 0.2
     assert http.calls[-1][1] is not None
-    assert http.calls[-1][1]["cursor"] == "opaque:spot:candle:async-page-2"
+    assert http.calls[-1][1]["cursor"] == "1742644222000"
+
+
+def test_g1_to_g4_public_copy_has_current_contracts() -> None:
+    root = Path(__file__).resolve().parents[1]
+    readme = (root / "README.md").read_text()
+    changelog = (root / "CHANGELOG.md").read_text()
+    types = (root / "oxarchive" / "types.py").read_text()
+    websocket = (root / "oxarchive" / "websocket.py").read_text()
+
+    assert "client.hyperliquid.hip3.breadth.current()" in readme
+    assert "history begins on 2026-08-28" in readme.lower()
+    assert "value_pct" in readme and "not zero" in readme
+    assert "about every five minutes" in readme
+    assert "45-minute" not in readme
+    assert "fractional, non-annualized" in readme
+    assert "fractional" in changelog and "non-annualized" in changelog
+    assert "45-minute" not in changelog
+    assert "l4_snapshot" in websocket and "ordered" in websocket
+    assert "l4_snapshot" in types and "live-only" in types
+
+
+def _breadth_snapshot(*, value_pct: float | None = 20.93) -> dict[str, Any]:
+    return {
+        "session_date": "2026-08-28",
+        "calculated_at": "2026-08-28T20:54:00Z",
+        "value_pct": value_pct,
+        "coverage_ratio": 0.382,
+        "counts": {
+            "candidates": 225,
+            "eligible": 86,
+            "above": 18,
+            "at": 0,
+            "below": 68,
+            "excluded_no_session_volume": 75,
+            "excluded_stale_price": 64,
+        },
+        "namespaces": {
+            "eligible": {"xyz": 41},
+            "above": {"xyz": 9},
+            "at": {},
+            "below": {"xyz": 32},
+        },
+    }
+
+
+def test_hip3_breadth_exposes_typed_current_and_history_contract() -> None:
+    snapshot = _breadth_snapshot()
+    response = {
+        "data": snapshot,
+        "meta": {"count": 1, "request_id": "breadth-current", "next_cursor": None},
+    }
+    http = FakeHttp(response)
+    client = Hip3Client(cast(HttpClient, http))
+
+    current = client.breadth.current()
+
+    assert isinstance(current, BreadthSnapshot)
+    assert current.session_date.isoformat() == "2026-08-28"
+    assert current.value_pct == 20.93
+    assert current.counts.eligible == 86
+    assert current.namespaces.above["xyz"] == 9
+    assert http.calls[0] == ("/v1/hyperliquid/hip3/breadth/above-vwap/current", None)
+
+    response["data"] = [snapshot]
+    response["meta"] = {
+        "count": 1,
+        "request_id": "breadth-history",
+        "next_cursor": "1788036840000",
+    }
+    result = client.breadth.history(
+        start="2026-08-28T20:00:00Z",
+        end="2026-08-28T21:00:00Z",
+        interval="1h",
+        limit=1000,
+        cursor="1788036840000",
+    )
+
+    assert isinstance(result.data[0], BreadthSnapshot)
+    assert result.next_cursor == "1788036840000"
+    path, params = http.calls[1]
+    assert path == "/v1/hyperliquid/hip3/breadth/above-vwap"
+    assert params is not None
+    assert isinstance(params["start"], int)
+    assert isinstance(params["end"], int)
+    assert params["interval"] == "1h"
+    assert params["limit"] == 1000
+    assert params["cursor"] == "1788036840000"
+
+    with pytest.raises(ValueError, match="1000"):
+        client.breadth.history(limit=1001)
+    with pytest.raises(ValueError, match="interval"):
+        client.breadth.history(interval=cast(Any, "1m"))
+    assert len(http.calls) == 2
+
+
+@pytest.mark.parametrize("interval", ["5m", "15m", "30m", "1h", "4h", "1d"])
+def test_hip3_breadth_accepts_every_served_history_interval(interval: str) -> None:
+    response = {
+        "data": [_breadth_snapshot()],
+        "meta": {"count": 1, "request_id": "breadth-history", "next_cursor": None},
+    }
+    http = FakeHttp(response)
+    client = Hip3Client(cast(HttpClient, http))
+
+    client.breadth.history(interval=cast(Any, interval))
+
+    assert http.calls[0][1] is not None
+    assert http.calls[0][1]["interval"] == interval
+
+
+def test_hip3_breadth_supports_async_methods_and_null_is_not_zero() -> None:
+    empty_snapshot = _breadth_snapshot(value_pct=None)
+    empty_snapshot["coverage_ratio"] = 0.0
+    empty_snapshot["counts"] = {
+        "candidates": 0,
+        "eligible": 0,
+        "above": 0,
+        "at": 0,
+        "below": 0,
+        "excluded_no_session_volume": 0,
+        "excluded_stale_price": 0,
+    }
+    empty_snapshot["namespaces"] = {
+        "eligible": {},
+        "above": {},
+        "at": {},
+        "below": {},
+    }
+    response = {
+        "data": empty_snapshot,
+        "meta": {"count": 1, "request_id": "breadth-empty", "next_cursor": None},
+    }
+    http = FakeHttp(response)
+    client = Hip3Client(cast(HttpClient, http))
+
+    current = asyncio.run(client.breadth.acurrent())
+
+    assert current.value_pct is None
+    assert current.counts.eligible == 0
+
+    response["data"] = [empty_snapshot]
+    history = asyncio.run(
+        client.breadth.ahistory(
+            start=1788033600000,
+            end=1788037200000,
+            cursor="1788036840000",
+        )
+    )
+    assert history.data[0].value_pct is None
+    assert http.calls[-1][1] is not None
+    assert http.calls[-1][1]["cursor"] == "1788036840000"

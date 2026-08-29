@@ -59,6 +59,8 @@ from .types import (
     WsChannel,
     WsConnectionState,
     WsData,
+    WsL4Snapshot,
+    WsL4Batch,
     WsError,
     WsOutcomeSettled,
     WsPong,
@@ -87,6 +89,56 @@ DEFAULT_WS_URL = "wss://api.0xarchive.io/ws"
 DEFAULT_PING_INTERVAL = 30
 DEFAULT_RECONNECT_DELAY = 1.0
 DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
+
+LIGHTER_REPLAY_CHANNELS: frozenset[str] = frozenset(
+    {
+        "lighter_orderbook",
+        "lighter_trades",
+        "lighter_candles",
+        "lighter_open_interest",
+        "lighter_funding",
+        "lighter_l3_orderbook",
+    }
+)
+"""Lighter channels available through historical replay, not live subscription."""
+
+LIGHTER_SUBSCRIPTION_ERROR = (
+    "Lighter WebSocket channels support replay, not live subscriptions. "
+    "Use REST for current data or a replay request for stored history."
+)
+
+CORE_L4_REPLAY_CHANNELS: frozenset[str] = frozenset({"l4_diffs", "l4_orders"})
+"""Hyperliquid core L4 channels whose replay starts with a snapshot."""
+
+L4_LIVE_ONLY_CHANNELS: frozenset[str] = frozenset(
+    {
+        "hip3_l4_diffs",
+        "hip3_l4_orders",
+        "hip4_l4_diffs",
+        "hip4_l4_orders",
+        "spot_l4_diffs",
+        "spot_l4_orders",
+    }
+)
+"""HIP-3, HIP-4, and Hyperliquid Spot L4 channels without replay support."""
+
+L4_LIVE_ONLY_ERROR = (
+    "HIP-3, HIP-4, and Hyperliquid Spot L4 channels support live subscriptions only. "
+    "Use subscribe for current streams."
+)
+
+
+def _validate_historical_l4_channel(channel: WsChannel) -> None:
+    """Reject historical operations for L4 channels that are live-only."""
+    if channel in L4_LIVE_ONLY_CHANNELS:
+        raise ValueError(L4_LIVE_ONLY_ERROR)
+
+
+def _validate_live_subscription(channel: WsChannel) -> None:
+    """Reject live subscriptions for channels that only support replay."""
+    if channel in LIGHTER_REPLAY_CHANNELS:
+        raise ValueError(LIGHTER_SUBSCRIPTION_ERROR)
+
 
 # Server idle timeout is 60 seconds. The SDK sends pings every 30 seconds
 # to keep the connection alive. The websockets library also automatically
@@ -119,7 +171,18 @@ class WsOptions:
 
 
 MessageHandler = Callable[
-    [Union[WsSubscribed, WsUnsubscribed, WsPong, WsError, WsData, WsOutcomeSettled]],
+    [
+        Union[
+            WsSubscribed,
+            WsUnsubscribed,
+            WsPong,
+            WsError,
+            WsData,
+            WsL4Snapshot,
+            WsL4Batch,
+            WsOutcomeSettled,
+        ]
+    ],
     None,
 ]
 OrderbookHandler = Callable[[str, OrderBook], None]
@@ -335,7 +398,7 @@ def _transform_orderbook(coin: str, raw: dict) -> OrderBook:
 
 
 class OxArchiveWs:
-    """WebSocket client for real-time data streaming."""
+    """WebSocket client for supported live data and historical replay."""
 
     def __init__(self, options: WsOptions):
         """Initialize the WebSocket client.
@@ -446,12 +509,17 @@ class OxArchiveWs:
             self._ws = None
 
     def subscribe(self, channel: WsChannel, coin: Optional[str] = None) -> None:
-        """Subscribe to a channel.
+        """Subscribe to a supported live channel.
 
         Args:
             channel: Channel type
             coin: Coin symbol (required for coin-specific channels)
+
+        Raises:
+            ValueError: If ``channel`` is a Lighter channel. Lighter supports
+                replay over WebSocket and current data through REST instead.
         """
+        _validate_live_subscription(channel)
         key = self._subscription_key(channel, coin)
         self._subscriptions.add(key)
 
@@ -459,7 +527,12 @@ class OxArchiveWs:
             asyncio.create_task(self._send_subscribe(channel, coin))
 
     async def subscribe_async(self, channel: WsChannel, coin: Optional[str] = None) -> None:
-        """Subscribe to a channel (async version)."""
+        """Subscribe asynchronously to a supported live channel.
+
+        Lighter channels are replay-only over WebSocket; use REST for current
+        data or :meth:`replay` for stored history.
+        """
+        _validate_live_subscription(channel)
         key = self._subscription_key(channel, coin)
         self._subscriptions.add(key)
 
@@ -658,6 +731,13 @@ class OxArchiveWs:
     ) -> None:
         """Start historical replay with timing preserved.
 
+        Hyperliquid core ``l4_diffs`` and ``l4_orders`` replay as one typed
+        ``l4_snapshot`` followed by ordered ``l4_batch`` messages. HIP-3,
+        HIP-4, and Hyperliquid Spot L4 channels are live-only and are rejected
+        here. All six ``lighter_*`` channels continue to support bounded
+        historical replay and do not support live subscriptions; use Lighter
+        REST for current data.
+
         Args:
             channel: Data channel to replay
             coin: Trading pair (e.g., 'BTC', 'ETH')
@@ -669,8 +749,10 @@ class OxArchiveWs:
 
         Example:
             >>> await ws.replay("orderbook", "BTC", start=time.time()*1000 - 86400000, speed=10)
+            >>> await ws.replay("l4_diffs", "BTC", start=..., speed=10)
             >>> await ws.replay("candles", "BTC", start=..., speed=10, interval="15m")
         """
+        _validate_historical_l4_channel(channel)
         msg = {
             "op": "replay",
             "channel": channel,
@@ -742,6 +824,9 @@ class OxArchiveWs:
             ...     speed=10,
             ... )
         """
+        for channel in channels:
+            _validate_historical_l4_channel(channel)
+
         msg: dict[str, Any] = {
             "op": "replay",
             "channels": channels,
@@ -782,6 +867,7 @@ class OxArchiveWs:
             >>> await ws.stream("orderbook", "ETH", start=..., end=..., batch_size=1000)
             >>> await ws.stream("candles", "BTC", start=..., end=..., interval="1h")
         """
+        _validate_historical_l4_channel(channel)
         msg = {
             "op": "stream",
             "channel": channel,
@@ -832,6 +918,9 @@ class OxArchiveWs:
             ...     batch_size=1000,
             ... )
         """
+        for channel in channels:
+            _validate_historical_l4_channel(channel)
+
         msg: dict[str, Any] = {
             "op": "stream",
             "channels": channels,
@@ -867,20 +956,23 @@ class OxArchiveWs:
     def on_l4_snapshot(self, handler: Callable[[str, str, dict], None]) -> None:
         """Set handler for the initial L4 orderbook snapshot.
 
-        Sent once after subscribing to an ``l4_diffs``-family channel, before
-        the batch stream begins. The callback receives
-        ``(channel, coin, message)`` where ``message`` is the full raw dict:
-        ``message["data"]`` holds the book (``bids``/``asks``),
-        ``message["last_block_number"]`` the block of the last applied diff.
-        Large symbols can be tens of MB of JSON.
+        Both live L4 subscriptions and Hyperliquid core L4 replay emit one
+        ``l4_snapshot`` before any ``l4_batch`` messages. The generic
+        :meth:`on_message` handler receives a typed :class:`WsL4Snapshot`; this
+        dedicated callback keeps the established ``(channel, coin, message)``
+        raw-dict shape. ``message["data"]`` holds the book and
+        ``message["last_block_number"]`` identifies its applied boundary.
         """
         self._on_l4_snapshot = handler
 
     def on_l4_batch(self, handler: Callable[[str, str, list], None]) -> None:
-        """Set handler for batched L4 data (~100ms windows).
+        """Set handler for ordered L4 diff/order batches.
 
-        The callback receives ``(channel, coin, records)`` where each record
-        is one raw diff or order event dict.
+        The generic :meth:`on_message` handler receives a typed
+        :class:`WsL4Batch`; this dedicated callback keeps the established
+        ``(channel, coin, records)`` raw-record shape. Records must be applied
+        in the order received. Live batches are emitted in short windows;
+        replay batches are delivered in server order.
         """
         self._on_l4_batch = handler
 
@@ -1159,21 +1251,22 @@ class OxArchiveWs:
                     liqs = _transform_liquidations(coin, raw_data)
                     self._on_liquidations(coin, liqs)
 
-            # L4 channel frames: initial snapshot then ~100ms batches.
-            # Previously unhandled and silently dropped.
+            # L4 channel frames: an initial snapshot followed by ordered batches.
+            # The generic handler receives typed envelopes; the dedicated handlers
+            # retain their established raw payload callback shapes.
             elif msg_type == "l4_snapshot":
+                msg = WsL4Snapshot.model_validate(data)
+                if self._on_message:
+                    self._on_message(msg)
                 if self._on_l4_snapshot:
-                    self._on_l4_snapshot(
-                        data.get("channel", ""), data.get("coin", ""), data
-                    )
+                    self._on_l4_snapshot(msg.channel, msg.coin, data)
 
             elif msg_type == "l4_batch":
+                msg = WsL4Batch.model_validate(data)
+                if self._on_message:
+                    self._on_message(msg)
                 if self._on_l4_batch:
-                    self._on_l4_batch(
-                        data.get("channel", ""),
-                        data.get("coin", ""),
-                        data.get("data", []),
-                    )
+                    self._on_l4_batch(msg.channel, msg.coin, msg.data)
 
             # Replay messages (Option B)
             elif msg_type == "replay_started" and self._on_replay_start:

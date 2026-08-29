@@ -58,6 +58,9 @@ from .types import (
     SpotPair,
     SpotTwapStatus,
     SpotTableFreshness,
+    BreadthNamespaceCounts,
+    BreadthCounts,
+    BreadthSnapshot,
     FundingRate,
     OpenInterest,
     Liquidation,
@@ -91,6 +94,8 @@ from .types import (
     WsPong,
     WsError,
     WsData,
+    WsL4Snapshot,
+    WsL4Batch,
     # Replay types (Option B)
     WsReplayStarted,
     WsReplayPaused,
@@ -119,7 +124,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.9.0"
+__version__ = "1.9.1"
 
 __all__ = [
     # Client
@@ -159,6 +164,9 @@ __all__ = [
     "SpotPair",
     "SpotTwapStatus",
     "SpotTableFreshness",
+    "BreadthNamespaceCounts",
+    "BreadthCounts",
+    "BreadthSnapshot",
     "LighterGranularity",
     "FundingRate",
     "OpenInterest",
@@ -193,6 +201,8 @@ __all__ = [
     "WsPong",
     "WsError",
     "WsData",
+    "WsL4Snapshot",
+    "WsL4Batch",
     # Replay Types (Option B)
     "WsReplayStarted",
     "WsReplayPaused",
