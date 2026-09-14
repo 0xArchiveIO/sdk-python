@@ -18,6 +18,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Hyperliquid Spot L4 remain live-only.
 
 ### Changed
+
+- Correct Lighter per-fill trade history to the observed global floor of January 17, 2025; exact starts vary by market. This supersedes the August floor documented in the earlier release notes below.
 - Lighter WebSocket channels now support bounded historical replay without
   live subscriptions. Current Lighter data remains available through REST;
   live subscription calls fail fast with guidance to REST or replay.
