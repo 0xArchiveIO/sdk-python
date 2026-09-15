@@ -5,7 +5,7 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.1] - Unreleased
+## [Unreleased]
 
 ### Added
 - HIP-3 breadth above current UTC-session VWAP via
@@ -30,6 +30,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Lighter `funding_rate` is now a fractional, non-annualized rate. Consumers
   that compensated for the former percent units must remove that conversion;
   do not apply a second percent conversion.
+
+## [1.9.1] - 2026-08-31
+
+### Changed
+- Documented the Free plan history window: Free includes every market, route,
+  schema, and served depth, with history limited to the most recent rolling
+  30 days and a maximum 30-day span per request or replay. Build and above
+  keep the full retained archive. Plans gate capacity and Free's 30-day
+  history window, not route families, schemas, or served depth.
 
 ## [1.9.0] - 2026-08-22
 

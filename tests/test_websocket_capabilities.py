@@ -1,10 +1,11 @@
 import asyncio
 import json
 import re
+from typing import Any, cast
 
 import pytest
 
-from oxarchive.types import WsL4Batch, WsL4Snapshot
+from oxarchive.types import WsChannel, WsL4Batch, WsL4Snapshot
 from oxarchive.websocket import (
     LIGHTER_REPLAY_CHANNELS,
     LIGHTER_SUBSCRIPTION_ERROR,
@@ -15,6 +16,7 @@ from oxarchive.websocket import (
 
 @pytest.mark.parametrize("channel", sorted(LIGHTER_REPLAY_CHANNELS))
 def test_lighter_channels_reject_live_subscription_before_state_change(channel: str) -> None:
+    channel = cast(WsChannel, channel)
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
 
     with pytest.raises(ValueError, match=re.escape(LIGHTER_SUBSCRIPTION_ERROR)):
@@ -25,6 +27,7 @@ def test_lighter_channels_reject_live_subscription_before_state_change(channel: 
 
 @pytest.mark.parametrize("channel", sorted(LIGHTER_REPLAY_CHANNELS))
 def test_lighter_channels_reject_async_live_subscription_before_state_change(channel: str) -> None:
+    channel = cast(WsChannel, channel)
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
 
     async def run() -> None:
@@ -37,12 +40,12 @@ def test_lighter_channels_reject_async_live_subscription_before_state_change(cha
 
 def test_lighter_channels_are_allowed_for_bounded_replay() -> None:
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
-    sent: list[dict] = []
+    sent: list[dict[str, Any]] = []
 
-    async def fake_send(message: dict) -> None:
+    async def fake_send(message: dict[str, Any]) -> None:
         sent.append(message)
 
-    ws._send = fake_send  # type: ignore[method-assign]
+    setattr(ws, "_send", fake_send)
 
     asyncio.run(
         ws.replay(
@@ -85,13 +88,14 @@ def test_hyperliquid_live_subscription_remains_allowed() -> None:
     ],
 )
 def test_non_core_l4_channels_remain_live_only_for_replay(channel: str) -> None:
+    channel = cast(WsChannel, channel)
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
-    sent: list[dict] = []
+    sent: list[dict[str, Any]] = []
 
-    async def fake_send(message: dict) -> None:
+    async def fake_send(message: dict[str, Any]) -> None:
         sent.append(message)
 
-    ws._send = fake_send  # type: ignore[method-assign]
+    setattr(ws, "_send", fake_send)
 
     with pytest.raises(ValueError, match="live subscriptions only"):
         asyncio.run(ws.replay(channel, "BTC", start=1_757_000_000_000))
@@ -101,13 +105,14 @@ def test_non_core_l4_channels_remain_live_only_for_replay(channel: str) -> None:
 
 @pytest.mark.parametrize("channel", ["hip3_l4_diffs", "hip4_l4_orders", "spot_l4_diffs"])
 def test_non_core_l4_channels_remain_live_only_for_multi_replay(channel: str) -> None:
+    channel = cast(WsChannel, channel)
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
-    sent: list[dict] = []
+    sent: list[dict[str, Any]] = []
 
-    async def fake_send(message: dict) -> None:
+    async def fake_send(message: dict[str, Any]) -> None:
         sent.append(message)
 
-    ws._send = fake_send  # type: ignore[method-assign]
+    setattr(ws, "_send", fake_send)
 
     with pytest.raises(ValueError, match="live subscriptions only"):
         asyncio.run(ws.multi_replay(["orderbook", channel], "BTC", start=1_757_000_000_000))
@@ -117,12 +122,12 @@ def test_non_core_l4_channels_remain_live_only_for_multi_replay(channel: str) ->
 
 def test_core_l4_replay_command_remains_allowed() -> None:
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
-    sent: list[dict] = []
+    sent: list[dict[str, Any]] = []
 
-    async def fake_send(message: dict) -> None:
+    async def fake_send(message: dict[str, Any]) -> None:
         sent.append(message)
 
-    ws._send = fake_send  # type: ignore[method-assign]
+    setattr(ws, "_send", fake_send)
 
     asyncio.run(
         ws.replay(
@@ -148,8 +153,8 @@ def test_core_l4_replay_command_remains_allowed() -> None:
 def test_l4_replay_frames_are_typed_and_batch_order_is_preserved() -> None:
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
     messages: list[object] = []
-    snapshots: list[dict] = []
-    batches: list[list[dict]] = []
+    snapshots: list[dict[str, Any]] = []
+    batches: list[list[dict[str, Any]]] = []
     ws.on_message(messages.append)
     ws.on_l4_snapshot(lambda _channel, _coin, message: snapshots.append(message))
     ws.on_l4_batch(lambda _channel, _coin, records: batches.append(records))

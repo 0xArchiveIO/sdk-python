@@ -1255,18 +1255,18 @@ class OxArchiveWs:
             # The generic handler receives typed envelopes; the dedicated handlers
             # retain their established raw payload callback shapes.
             elif msg_type == "l4_snapshot":
-                msg = WsL4Snapshot.model_validate(data)
+                snapshot = WsL4Snapshot.model_validate(data)
                 if self._on_message:
-                    self._on_message(msg)
+                    self._on_message(snapshot)
                 if self._on_l4_snapshot:
-                    self._on_l4_snapshot(msg.channel, msg.coin, data)
+                    self._on_l4_snapshot(snapshot.channel, snapshot.coin, data)
 
             elif msg_type == "l4_batch":
-                msg = WsL4Batch.model_validate(data)
+                batch = WsL4Batch.model_validate(data)
                 if self._on_message:
-                    self._on_message(msg)
+                    self._on_message(batch)
                 if self._on_l4_batch:
-                    self._on_l4_batch(msg.channel, msg.coin, msg.data)
+                    self._on_l4_batch(batch.channel, batch.coin, batch.data)
 
             # Replay messages (Option B)
             elif msg_type == "replay_started" and self._on_replay_start:

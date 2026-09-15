@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from ..http import HttpClient
 from ..types import BreadthSnapshot, CursorResponse, Timestamp
@@ -58,7 +58,7 @@ class BreadthResource:
         return None
 
     @staticmethod
-    def _history_response(payload: dict) -> CursorResponse[list[BreadthSnapshot]]:
+    def _history_response(payload: dict[str, Any]) -> CursorResponse[list[BreadthSnapshot]]:
         return CursorResponse(
             data=[BreadthSnapshot.model_validate(item) for item in payload["data"]],
             next_cursor=payload.get("meta", {}).get("next_cursor"),
