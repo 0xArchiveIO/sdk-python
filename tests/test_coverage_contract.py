@@ -35,6 +35,23 @@ class FakeHttp:
         return self.get(path, params)
 
 
+class PathReached(RuntimeError):
+    pass
+
+
+class PathOnlyHttp:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+
+    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.calls.append((path, params))
+        raise PathReached(path)
+
+    async def aget(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.calls.append((path, params))
+        raise PathReached(path)
+
+
 def test_hip4_exposes_candle_history_without_funding() -> None:
     http = FakeHttp()
     client = Hip4Client(cast(HttpClient, http))
@@ -131,6 +148,141 @@ def test_lighter_candles_keep_the_10000_limit_and_opaque_cursor() -> None:
     assert http.calls[0][1] is not None
     assert http.calls[0][1]["cursor"] == "opaque:lighter:candle:page-2"
     assert http.calls[0][1]["limit"] == 10000
+
+
+def test_lighter_candle_symbol_paths_encode_slashes_for_sync_and_async() -> None:
+    http = FakeHttp()
+    client = LighterClient(cast(HttpClient, http))
+
+    client.candles.history(
+        "eth/usdc",
+        start="2025-08-01T00:00:00Z",
+        end="2025-08-01T01:00:00Z",
+    )
+    assert http.calls[-1][0] == "/v1/lighter/candles/ETH%2FUSDC"
+
+    asyncio.run(
+        client.candles.ahistory(
+            "ETH/USDC",
+            start="2025-08-01T00:00:00Z",
+            end="2025-08-01T01:00:00Z",
+        )
+    )
+    assert http.calls[-1][0] == "/v1/lighter/candles/ETH%2FUSDC"
+
+
+def test_lighter_candle_encoding_does_not_change_hip3_paths() -> None:
+    http = FakeHttp()
+    client = Hip3Client(cast(HttpClient, http))
+
+    client.candles.history(
+        "km:US500",
+        start="2026-02-01T00:00:00Z",
+        end="2026-02-01T01:00:00Z",
+    )
+
+    assert http.calls[-1][0] == "/v1/hyperliquid/hip3/candles/km:US500"
+
+
+def test_lighter_symbol_paths_encode_slashes_across_sync_surfaces() -> None:
+    http = PathOnlyHttp()
+    client = LighterClient(cast(HttpClient, http))
+    cases = (
+        (lambda: client.orderbook.get("BTC"), "/v1/lighter/orderbook/BTC"),
+        (lambda: client.orderbook.get("eth/usdc"), "/v1/lighter/orderbook/ETH%2FUSDC"),
+        (lambda: client.trades.recent("ETH"), "/v1/lighter/trades/ETH/recent"),
+        (lambda: client.trades.recent("eth/usdc"), "/v1/lighter/trades/ETH%2FUSDC/recent"),
+        (lambda: client.instruments.get("eth/usdc"), "/v1/lighter/instruments/ETH%2FUSDC"),
+        (
+            lambda: client.funding.current("eth/usdc"),
+            "/v1/lighter/funding/ETH%2FUSDC/current",
+        ),
+        (
+            lambda: client.open_interest.current("eth/usdc"),
+            "/v1/lighter/openinterest/ETH%2FUSDC/current",
+        ),
+        (
+            lambda: client.candles.history(
+                "eth/usdc",
+                start="2025-08-01T00:00:00Z",
+                end="2025-08-01T01:00:00Z",
+            ),
+            "/v1/lighter/candles/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.l3_orderbook.get("eth/usdc"),
+            "/v1/lighter/l3orderbook/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.get_freshness("eth/usdc"),
+            "/v1/lighter/freshness/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.get_summary("eth/usdc"),
+            "/v1/lighter/summary/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.get_price_history("eth/usdc"),
+            "/v1/lighter/prices/ETH%2FUSDC",
+        ),
+    )
+
+    for invoke, expected_path in cases:
+        with pytest.raises(PathReached):
+            invoke()
+        assert http.calls[-1][0] == expected_path
+
+
+def test_lighter_symbol_paths_encode_slashes_across_async_surfaces() -> None:
+    http = PathOnlyHttp()
+    client = LighterClient(cast(HttpClient, http))
+    cases = (
+        (lambda: client.orderbook.aget("BTC"), "/v1/lighter/orderbook/BTC"),
+        (lambda: client.orderbook.aget("eth/usdc"), "/v1/lighter/orderbook/ETH%2FUSDC"),
+        (lambda: client.trades.arecent("ETH"), "/v1/lighter/trades/ETH/recent"),
+        (lambda: client.trades.arecent("eth/usdc"), "/v1/lighter/trades/ETH%2FUSDC/recent"),
+        (
+            lambda: client.instruments.aget("eth/usdc"),
+            "/v1/lighter/instruments/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.funding.acurrent("eth/usdc"),
+            "/v1/lighter/funding/ETH%2FUSDC/current",
+        ),
+        (
+            lambda: client.open_interest.acurrent("eth/usdc"),
+            "/v1/lighter/openinterest/ETH%2FUSDC/current",
+        ),
+        (
+            lambda: client.candles.ahistory(
+                "eth/usdc",
+                start="2025-08-01T00:00:00Z",
+                end="2025-08-01T01:00:00Z",
+            ),
+            "/v1/lighter/candles/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.l3_orderbook.aget("eth/usdc"),
+            "/v1/lighter/l3orderbook/ETH%2FUSDC",
+        ),
+        (
+            lambda: client.aget_freshness("eth/usdc"),
+            "/v1/lighter/freshness/ETH%2FUSDC",
+        ),
+        (lambda: client.aget_summary("eth/usdc"), "/v1/lighter/summary/ETH%2FUSDC"),
+        (
+            lambda: client.aget_price_history("eth/usdc"),
+            "/v1/lighter/prices/ETH%2FUSDC",
+        ),
+    )
+
+    async def run_cases() -> None:
+        for invoke, expected_path in cases:
+            with pytest.raises(PathReached):
+                await invoke()
+            assert http.calls[-1][0] == expected_path
+
+    asyncio.run(run_cases())
 
 
 def test_hip4_open_interest_uses_the_family_model_on_history_and_current() -> None:

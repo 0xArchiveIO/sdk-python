@@ -521,6 +521,11 @@ def _hip4_encode(symbol: str | int) -> str:
     return quote(symbol_text, safe="")
 
 
+def _lighter_encode(symbol: str) -> str:
+    """Uppercase and URL-encode a Lighter symbol path segment."""
+    return quote(symbol.upper(), safe="")
+
+
 class Hip4Client:
     """
     HIP-4 outcome markets client.
@@ -881,25 +886,27 @@ class LighterClient:
         self._http = http
         base_path = "/v1/lighter"
 
-        self.orderbook = OrderBookResource(http, base_path)
+        self.orderbook = OrderBookResource(http, base_path, coin_transform=_lighter_encode)
         """Order book data (L2 snapshots)"""
 
-        self.trades = TradesResource(http, base_path)
+        self.trades = TradesResource(http, base_path, coin_transform=_lighter_encode)
         """Trade/fill history"""
 
-        self.instruments = LighterInstrumentsResource(http, base_path)
+        self.instruments = LighterInstrumentsResource(
+            http, base_path, coin_transform=_lighter_encode
+        )
         """Trading instruments metadata (returns LighterInstrument with fees, min amounts, etc.)"""
 
-        self.funding = FundingResource(http, base_path)
+        self.funding = FundingResource(http, base_path, coin_transform=_lighter_encode)
         """Funding rates"""
 
-        self.open_interest = OpenInterestResource(http, base_path)
+        self.open_interest = OpenInterestResource(http, base_path, coin_transform=_lighter_encode)
         """Open interest"""
 
-        self.candles = CandlesResource(http, base_path)
+        self.candles = CandlesResource(http, base_path, coin_transform=_lighter_encode)
         """OHLCV candle data"""
 
-        self.l3_orderbook = L3OrderBookResource(http, base_path)
+        self.l3_orderbook = L3OrderBookResource(http, base_path, coin_transform=_lighter_encode)
         """L3 individual order-level orderbook data"""
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
@@ -929,13 +936,13 @@ class LighterClient:
             CoinFreshness with per-data-type lag information
         """
         symbol = _resolve_symbol(symbol, kwargs)
-        data = self._http.get(f"/v1/lighter/freshness/{symbol.upper()}")
+        data = self._http.get(f"/v1/lighter/freshness/{_lighter_encode(symbol)}")
         return CoinFreshness.model_validate(data["data"])
 
     async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
         symbol = _resolve_symbol(symbol, kwargs)
-        data = await self._http.aget(f"/v1/lighter/freshness/{symbol.upper()}")
+        data = await self._http.aget(f"/v1/lighter/freshness/{_lighter_encode(symbol)}")
         return CoinFreshness.model_validate(data["data"])
 
     def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
@@ -949,13 +956,13 @@ class LighterClient:
             CoinSummary with all market metrics
         """
         symbol = _resolve_symbol(symbol, kwargs)
-        data = self._http.get(f"/v1/lighter/summary/{symbol.upper()}")
+        data = self._http.get(f"/v1/lighter/summary/{_lighter_encode(symbol)}")
         return CoinSummary.model_validate(data["data"])
 
     async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
         symbol = _resolve_symbol(symbol, kwargs)
-        data = await self._http.aget(f"/v1/lighter/summary/{symbol.upper()}")
+        data = await self._http.aget(f"/v1/lighter/summary/{_lighter_encode(symbol)}")
         return CoinSummary.model_validate(data["data"])
 
     def get_price_history(
@@ -992,7 +999,7 @@ class LighterClient:
             "cursor": cursor,
         }
         data = self._http.get(
-            f"/v1/lighter/prices/{symbol.upper()}",
+            f"/v1/lighter/prices/{_lighter_encode(symbol)}",
             params=params,
         )
         return CursorResponse(
@@ -1021,7 +1028,7 @@ class LighterClient:
             "cursor": cursor,
         }
         data = await self._http.aget(
-            f"/v1/lighter/prices/{symbol.upper()}",
+            f"/v1/lighter/prices/{_lighter_encode(symbol)}",
             params=params,
         )
         return CursorResponse(
