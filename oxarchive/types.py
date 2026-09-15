@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Generic, Literal, Optional, TypeVar, Union
 
 from pydantic import BaseModel, Field
@@ -578,6 +578,81 @@ class LighterInstrument(BaseModel):
 
 
 # =============================================================================
+# HIP-3 Market Breadth Types
+# =============================================================================
+
+
+class BreadthNamespaceCounts(BaseModel):
+    """Per-builder-namespace counts for a HIP-3 breadth snapshot."""
+
+    eligible: dict[str, int]
+    """Eligible instruments by builder namespace."""
+
+    above: dict[str, int]
+    """Eligible instruments trading above session VWAP by namespace."""
+
+    at: dict[str, int]
+    """Eligible instruments exactly at session VWAP by namespace."""
+
+    below: dict[str, int]
+    """Eligible instruments trading below session VWAP by namespace."""
+
+
+class BreadthCounts(BaseModel):
+    """Auditable aggregate counts for a HIP-3 breadth snapshot."""
+
+    candidates: int
+    """Full HIP-3 candidate universe at calculation time."""
+
+    eligible: int
+    """Candidates with a usable completed candle and session volume."""
+
+    above: int
+    """Eligible instruments above session VWAP."""
+
+    at: int
+    """Eligible instruments whose close equals session VWAP."""
+
+    below: int
+    """Eligible instruments below session VWAP."""
+
+    excluded_no_session_volume: int
+    """Candidates excluded because they have no session volume."""
+
+    excluded_stale_price: int
+    """Candidates excluded because their completed candle is over five minutes old."""
+
+
+class BreadthSnapshot(BaseModel):
+    """Validated HIP-3 percent-above-session-VWAP market snapshot.
+
+    Snapshots use the current UTC session and the close of the most recently
+    completed one-minute candle. ``value_pct`` is unavailable (``None``), not
+    zero, when no instrument is eligible. The API stores one-minute snapshots
+    beginning on 2026-08-28 and downsamples history with the last snapshot in
+    each requested interval bucket.
+    """
+
+    session_date: date
+    """UTC calendar date for the session."""
+
+    calculated_at: datetime
+    """Job timestamp; the newest included candle closed at this minute."""
+
+    value_pct: Optional[float]
+    """100 * above / eligible, or ``None`` when eligible is zero."""
+
+    coverage_ratio: float
+    """Eligible divided by candidates, from 0 to 1."""
+
+    counts: BreadthCounts
+    """Aggregate counts whose invariants are enforced by the producer."""
+
+    namespaces: BreadthNamespaceCounts
+    """Per-builder-namespace breakdowns for the aggregate counts."""
+
+
+# =============================================================================
 # Funding Types
 # =============================================================================
 
@@ -592,7 +667,11 @@ class FundingRate(BaseModel):
     """Funding timestamp (UTC)."""
 
     funding_rate: str
-    """Funding rate as decimal (e.g., 0.0001 = 0.01%)."""
+    """Fractional, non-annualized funding rate (e.g., 0.0001 = 0.01%).
+
+    Lighter uses this fractional unit as a breaking normalization from its
+    former percent representation; do not apply a second percent conversion.
+    """
 
     premium: Optional[str] = None
     """Premium component of funding rate."""
@@ -745,7 +824,7 @@ class LiquidationLevels(BaseModel):
     """Projected forced-liquidation levels for one snapshot.
 
     Computed from clearinghouse positions and margin state, bucketed around
-    the snapshot mark price. Snapshots refresh roughly every 45 minutes;
+    the snapshot mark price. Snapshots refresh approximately every five minutes;
     ``snapshot_ts`` identifies the snapshot served.
     """
 
@@ -1016,14 +1095,17 @@ Notes:
   Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
 - open_interest, funding, lighter_open_interest, lighter_funding,
   hip3_open_interest, hip3_funding are historical only (replay/stream).
-- l4_diffs, l4_orders: Hyperliquid L4 order-level data (realtime only).
-- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (realtime only).
+- all six ``lighter_*`` channels support historical replay, not live
+  subscriptions. Use Lighter REST for current data.
+- l4_diffs, l4_orders: Hyperliquid core L4 order-level data. Historical replay
+  emits one ``l4_snapshot`` followed by ordered ``l4_batch`` messages.
+- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (live-only).
 - hip4_trades: HIP-4 outcome-market fills (realtime + replay).
 - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused.
-- hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (realtime only).
+- hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (live-only).
 - HIP-4 has no funding or liquidation channels. Candles are served through REST.
 - spot_orderbook, spot_trades, spot_twap: Hyperliquid spot (realtime).
-- spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (realtime only).
+- spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (live-only).
 - Spot has no funding / open interest / liquidations WebSocket channels.
   Candle history is REST-only; subscribe to the supported ``spot_*`` realtime
   channels for live spot streams.
@@ -1074,6 +1156,38 @@ class WsData(BaseModel):
     channel: WsChannel
     coin: str
     data: Union[dict[str, Any], list[dict[str, Any]]]
+
+
+class WsL4Snapshot(BaseModel):
+    """Initial L4 orderbook state for a live stream or core replay."""
+
+    type: Literal["l4_snapshot"]
+    channel: WsChannel
+    coin: str
+    symbol: str
+    """Canonical wire symbol for the L4 stream."""
+
+    last_block_number: int
+    """Highest block applied to this snapshot."""
+
+    timestamp: int
+    """Snapshot timestamp in Unix milliseconds."""
+
+    data: dict[str, Any]
+    """Full L4 book state."""
+
+
+class WsL4Batch(BaseModel):
+    """Ordered L4 diff/order events following an ``l4_snapshot``."""
+
+    type: Literal["l4_batch"]
+    channel: WsChannel
+    coin: str
+    symbol: str
+    """Canonical wire symbol for the L4 stream."""
+
+    data: list[dict[str, Any]]
+    """Events in server order; each event carries its own block/sequence data."""
 
 
 # =============================================================================

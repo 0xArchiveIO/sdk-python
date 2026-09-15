@@ -111,7 +111,8 @@ class Client:
         TWAP, and orders live from 2026-05-05. No funding, OI, or liquidations."""
 
         self.lighter = LighterClient(self._http)
-        """Lighter.xyz exchange data (August 2025+)"""
+        """Lighter.xyz exchange data. Trade history begins January 17, 2025;
+        exact starts vary by market and data type."""
 
         # Data quality monitoring (cross-exchange)
         self.data_quality = DataQualityResource(self._http)

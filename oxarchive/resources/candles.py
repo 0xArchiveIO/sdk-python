@@ -80,9 +80,10 @@ class CandlesResource:
             start: Start timestamp (required)
             end: End timestamp (required)
             interval: Candle interval (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w). Default: 1h
-            cursor: Opaque cursor string from the previous response's next_cursor
+            cursor: Numeric timestamp string returned as the previous response's
+                next_cursor; pass it back unchanged
             limit: Maximum number of results (default: 100, max: 10000 for
-                Hyperliquid core and Lighter candles; HIP-3, HIP-4, and Spot
+                Hyperliquid core, HIP-3, and Lighter candles; HIP-4 and Spot
                 have a max of 1000)
 
         Returns:
@@ -164,7 +165,7 @@ class CandlesResource:
 
 
 class Hip3CandlesResource(CandlesResource):
-    """HIP-3 OHLCV candles with a 1,000-row page cap."""
+    """HIP-3 OHLCV candles with a 10,000-row page cap."""
 
     def __init__(
         self,
@@ -173,7 +174,7 @@ class Hip3CandlesResource(CandlesResource):
         coin_transform=lambda coin: coin,
     ):
         super().__init__(http, base_path, coin_transform)
-        self._max_limit = 1000
+        self._max_limit = 10000
         self._limit_label = "HIP-3 candles"
 
 
