@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Callable
 from urllib.parse import quote
 
 from ..http import HttpClient
@@ -86,9 +87,15 @@ class LighterInstrumentsResource:
         >>> print(f"Taker fee: {btc.taker_fee}")
     """
 
-    def __init__(self, http: HttpClient, base_path: str = "/v1/lighter"):
+    def __init__(
+        self,
+        http: HttpClient,
+        base_path: str = "/v1/lighter",
+        coin_transform: Callable[[str], str] = str.upper,
+    ) -> None:
         self._http = http
         self._base_path = base_path
+        self._coin_transform = coin_transform
 
     def list(self) -> list[LighterInstrument]:
         """
@@ -115,12 +122,14 @@ class LighterInstrumentsResource:
         Returns:
             Lighter instrument details with full market configuration
         """
-        data = self._http.get(f"{self._base_path}/instruments/{coin.upper()}")
+        data = self._http.get(f"{self._base_path}/instruments/{self._coin_transform(coin)}")
         return LighterInstrument.model_validate(data["data"])
 
     async def aget(self, coin: str) -> LighterInstrument:
         """Async version of get()."""
-        data = await self._http.aget(f"{self._base_path}/instruments/{coin.upper()}")
+        data = await self._http.aget(
+            f"{self._base_path}/instruments/{self._coin_transform(coin)}"
+        )
         return LighterInstrument.model_validate(data["data"])
 
 
