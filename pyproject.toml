@@ -55,6 +55,19 @@ Issues = "https://github.com/0xArchiveIO/sdk-python/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["oxarchive"]
 
+# The wheel is scoped to the package, but the sdist had no scope at all, so
+# hatchling swept in every non-gitignored file in the directory. That published
+# an agent working directory, and with it a copy of the private backend, inside
+# oxarchive 1.8.0's sdist. List what ships instead of trusting the default.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/oxarchive",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/pyproject.toml",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py39"

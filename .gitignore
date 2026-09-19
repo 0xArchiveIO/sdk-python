@@ -76,3 +76,8 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent working directories. These are not source and must never be packaged;
+# an unscoped sdist published one to PyPI once already.
+.claude/
+.codex/
