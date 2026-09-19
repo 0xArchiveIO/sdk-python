@@ -1,0 +1,31 @@
+name: Package contents
+
+# The sdist once shipped an entire agent working directory because it had no
+# include list and the build backend defaults to "everything not ignored".
+# This fails the build if anything outside the package ever ships again.
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  sdist-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build
+      - name: Plant a stray directory the way an agent would
+        run: mkdir -p .claude/worktrees/probe && echo leak > .claude/worktrees/probe/leak.rs
+      - run: python -m build --sdist --outdir dist-check
+      - name: The sdist must contain only the package and its metadata
+        run: |
+          set -euo pipefail
+          tar tzf dist-check/*.tar.gz | sed 's|^[^/]*/||' | grep -v '^$' \
+            | awk -F/ '{print $1}' | sort -u > /tmp/top.txt
+          echo "top-level entries in the sdist:"; cat /tmp/top.txt
+          if grep -qE '^\.claude|^\.codex|^backend|^crates|^migrations' /tmp/top.txt; then
+            echo "::error::the sdist contains files from outside the package"; exit 1
+          fi
