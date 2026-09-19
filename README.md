@@ -169,7 +169,7 @@ hip3_ob = await client.hyperliquid.hip3.orderbook.aget("km:US500")
 
 The `depth` parameter controls how many price levels are returned per side. Full orderbook depth is available on every tier.
 
-**Note:** Hyperliquid L2 source data contains ~20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth. Depth limits apply to L2 snapshot endpoints only — L4 and L2 diff endpoints return full data.
+**Note:** Hyperliquid L2 source data contains ~20 levels. Full-depth L2 (derived from L4) and Lighter.xyz provide full depth. Depth limits apply to L2 snapshot endpoints only. L4 and L2 diff endpoints return full data.
 
 #### Lighter Orderbook Granularity
 
@@ -695,10 +695,10 @@ print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
 print(f"  Long: ${summary.long_liquidation_volume_24h}")
 print(f"  Short: ${summary.short_liquidation_volume_24h}")
 
-# Lighter.xyz (price, funding, OI — no volume/liquidation data)
+# Lighter.xyz (price, funding, OI; no volume/liquidation data)
 lighter_summary = client.lighter.get_summary("BTC")
 
-# HIP-3 (includes mid_price — case-sensitive coins)
+# HIP-3 (includes mid_price; case-sensitive coins)
 hip3_summary = client.hyperliquid.hip3.get_summary("km:US500")
 print(f"Mid price: {hip3_summary.mid_price}")
 
@@ -1179,6 +1179,325 @@ print(sub.api_key, sub.tier, sub.expires_at)
 keys = client.web3.list_keys(message=challenge.message, signature=signature)
 client.web3.revoke_key(message=challenge.message, signature=signature, key_id=keys.keys[0].id)
 ```
+
+### Webhooks
+
+Push delivery of market and account events. Instead of polling a route on a
+timer, register a URL and 0xArchive posts to it when something happens.
+
+Three objects, in the order you create them:
+
+1. An **endpoint** is a URL 0xArchive posts to. Creating one returns a signing
+   secret, shown once.
+2. A **subscription** is a rule: one event type, on one endpoint, with optional
+   filters, parameters, and conditions.
+3. A **watched address** is a wallet you own or follow. Event types scoped to
+   `addresses` only fire on wallets you have added.
+
+```python
+# 1. Somewhere to deliver
+endpoint = client.webhooks.create_endpoint(
+    "https://example.com/hooks/0xarchive",
+    description="prod receiver",
+)
+store_secret(endpoint.secret)  # shown ONCE, never returned again
+
+# 2. Size the rule before you turn it on
+estimate = client.webhooks.estimate(
+    "market.liquidation",
+    config={"venue": "hyperliquid", "min_notional_usd": 250_000},
+    lookback_days=7,
+)
+print(f"median {estimate.per_day_p50:.0f} deliveries a day, worst day {estimate.per_day_max}")
+
+# 3. Turn it on
+sub = client.webhooks.create_subscription(
+    endpoint_id=endpoint.id,
+    event_type="market.liquidation",
+    config={"venue": "hyperliquid", "min_notional_usd": 250_000},
+)
+
+# 4. Fire a real signed test delivery at your receiver
+client.webhooks.test_endpoint(endpoint.id)
+```
+
+#### Plan limits
+
+Webhook **delivery** is a paid feature. Free plans hold no endpoints, no
+subscriptions, no watched wallets, and receive no deliveries.
+
+| Plan | Endpoints | Subscriptions | Watched wallets | Deliveries per day |
+| --- | --- | --- | --- | --- |
+| Free | 0 | 0 | 0 | 0 |
+| Build | 1 | 8 | 2 | 5,000 |
+| Pro | 4 | 40 | 15 | 50,000 |
+| Scale | 12 | 200 | 50 | 500,000 |
+| Enterprise | negotiated | negotiated | negotiated | negotiated |
+
+Free still gets `estimate()` and `dry_run()`. You can design a rule, see
+exactly which historical occurrences it would have delivered and how often it
+would have fired, and decide whether it is worth a plan, before there is
+anywhere to deliver it to. Only delivery is gated.
+
+One consequence worth knowing before you try it: event types whose `scope` is
+`addresses` preview against your watched wallets, so previewing one needs at
+least one watched wallet. Plans that allow no watched wallets can preview the
+`public` types but not the `addresses` types.
+
+If an account exceeds its deliveries-per-day allowance, the offending
+subscription is **paused and says so**, rather than events being dropped
+without a signal. A paused subscriber recovers the gap by querying the REST
+archive over the paused interval for the same event type and filters; nothing
+is queued up and replayed at you later. The pause state is reported on the
+subscription record; those field names are still settling, so this SDK does not
+bind types to them yet and passes them through untouched on
+`list_subscriptions()`.
+
+#### Event types
+
+The catalog is the only place event types are declared. Read the filters,
+parameters, metrics, and operators from it rather than hardcoding them.
+
+```python
+for t in client.webhooks.event_types():
+    if t.live:
+        print(t.type, t.scope, t.latency_class, t.description)
+```
+
+`scope` says what a type fires on:
+
+| Scope | Fires on | Needs |
+| --- | --- | --- |
+| `public` | Venue-wide activity | Nothing extra |
+| `addresses` | Your watched wallets | At least one watched wallet |
+| `user` | Your own account | Nothing extra |
+
+A type whose `live` is `False` is published but not yet subscribable.
+
+#### Conditions, filters, and parameters
+
+A subscription's `config` is validated against the event's declaration, and
+nothing is silently ignored: an undeclared key, an operator that does not apply
+to a metric, or a parameter outside its bounds is refused with the declaration
+in the error message. Declared parameter defaults are filled in server-side, so
+what comes back is more complete than what you sent.
+
+```python
+# Watch the wallet first. Address-scoped rules can only filter on watched wallets.
+client.webhooks.add_address("0x00000000000000000000000000000000000000a1", label="desk 1")
+
+sub = client.webhooks.create_subscription(
+    endpoint_id=endpoint.id,
+    event_type="account.fill",
+    config={
+        "addresses": ["0x00000000000000000000000000000000000000a1"],
+        "conditions": [
+            {"metric": "notional_usd", "op": ">=", "value": 25_000},
+            {"metric": "side", "op": "in", "value": ["buy"]},
+        ],
+    },
+)
+
+# Retune in place. config REPLACES the stored config, so send the whole object.
+client.webhooks.update_subscription(sub.id, config={"addresses": [...], "conditions": [...]})
+
+# Or just switch it off without losing the rule
+client.webhooks.update_subscription(sub.id, enabled=False)
+```
+
+Operators are grouped by metric type and accept symbol spellings (`>=`, `<`,
+`!=`) as well as canonical names (`greater_than_or_equal`, `less_than`,
+`not_equal`). The catalog's `operators` map is authoritative.
+
+#### Previewing a rule
+
+`dry_run()` answers "which recent occurrences would this have delivered?".
+`estimate()` answers "how often would it have fired?". Both validate `config`
+exactly as `create_subscription()` does, so a config that previews cleanly will
+subscribe cleanly. Neither writes anything. Both are available on every plan.
+
+```python
+# Which ones, over a recent window (60s to 24h, default 1h)
+preview = client.webhooks.dry_run(
+    "market.liquidation",
+    {"venue": "hyperliquid", "min_notional_usd": 500_000},
+    lookback_s=86_400,
+)
+print(f"{preview.matched} matched between {preview.window.from_} and {preview.window.to}")
+for occ in preview.occurrences[:5]:
+    print(occ.observed_at_estimate, occ.data)
+
+# How often, over 1 to 30 days (default 7)
+est = client.webhooks.estimate("market.liquidation_burst", lookback_days=14)
+print(f"{est.total} over {est.days} days, median {est.per_day_p50:.0f}/day")
+
+# And what a different threshold would have cost you
+for rung in est.ladder:
+    print(f"  at {rung.value:,.0f}: {rung.per_day:.1f}/day")
+```
+
+Dry-runs and estimates share a budget of 6 per minute per account. Not every
+live event type is previewable yet; the error names the ones that are.
+
+#### Verifying deliveries
+
+Every delivery is signed with HMAC-SHA256. Verify it, or anyone who learns your
+URL can post whatever they like to it.
+
+The one rule that matters: **verify the raw request body**, before any JSON
+parser touches it. The body 0xArchive sends is rendered by PostgreSQL, so its
+key order and spacing match neither the emitter's field order nor any JSON
+library's default output. Re-serialising a parsed dict produces different bytes
+and the signature will never match.
+
+```python
+from oxarchive import WebhookVerifier, WebhookSignatureError
+
+verifier = WebhookVerifier(os.environ["OXARCHIVE_WEBHOOK_SECRET"])
+
+# Flask
+@app.post("/webhooks/0xarchive")
+def receive():
+    try:
+        event = verifier.verify(request.get_data(), request.headers)
+    except WebhookSignatureError as e:
+        # Never 5xx a bad signature: that replays the same bad delivery at
+        # you for 24 hours.
+        app.logger.warning("rejected webhook: %s", e.reason)
+        return "", 400
+
+    if already_seen(event.id):   # delivery is at-least-once
+        return "", 200
+    enqueue(event.payload)       # do the real work out of band
+    return "", 200
+```
+
+| Framework | Raw body |
+| --- | --- |
+| Flask | `request.get_data()` |
+| FastAPI / Starlette | `await request.body()` |
+| Django | `request.body` |
+| Next.js route handlers | `await req.text()`, body parser disabled |
+
+Not `request.get_json()`, not a parsed Pydantic model, not `request.POST`. Any
+proxy or gateway in front of the receiver that pretty-prints, minifies, or
+re-encodes JSON also breaks verification: verify before that layer or turn it
+off.
+
+Deliveries carry four headers:
+
+| Header | Meaning |
+| --- | --- |
+| `0xa-signature` | `t=<unix seconds>,v1=<hex>` and, mid-rotation, a second `v1=` |
+| `0xa-event-id` | Event UUID. **Deduplicate on this.** Stable across retries and manual redelivery |
+| `0xa-event-type` | The event type, for example `account.fill` |
+| `content-type` | Always `application/json` |
+
+Only the timestamp and the body are signed. The event id, the event type, the
+destination URL, and every other header are not, so the replay window plus
+deduplication on `0xa-event-id` is the whole of the defence. Serve the receiver
+over HTTPS.
+
+The verifier enforces a 5-minute replay window by default. 0xArchive re-signs
+with a fresh timestamp on every attempt, so a legitimate delivery is never stale
+by more than network and clock skew:
+
+```python
+verifier = WebhookVerifier(secret, tolerance_seconds=120)  # tighten it if you like
+```
+
+A functional entry point is available if you do not want to hold state:
+
+```python
+from oxarchive import verify_webhook
+
+event = verify_webhook(raw_body_bytes, headers, secret)
+```
+
+#### Rotating a secret
+
+`rotate_secret()` issues a new secret and keeps the previous one valid for 24
+hours. During the overlap every delivery carries **two** `v1=` signatures, one
+under each secret, so a receiver holding either keeps verifying. That is what
+makes a zero-downtime roll possible.
+
+```python
+rotated = client.webhooks.rotate_secret(endpoint.id)
+
+verifier.add_secret(rotated.secret)   # now accepts both
+deploy()                              # ship the new secret to every replica
+verifier.remove_secret(old_secret)    # before the 24 hours are up
+```
+
+Two constraints the server imposes:
+
+- Only **one** previous secret is carried. Rotating twice inside the window
+  overwrites it, and the original stops verifying immediately.
+- The window is measured server-side. A receiver cannot extend it.
+
+If you write your own verifier instead of using this one, parse **every** `v1=`
+value in the header, not just the first. A verifier that reads only the first
+works fine until the day someone rotates, then fails intermittently for 24
+hours and nowhere else.
+
+#### Retries and failures
+
+| Behaviour | Detail |
+| --- | --- |
+| Success | HTTP 200 to 299 only. A 301 or 302 counts as a failure; redirects are not followed |
+| Timeout | 10 seconds. Acknowledge immediately and process asynchronously |
+| Retry ladder | 5s, 30s, 2m, 10m, 1h, then hourly, capped at 24 hours |
+| Auto-disable | After 10 consecutive failures spanning at least 6 hours |
+| Recovery | `client.webhooks.enable_endpoint(endpoint_id)` |
+
+```python
+# What actually happened
+for d in client.webhooks.deliveries(endpoint.id, limit=100):
+    print(d.event_type, d.state, d.attempts, d.last_status_code, d.last_error)
+
+# Send one again after fixing the receiver. The event id is unchanged, so a
+# receiver that already processed it will dedupe it away.
+client.webhooks.redeliver(delivery_id)
+```
+
+#### Watched addresses
+
+```python
+client.webhooks.add_address("0x00000000000000000000000000000000000000a1", label="desk 1")
+watched = client.webhooks.list_addresses()
+client.webhooks.delete_address(watched[0].id)
+```
+
+Re-adding a wallet already on the list is idempotent and does not consume
+another slot. Bridge system addresses are refused: they are a counterparty to
+every bridge move of their token, not an account.
+
+#### Every webhook method
+
+| Method | Route |
+| --- | --- |
+| `event_types()` | `GET /v1/webhooks/event-types` |
+| `list_endpoints()` | `GET /v1/webhooks/endpoints` |
+| `create_endpoint()` | `POST /v1/webhooks/endpoints` |
+| `delete_endpoint()` | `DELETE /v1/webhooks/endpoints/{id}` |
+| `rotate_secret()` | `POST /v1/webhooks/endpoints/{id}/rotate` |
+| `enable_endpoint()` | `POST /v1/webhooks/endpoints/{id}/enable` |
+| `test_endpoint()` | `POST /v1/webhooks/endpoints/{id}/test` |
+| `deliveries()` | `GET /v1/webhooks/endpoints/{id}/deliveries` |
+| `redeliver()` | `POST /v1/webhooks/deliveries/{id}/redeliver` |
+| `list_subscriptions()` | `GET /v1/webhooks/subscriptions` |
+| `create_subscription()` | `POST /v1/webhooks/subscriptions` |
+| `update_subscription()` | `PATCH /v1/webhooks/subscriptions/{id}` |
+| `delete_subscription()` | `DELETE /v1/webhooks/subscriptions/{id}` |
+| `dry_run()` | `POST /v1/webhooks/subscriptions/dry-run` |
+| `estimate()` | `POST /v1/webhooks/subscriptions/estimate` |
+| `list_addresses()` | `GET /v1/webhooks/addresses` |
+| `add_address()` | `POST /v1/webhooks/addresses` |
+| `delete_address()` | `DELETE /v1/webhooks/addresses/{id}` |
+
+Every method has an async version prefixed with `a`: `await
+client.webhooks.aestimate(...)`, `await client.webhooks.acreate_endpoint(...)`,
+and so on.
 
 ### Legacy API (Deprecated)
 

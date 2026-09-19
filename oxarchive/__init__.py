@@ -28,6 +28,10 @@ Example:
     >>>
     >>> # Get historical snapshots
     >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
+    >>>
+    >>> # Webhooks: size a rule, then subscribe to it
+    >>> estimate = client.webhooks.estimate("market.liquidation")
+    >>> event_types = client.webhooks.event_types()
 """
 
 from .client import Client
@@ -43,6 +47,19 @@ from .orderbook_reconstructor import (
     reconstruct_final,
 )
 from .l4_reconstructor import L4OrderBookReconstructor, L4Order, L2Level
+from .webhook_signature import (
+    DEFAULT_TOLERANCE_SECONDS,
+    EVENT_ID_HEADER,
+    EVENT_TYPE_HEADER,
+    SIGNATURE_HEADER,
+    WebhookEvent,
+    WebhookSignature,
+    WebhookSignatureError,
+    WebhookVerifier,
+    parse_signature_header,
+    verify_webhook,
+    verify_webhook_signature,
+)
 from .types import (
     OrderBook,
     Trade,
@@ -74,6 +91,23 @@ from .types import (
     Candle,
     CandleInterval,
     OxArchiveError,
+    # Webhook types
+    WebhookDayCount,
+    WebhookDelivery,
+    WebhookDistribution,
+    WebhookDryRun,
+    WebhookEndpoint,
+    WebhookEstimate,
+    WebhookEstimateBasis,
+    WebhookEventTypeDeclaration,
+    WebhookLadderRung,
+    WebhookOccurrence,
+    WebhookRedelivery,
+    WebhookSecret,
+    WebhookSubscription,
+    WebhookTestResult,
+    WebhookWatchedAddress,
+    WebhookWindow,
     # Web3 Auth types
     SiweChallenge,
     Web3SignupResult,
@@ -176,6 +210,35 @@ __all__ = [
     "Candle",
     "CandleInterval",
     "OxArchiveError",
+    # Webhook Signature Verification
+    "WebhookVerifier",
+    "WebhookEvent",
+    "WebhookSignature",
+    "WebhookSignatureError",
+    "verify_webhook",
+    "verify_webhook_signature",
+    "parse_signature_header",
+    "SIGNATURE_HEADER",
+    "EVENT_ID_HEADER",
+    "EVENT_TYPE_HEADER",
+    "DEFAULT_TOLERANCE_SECONDS",
+    # Webhook Types
+    "WebhookEventTypeDeclaration",
+    "WebhookEndpoint",
+    "WebhookSecret",
+    "WebhookSubscription",
+    "WebhookDelivery",
+    "WebhookTestResult",
+    "WebhookRedelivery",
+    "WebhookWatchedAddress",
+    "WebhookWindow",
+    "WebhookOccurrence",
+    "WebhookDryRun",
+    "WebhookDayCount",
+    "WebhookLadderRung",
+    "WebhookDistribution",
+    "WebhookEstimateBasis",
+    "WebhookEstimate",
     # Web3 Auth Types
     "SiweChallenge",
     "Web3SignupResult",

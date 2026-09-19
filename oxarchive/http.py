@@ -158,3 +158,60 @@ class HttpClient:
         except httpx.HTTPError as e:
             raise OxArchiveError(f"Network error: {e}", 0) from e
         return self._handle_response(response)
+
+    def patch(
+        self,
+        path: str,
+        json: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Make a synchronous PATCH request."""
+        try:
+            response = self.client.patch(path, json=json)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
+        return self._handle_response(response)
+
+    async def apatch(
+        self,
+        path: str,
+        json: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Make an asynchronous PATCH request."""
+        try:
+            response = await self.async_client.patch(path, json=json)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
+        return self._handle_response(response)
+
+    def delete(
+        self,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Make a synchronous DELETE request.
+
+        No 0xarchive DELETE route takes a request body, so none is sent.
+        """
+        if params:
+            params = {k: v for k, v in params.items() if v is not None}
+
+        try:
+            response = self.client.delete(path, params=params)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
+        return self._handle_response(response)
+
+    async def adelete(
+        self,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Make an asynchronous DELETE request."""
+        if params:
+            params = {k: v for k, v in params.items() if v is not None}
+
+        try:
+            response = await self.async_client.delete(path, params=params)
+        except httpx.HTTPError as e:
+            raise OxArchiveError(f"Network error: {e}", 0) from e
+        return self._handle_response(response)
