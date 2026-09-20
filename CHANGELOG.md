@@ -5,6 +5,37 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Webhooks**: `client.webhooks`, covering every route under `/v1/webhooks`
+  (endpoints, subscriptions, watched wallets, deliveries, the event-type
+  catalog, and the dry-run and estimate previews), each with an async twin.
+- **Signature verification**: `WebhookVerifier`, plus the functional
+  `verify_webhook()`, `verify_webhook_signature()`, and
+  `parse_signature_header()`. Takes raw bytes, compares with
+  `hmac.compare_digest`, enforces a configurable replay window (5 minutes by
+  default), and accepts every `v1=` in the header so a delivery keeps
+  verifying through a 24-hour secret rotation overlap.
+- New pydantic models exported at package root: `WebhookEndpoint`,
+  `WebhookSecret`, `WebhookSubscription`, `WebhookDelivery`,
+  `WebhookTestResult`, `WebhookRedelivery`, `WebhookWatchedAddress`,
+  `WebhookEventTypeDeclaration`, `WebhookDryRun`, `WebhookEstimate`, and the
+  preview value types (`WebhookWindow`, `WebhookOccurrence`,
+  `WebhookDayCount`, `WebhookLadderRung`, `WebhookDistribution`,
+  `WebhookEstimateBasis`).
+- `HttpClient` gained PATCH and DELETE (`patch`/`apatch`, `delete`/`adelete`).
+  The webhook routes are the first in the API to need either.
+
+### Notes
+- Webhook delivery is a paid feature: Free plans hold no endpoints,
+  subscriptions, watched wallets, or deliveries. Free keeps `estimate()` and
+  `dry_run()`, so a rule can be designed and sized before upgrading. Per-plan
+  limits are in the README.
+- Every webhook model allows unknown fields. Subscription pause state (set
+  when an account exceeds its deliveries-per-day allowance) passes through
+  untouched rather than being bound to field names that are still settling.
+
 ## [1.8.0] - 2026-07-27
 
 ### Added

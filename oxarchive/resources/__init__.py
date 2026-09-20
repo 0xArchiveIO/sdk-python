@@ -20,6 +20,7 @@ from .l4_orderbook import L4OrderBookResource
 from .l2_orderbook import L2OrderBookResource
 from .l3_orderbook import L3OrderBookResource
 from .spot import SpotPairsResource, SpotTwapResource
+from .webhooks import WebhooksResource
 
 __all__ = [
     "OrderBookResource",
@@ -41,4 +42,5 @@ __all__ = [
     "L3OrderBookResource",
     "SpotPairsResource",
     "SpotTwapResource",
+    "WebhooksResource",
 ]

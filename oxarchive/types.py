@@ -1832,3 +1832,416 @@ class SlaResponse(BaseModel):
 
     total_downtime_minutes: int
     """Total downtime in minutes."""
+
+
+# =============================================================================
+# Webhook Types
+# =============================================================================
+#
+# Webhook delivery is a paid feature. Free plans hold no endpoints,
+# subscriptions, watched wallets, or deliveries, but they keep the two
+# preview routes (estimate and dry-run) so a rule can be designed and costed
+# before upgrading. See the README for the full per-plan grid.
+#
+# Every model here allows unknown fields. The webhook surface is the newest
+# part of the API and it gains fields faster than the SDK ships; an extra key
+# on the wire must never raise in a customer's receiver.
+
+
+class WebhookEventTypeDeclaration(BaseModel):
+    """One entry in the served event-type catalog.
+
+    The catalog is the single source the dashboard, the docs, and this SDK
+    render from. Nothing client-side should hardcode an event type, a
+    threshold, or an operator: read them from here.
+    """
+
+    model_config = {"extra": "allow"}
+
+    type: str
+    """Event type identifier, for example 'account.fill' or 'market.liquidation'."""
+
+    live: bool
+    """True when the type accepts subscriptions. False means published but not yet available."""
+
+    scope: str
+    """'public' (venue-wide), 'addresses' (your watched wallets), or 'user' (your account)."""
+
+    description: str
+    """What the event fires on."""
+
+    venues: list[str] = Field(default_factory=list)
+    """Venues this type covers, for example ['hyperliquid', 'hip3', 'lighter']."""
+
+    filters: list[str] = Field(default_factory=list)
+    """Filter keys the type accepts, for example ['venue', 'symbols', 'addresses']."""
+
+    params: dict[str, Any] = Field(default_factory=dict)
+    """Declared parameters, each with its type, bounds or enum, and default."""
+
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    """Metrics that conditions can be written against, each with its type and unit."""
+
+    operators: dict[str, Any] = Field(default_factory=dict)
+    """Operator vocabulary, grouped by metric type."""
+
+    latency_class: Optional[str] = None
+    """Rough delivery latency after the underlying event: 'seconds' or 'minutes'."""
+
+    schema_version: Optional[int] = None
+    """Payload schema version for this event type."""
+
+    cost_floor: Optional[float] = None
+    """Minimum threshold the type enforces, when it has one."""
+
+
+class WebhookEndpoint(BaseModel):
+    """A registered delivery destination."""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    """Endpoint UUID."""
+
+    url: str
+    """HTTPS destination. Redirects are not followed, so point this at the final URL."""
+
+    description: str = ""
+    """Your own label for the endpoint."""
+
+    status: str
+    """'active', 'disabled', or 'auto_disabled'.
+
+    An endpoint auto-disables after 10 consecutive failures spanning at least
+    6 hours. Recover it with ``enable_endpoint()``.
+    """
+
+    consecutive_failures: int = 0
+    """Failures since the last success. Resets on any 2xx."""
+
+    created_at: datetime
+    """When the endpoint was registered (UTC)."""
+
+    secret: Optional[str] = None
+    """The signing secret, shown ONCE.
+
+    Populated only by ``create_endpoint()`` and ``rotate_secret()``. Every
+    list and get returns None. Store it when you get it: the API will not
+    show it again, and without it you cannot verify a delivery.
+    """
+
+
+class WebhookSecret(BaseModel):
+    """A newly issued signing secret, returned once by a rotation."""
+
+    model_config = {"extra": "allow"}
+
+    secret: str
+    """The new signing secret ('whsec_' followed by 64 hex characters).
+
+    Pass the whole string to :class:`~oxarchive.WebhookVerifier`; the prefix
+    is part of the HMAC key.
+    """
+
+    note: Optional[str] = None
+    """The API's own advisory, which states how long the previous secret stays valid."""
+
+
+class WebhookSubscription(BaseModel):
+    """A rule: which event type goes to which endpoint, under which conditions."""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    """Subscription UUID."""
+
+    endpoint_id: str
+    """The endpoint this rule delivers to."""
+
+    event_type: str
+    """The subscribed event type."""
+
+    filters: dict[str, Any] = Field(default_factory=dict)
+    """The stored, normalised configuration: filters, params, and conditions.
+
+    The API returns it under the name ``filters``; this SDK sends it as
+    ``config``. Same object. Declared parameter defaults are filled in
+    server-side, so what comes back is more complete than what you sent.
+    """
+
+    enabled: bool = True
+    """Your own on/off switch for the rule."""
+
+    created_at: datetime
+    """When the rule was created (UTC)."""
+
+    @property
+    def config(self) -> dict[str, Any]:
+        """Alias for :attr:`filters`, matching the SDK's request vocabulary."""
+        return self.filters
+
+
+class WebhookDelivery(BaseModel):
+    """One delivery attempt record from the endpoint's delivery log."""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    """Delivery UUID. Pass this to ``redeliver()``."""
+
+    event_id: str
+    """Event UUID, sent as the '0xa-event-id' header.
+
+    Stable across retries and across manual redelivery. This is what a
+    receiver deduplicates on.
+    """
+
+    event_type: str
+    """The event type that was delivered."""
+
+    state: str
+    """'pending', 'delivered', or 'exhausted'."""
+
+    attempts: int = 0
+    """Attempts made so far. The ladder is 5s, 30s, 2m, 10m, 1h, then hourly, capped at 24 hours."""
+
+    last_status_code: Optional[int] = None
+    """HTTP status from the most recent attempt. Only 2xx counts as success."""
+
+    last_error: Optional[str] = None
+    """Failure detail from the most recent attempt."""
+
+    last_latency_ms: Optional[int] = None
+    """Round-trip time of the most recent attempt. The request times out at 10 seconds."""
+
+    next_attempt_at: Optional[datetime] = None
+    """When the next attempt is due (UTC)."""
+
+    delivered_at: Optional[datetime] = None
+    """When the delivery first succeeded (UTC), if it has."""
+
+    created_at: datetime
+    """When the delivery was queued (UTC)."""
+
+    payload: dict[str, Any] = Field(default_factory=dict)
+    """The event body as stored.
+
+    Useful for inspection. It is NOT byte-identical to what was signed and
+    sent, so never verify a signature against a re-serialised copy of this.
+    """
+
+
+class WebhookTestResult(BaseModel):
+    """The queued 'webhook.test' delivery from a test fire."""
+
+    model_config = {"extra": "allow"}
+
+    delivery_id: str
+    """UUID of the queued delivery. Watch it in the delivery log."""
+
+    event_id: str
+    """Event UUID, which arrives as the '0xa-event-id' header."""
+
+
+class WebhookRedelivery(BaseModel):
+    """The outcome of asking for a past delivery to be sent again."""
+
+    model_config = {"extra": "allow"}
+
+    delivery_id: str
+    """UUID of the queued delivery."""
+
+    event_id: Optional[str] = None
+    """Event UUID. Unchanged from the original, so receivers dedupe it away
+    unless they are meant to reprocess it."""
+
+    event_type: Optional[str] = None
+    """The event type being resent."""
+
+    state: Optional[str] = None
+    """Delivery state after requeueing."""
+
+    attempts: Optional[int] = None
+    """Attempts made so far."""
+
+    next_attempt_at: Optional[datetime] = None
+    """When the attempt is due (UTC)."""
+
+
+class WebhookWatchedAddress(BaseModel):
+    """A wallet the account-scoped event types are allowed to fire on."""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    """Watched-address UUID."""
+
+    address: str
+    """The wallet, normalised to lowercase 0x form."""
+
+    label: str = ""
+    """Your own label, up to 64 characters."""
+
+    created_at: datetime
+    """When the wallet was added (UTC)."""
+
+
+class WebhookWindow(BaseModel):
+    """The time range a preview answer vouches for."""
+
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+    from_: str = Field(alias="from")
+    """Start of the window (RFC 3339).
+
+    Named ``from_`` because ``from`` is a Python keyword. It moves later than
+    you asked when a capped scan could not reach back that far.
+    """
+
+    to: str
+    """End of the window (RFC 3339)."""
+
+
+class WebhookOccurrence(BaseModel):
+    """One historical event a preview says would have been delivered."""
+
+    model_config = {"extra": "allow"}
+
+    observed_at_estimate: str
+    """The occurrence's own timestamp (RFC 3339).
+
+    A real delivery's ``observed_at`` would be this plus the detector's
+    ingest lag.
+    """
+
+    data: dict[str, Any] = Field(default_factory=dict)
+    """The event data, shaped as the delivered payload's ``data`` would be."""
+
+
+class WebhookDryRun(BaseModel):
+    """Which occurrences a rule would have delivered over a recent window.
+
+    Available on every plan, Free included, so a rule can be checked before
+    there is anywhere to deliver it.
+    """
+
+    model_config = {"extra": "allow"}
+
+    event_type: str
+    """The event type that was evaluated."""
+
+    window: WebhookWindow
+    """The window the answer vouches for."""
+
+    matched: int = 0
+    """Occurrences that matched inside the window, before the page limit."""
+
+    truncated: bool = False
+    """True when fewer occurrences are listed than matched, or a scan hit its row cap."""
+
+    occurrences: list[WebhookOccurrence] = Field(default_factory=list)
+    """The matches, newest first."""
+
+
+class WebhookDayCount(BaseModel):
+    """One 24-hour bin of an estimate."""
+
+    model_config = {"extra": "allow"}
+
+    date: str
+    """The UTC date the bin ends on."""
+
+    count: int
+    """Matches in the bin."""
+
+
+class WebhookLadderRung(BaseModel):
+    """The daily rate a rule would have had at a different threshold."""
+
+    model_config = {"extra": "allow"}
+
+    value: float
+    """The threshold on the estimate's primary metric."""
+
+    per_day: float
+    """Deliveries per day at that threshold, everything else unchanged."""
+
+
+class WebhookDistribution(BaseModel):
+    """Quantiles of an estimate's primary metric over the matched occurrences."""
+
+    model_config = {"extra": "allow"}
+
+    n: int
+    """Occurrences the quantiles are computed over."""
+
+    p50: float
+    """Median."""
+
+    p90: float
+    """90th percentile."""
+
+    p99: float
+    """99th percentile."""
+
+    max: float
+    """Largest observed value."""
+
+
+class WebhookEstimateBasis(BaseModel):
+    """How an estimate was computed."""
+
+    model_config = {"extra": "allow"}
+
+    mode: str
+    """Which evaluation path answered, for example an exact scan or a replay."""
+
+    note: Optional[str] = None
+    """Any caveat attached to the answer."""
+
+
+class WebhookEstimate(BaseModel):
+    """How often a rule would have fired over a historical window.
+
+    Available on every plan, Free included. Use it to size a rule before
+    paying for the deliveries: ``per_day_p50`` against the plan's
+    deliveries-per-day allowance is the number that matters.
+    """
+
+    model_config = {"extra": "allow"}
+
+    event_type: str
+    """The event type that was evaluated."""
+
+    window: WebhookWindow
+    """The window the answer vouches for."""
+
+    days: int
+    """Days covered. Shorter than requested when the type caps its own window."""
+
+    total: int
+    """Matches across the whole window."""
+
+    per_day: list[WebhookDayCount] = Field(default_factory=list)
+    """One entry per day, oldest first, zero-filled."""
+
+    per_day_p50: float = 0.0
+    """Median deliveries per day."""
+
+    per_day_max: int = 0
+    """Busiest single day."""
+
+    primary_metric: Optional[str] = None
+    """The metric the ladder and the distribution describe."""
+
+    ladder: list[WebhookLadderRung] = Field(default_factory=list)
+    """Ascending what-if thresholds and the daily rate each would have produced."""
+
+    distribution: Optional[WebhookDistribution] = None
+    """Quantiles of the primary metric, when the type has one."""
+
+    sample: list[WebhookOccurrence] = Field(default_factory=list)
+    """A sample of matches, newest first."""
+
+    basis: Optional[WebhookEstimateBasis] = None
+    """How the answer was computed."""
