@@ -77,3 +77,7 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent working directories. Not source, never packaged.
+.claude/
+.codex/
