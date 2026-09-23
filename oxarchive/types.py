@@ -116,19 +116,24 @@ class Trade(BaseModel):
     """True if taker (crossed the spread), false if maker."""
 
     fee: Optional[str] = None
-    """Trading fee amount."""
+    """Fee paid on this fill in ``fee_token``, including any builder fee; negative
+    is a rebate. ``"0"`` is a recorded zero fee. ``None`` when the source did not
+    record fees, for example fills from 2025-03-22 to 2025-05-25."""
 
     fee_token: Optional[str] = None
-    """Fee denomination (e.g., USDC)."""
+    """Fee denomination (e.g., USDC). Present exactly when ``fee`` and
+    ``closed_pnl`` were recorded."""
 
     closed_pnl: Optional[str] = None
-    """Realized PnL if closing a position."""
+    """Realized PnL on this fill. ``"0"`` when the fill opened or added to a
+    position. ``None`` when the source did not record it (same cases as ``fee``)."""
 
     direction: Optional[str] = None
     """Position direction (e.g., 'Open Long', 'Close Short', 'Long > Short')."""
 
     start_position: Optional[str] = None
-    """Position size before this trade."""
+    """Position size (spot: balance) before this fill; negative is short. ``"0"``
+    means flat. ``None`` when the source did not record it."""
 
     user_address: Optional[str] = None
     """User's wallet address (for fill-level data)."""
