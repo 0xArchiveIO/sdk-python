@@ -54,6 +54,19 @@ Issues = "https://github.com/0xArchiveIO/sdk-python/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["oxarchive"]
+include = ["/oxarchive/**/*.py"]
+
+# The sdist needs its own list: without one, hatchling packages every
+# non-ignored file in the directory. List what ships instead of trusting the
+# default.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/oxarchive/**/*.py",
+  "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+  "/pyproject.toml",
+]
 
 [tool.ruff]
 line-length = 100
