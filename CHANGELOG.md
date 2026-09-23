@@ -5,7 +5,10 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.10.0] - 2026-09-23
+
+Versions 1.8.0, 1.9.0 and 1.9.1 are not available on PyPI. This release
+includes all of their changes; upgrade from 1.7.0 straight to 1.10.0.
 
 ### Added
 - HIP-3 breadth above current UTC-session VWAP via
@@ -18,13 +21,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Hyperliquid Spot L4 remain live-only.
 
 ### Changed
-
-- Correct Lighter per-fill trade history to the observed global floor of January 17, 2025; exact starts vary by market. This supersedes the August floor documented in the earlier release notes below.
+- Trade `fee`, `closed_pnl` and `start_position` are now returned as `"0"`
+  when the venue recorded a zero, instead of being omitted. A missing value
+  now means the source did not record it (for example fills from 2025-03-22 to
+  2025-05-25), never zero. This is a server-side change and applies to every
+  SDK version.
+- HIP-3 and HIP-4 trades now include `fee`, `fee_token`, `closed_pnl` and
+  `start_position`.
+- Correct Lighter per-fill trade history to the observed global floor of
+  January 17, 2025; exact starts vary by market. This supersedes the August
+  floor documented in the earlier release notes below.
 - Lighter WebSocket channels now support bounded historical replay without
   live subscriptions. Current Lighter data remains available through REST;
   live subscription calls fail fast with guidance to REST or replay.
 - Projected forced-liquidation price-level endpoints refresh about every five
   minutes. This is a measured cadence, not an exact five-minute guarantee.
+
+### Fixed
+- Lighter symbols are encoded as a single path segment in every resource and
+  convenience method, sync and async.
 
 ### Breaking
 - Lighter `funding_rate` is now a fractional, non-annualized rate. Consumers
