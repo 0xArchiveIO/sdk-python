@@ -1,0 +1,43 @@
+name: Package contents
+
+# Plants untracked files in the tree, builds the sdist and the wheel, and fails
+# unless every file in them is a tracked source file or metadata the build
+# backend generates. The check is an allowlist on purpose: anything else fails.
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  package-scope:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build
+      - name: Plant untracked files that must not be packaged
+        run: |
+          mkdir -p .claude/worktrees/probe && echo stray > .claude/worktrees/probe/stray.rs
+          echo stray > oxarchive/stray.txt
+          mkdir -p oxarchive/.claude && echo stray > oxarchive/.claude/stray.py
+      - run: python -m build --outdir dist-check
+      - name: Every packaged file is tracked source or build metadata
+        run: |
+          set -euo pipefail
+          git ls-files > /tmp/tracked.txt
+          python - <<'PY'
+          import glob, sys, tarfile, zipfile
+          tracked = set(open("/tmp/tracked.txt").read().split())
+          sdist = tarfile.open(glob.glob("dist-check/*.tar.gz")[0])
+          sdist_files = {m.name.split("/", 1)[1] for m in sdist.getmembers() if m.isfile()}
+          wheel_files = set(zipfile.ZipFile(glob.glob("dist-check/*.whl")[0]).namelist())
+          bad = sorted(f for f in sdist_files if f not in tracked and f != "PKG-INFO")
+          bad += sorted(f for f in wheel_files
+                        if f not in tracked and ".dist-info/" not in f)
+          print("sdist:", len(sdist_files), "files; wheel:", len(wheel_files), "files")
+          if not any(f.startswith("oxarchive/") for f in wheel_files):
+              sys.exit("::error::the wheel has no oxarchive package")
+          sys.exit(f"::error::unexpected packaged files: {bad}" if bad else 0)
+          PY
