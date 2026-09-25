@@ -5,6 +5,49 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-09-25
+
+### Added
+- Live Lighter WebSocket subscriptions for `lighter_orderbook`,
+  `lighter_trades`, `lighter_open_interest`, and `lighter_funding` on
+  `wss://api.0xarchive.io/ws` (the client default). New helpers
+  `subscribe_lighter_orderbook()`, `subscribe_lighter_trades()`,
+  `subscribe_lighter_open_interest()`, `subscribe_lighter_funding()` and their
+  `unsubscribe_*` counterparts.
+- `interval_ms` keyword on `subscribe()`, `subscribe_async()` and
+  `subscribe_lighter_orderbook()`. Live Lighter books default to one per
+  second; pass 100 to 5000 to choose the rate. Each book sent is one metered
+  message. It is accepted on `lighter_orderbook` only, is checked before
+  anything is sent, and is re-sent on reconnect.
+- `on_lighter_orderbook()`, `on_lighter_trades()` and
+  `on_lighter_market_context()` handlers. The first two take precedence over
+  `on_orderbook()` and `on_trades()` for Lighter messages, so Lighter `BTC`
+  is not mixed up with Hyperliquid `BTC`; without them, Lighter books and
+  trades still reach the generic handlers.
+- Typed live payloads: `LighterLiveTrade` (one trade leg, with the Lighter
+  account index in `users`) and `LighterMarketContext` /
+  `LighterMarketContextUpdate` (the message shared by `lighter_open_interest`
+  and `lighter_funding`). Live books decode to the existing `OrderBook`.
+- `Trade.account_index`: the Lighter account index of a fill's owner, set on
+  live Lighter trade legs and on Lighter REST trades.
+- `symbol` on `WsSubscribed`, `WsUnsubscribed` and `WsData`.
+- `LIGHTER_LIVE_CHANNELS`, `LIGHTER_REPLAY_ONLY_CHANNELS` and the
+  `LIGHTER_BOOK_INTERVAL_*` constants in `oxarchive.websocket`.
+
+### Changed
+- Live subscribe calls no longer raise for the four live Lighter channels.
+  `lighter_candles` and `lighter_l3_orderbook` remain replay-only and still
+  raise `ValueError` with `LIGHTER_SUBSCRIPTION_ERROR`, whose text now names
+  those two channels.
+- Live Lighter trade legs decode with their own mapping instead of the
+  Hyperliquid one: `users` becomes `Trade.account_index` (not
+  `maker_address`), and `order_id`, `crossed` and `start_position` are kept.
+  Each trade arrives as two legs sharing `trade_id`; `fee`, `fee_token`,
+  `closed_pnl` and `direction` are `None` in live messages. Live trades are
+  preliminary; `client.lighter.trades.list()` serves the reconciled record.
+- Replay of all six Lighter channels is unchanged and keeps its historical
+  row shapes, which differ from the live messages.
+
 ## [1.10.0] - 2026-09-23
 
 Versions 1.8.0, 1.9.0 and 1.9.1 are not available on PyPI. This release

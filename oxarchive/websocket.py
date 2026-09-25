@@ -8,6 +8,11 @@ Examples:
         >>> ws.on_orderbook(lambda coin, ob: print(f"{coin}: {ob.mid_price}"))
         >>> ws.subscribe_orderbook("BTC")
 
+    Live Lighter data (books default to one per second):
+        >>> ws.on_lighter_orderbook(lambda coin, ob: print(f"Lighter {coin}: {ob.mid_price}"))
+        >>> ws.subscribe_lighter_orderbook("BTC", interval_ms=250)
+        >>> ws.subscribe_lighter_trades("BTC")
+
     Historical replay (like Tardis.dev):
         >>> ws = OxArchiveWs(WsOptions(api_key="ox_..."))
         >>> await ws.connect()
@@ -51,6 +56,9 @@ except ImportError:
     )
 
 from .types import (
+    LighterLiveTrade,
+    LighterMarketContext,
+    LighterMarketContextUpdate,
     Liquidation,
     OrderBook,
     OrderbookDelta,
@@ -90,22 +98,40 @@ DEFAULT_PING_INTERVAL = 30
 DEFAULT_RECONNECT_DELAY = 1.0
 DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
 
-LIGHTER_REPLAY_CHANNELS: frozenset[str] = frozenset(
+LIGHTER_LIVE_CHANNELS: frozenset[str] = frozenset(
     {
         "lighter_orderbook",
         "lighter_trades",
-        "lighter_candles",
         "lighter_open_interest",
         "lighter_funding",
+    }
+)
+"""Lighter channels that support live subscriptions (and historical replay)."""
+
+LIGHTER_REPLAY_ONLY_CHANNELS: frozenset[str] = frozenset(
+    {
+        "lighter_candles",
         "lighter_l3_orderbook",
     }
 )
 """Lighter channels available through historical replay, not live subscription."""
 
+LIGHTER_REPLAY_CHANNELS: frozenset[str] = LIGHTER_LIVE_CHANNELS | LIGHTER_REPLAY_ONLY_CHANNELS
+"""All six Lighter channels; each supports historical replay."""
+
 LIGHTER_SUBSCRIPTION_ERROR = (
-    "Lighter WebSocket channels support replay, not live subscriptions. "
+    "lighter_candles and lighter_l3_orderbook support replay, not live subscriptions. "
     "Use REST for current data or a replay request for stored history."
 )
+
+LIGHTER_BOOK_INTERVAL_MIN_MS = 100
+"""Smallest ``interval_ms`` accepted on a ``lighter_orderbook`` subscription."""
+
+LIGHTER_BOOK_INTERVAL_MAX_MS = 5000
+"""Largest ``interval_ms`` accepted on a ``lighter_orderbook`` subscription."""
+
+LIGHTER_BOOK_INTERVAL_DEFAULT_MS = 1000
+"""Book interval the server uses when ``interval_ms`` is left out."""
 
 CORE_L4_REPLAY_CHANNELS: frozenset[str] = frozenset({"l4_diffs", "l4_orders"})
 """Hyperliquid core L4 channels whose replay starts with a snapshot."""
@@ -134,10 +160,29 @@ def _validate_historical_l4_channel(channel: WsChannel) -> None:
         raise ValueError(L4_LIVE_ONLY_ERROR)
 
 
-def _validate_live_subscription(channel: WsChannel) -> None:
-    """Reject live subscriptions for channels that only support replay."""
-    if channel in LIGHTER_REPLAY_CHANNELS:
+def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] = None) -> None:
+    """Reject live subscriptions the server would refuse, before any state changes.
+
+    ``lighter_candles`` and ``lighter_l3_orderbook`` are replay-only, and
+    ``interval_ms`` is accepted only on ``lighter_orderbook``, between
+    ``LIGHTER_BOOK_INTERVAL_MIN_MS`` and ``LIGHTER_BOOK_INTERVAL_MAX_MS``.
+    """
+    if channel in LIGHTER_REPLAY_ONLY_CHANNELS:
         raise ValueError(LIGHTER_SUBSCRIPTION_ERROR)
+    if interval_ms is None:
+        return
+    if channel != "lighter_orderbook":
+        raise ValueError("interval_ms is only supported on lighter_orderbook.")
+    if (
+        isinstance(interval_ms, bool)
+        or not isinstance(interval_ms, int)
+        or not LIGHTER_BOOK_INTERVAL_MIN_MS <= interval_ms <= LIGHTER_BOOK_INTERVAL_MAX_MS
+    ):
+        raise ValueError(
+            f"interval_ms must be between {LIGHTER_BOOK_INTERVAL_MIN_MS} and "
+            f"{LIGHTER_BOOK_INTERVAL_MAX_MS} for lighter_orderbook (got {interval_ms!r}). "
+            "Leave it out for one book a second."
+        )
 
 
 # Server idle timeout is 60 seconds. The SDK sends pings every 30 seconds
@@ -189,6 +234,7 @@ OrderbookHandler = Callable[[str, OrderBook], None]
 TradesHandler = Callable[[str, list[Trade]], None]
 LiquidationsHandler = Callable[[str, list[Liquidation]], None]
 OutcomeSettledHandler = Callable[[WsOutcomeSettled], None]
+LighterMarketContextHandler = Callable[[WsChannel, str, LighterMarketContext], None]
 StateHandler = Callable[[WsConnectionState], None]
 ErrorHandler = Callable[[Exception], None]
 
@@ -274,6 +320,54 @@ def _transform_trades(coin: str, raw_data: list) -> list[Trade]:
     if not isinstance(raw_data, list):
         return [_transform_trade(coin, raw_data)]
     return [_transform_trade(coin, t) for t in raw_data]
+
+
+def _transform_lighter_trade(coin: str, raw: dict[str, Any]) -> Trade:
+    """Map one live ``lighter_trades`` leg to the SDK Trade type.
+
+    Each leg is one side of a trade: ``users`` holds that side's Lighter
+    account index, ``oid`` its order id and ``crossed`` marks the taker leg.
+    Lighter's live stream carries no fee, fee token, realized PnL or direction,
+    so those stay ``None``.
+    """
+    from datetime import datetime, timezone
+
+    leg = LighterLiveTrade.model_validate({**raw, "coin": raw.get("coin") or coin})
+    return Trade(
+        coin=leg.coin,
+        side=leg.side,
+        price=leg.px,
+        size=leg.sz,
+        timestamp=datetime.fromtimestamp(leg.time / 1000, tz=timezone.utc),
+        tx_hash=leg.hash,
+        trade_id=leg.tid,
+        order_id=leg.oid,
+        crossed=leg.crossed,
+        fee=leg.fee,
+        fee_token=leg.fee_token,
+        closed_pnl=leg.closed_pnl,
+        direction=leg.dir,
+        start_position=leg.start_position,
+        account_index=leg.account_index,
+    )
+
+
+def _transform_lighter_trades(coin: str, raw_data: Any) -> list[Trade]:
+    """Map a live ``lighter_trades`` payload (a list of legs) to Trade records."""
+    if isinstance(raw_data, dict):
+        return [_transform_lighter_trade(coin, raw_data)]
+    if not isinstance(raw_data, list):
+        return []
+    return [_transform_lighter_trade(coin, leg) for leg in raw_data if isinstance(leg, dict)]
+
+
+def _transform_lighter_market_context(coin: str, raw: Any) -> LighterMarketContextUpdate:
+    """Parse a live ``lighter_open_interest`` / ``lighter_funding`` payload."""
+    if not isinstance(raw, dict):
+        raise ValueError("expected an object with 'coin' and 'ctx'")
+    return LighterMarketContextUpdate.model_validate(
+        {"coin": raw.get("coin") or coin, "ctx": raw.get("ctx") or {}}
+    )
 
 
 def _transform_liquidation(coin: str, raw: dict) -> Liquidation:
@@ -410,6 +504,8 @@ class OxArchiveWs:
         self._ws: Optional[ClientConnection] = None
         self._state: WsConnectionState = "disconnected"
         self._subscriptions: Set[str] = set()
+        # Per-subscription options re-sent on reconnect (e.g. interval_ms).
+        self._subscription_options: dict[str, dict[str, Any]] = {}
         self._reconnect_attempts = 0
         self._running = False
         self._ping_task: Optional[asyncio.Task] = None
@@ -423,6 +519,9 @@ class OxArchiveWs:
         self._on_l4_snapshot: Optional[Callable[[str, str, dict], None]] = None
         self._on_l4_batch: Optional[Callable[[str, str, list], None]] = None
         self._on_outcome_settled: Optional[OutcomeSettledHandler] = None
+        self._on_lighter_orderbook: Optional[OrderbookHandler] = None
+        self._on_lighter_trades: Optional[TradesHandler] = None
+        self._on_lighter_market_context: Optional[LighterMarketContextHandler] = None
         self._on_state_change: Optional[StateHandler] = None
         self._on_error: Optional[ErrorHandler] = None
         self._on_open: Optional[Callable[[], None]] = None
@@ -508,36 +607,52 @@ class OxArchiveWs:
             await self._ws.close(1000, "Client disconnect")
             self._ws = None
 
-    def subscribe(self, channel: WsChannel, coin: Optional[str] = None) -> None:
+    def subscribe(
+        self,
+        channel: WsChannel,
+        coin: Optional[str] = None,
+        *,
+        interval_ms: Optional[int] = None,
+    ) -> None:
         """Subscribe to a supported live channel.
 
         Args:
             channel: Channel type
             coin: Coin symbol (required for coin-specific channels)
+            interval_ms: ``lighter_orderbook`` only. Send the newest book at
+                most once per this many milliseconds (100 to 5000). Leave it
+                out for one book a second. Each book sent is one metered
+                message.
 
         Raises:
-            ValueError: If ``channel`` is a Lighter channel. Lighter supports
-                replay over WebSocket and current data through REST instead.
+            ValueError: If ``channel`` is ``lighter_candles`` or
+                ``lighter_l3_orderbook`` (replay-only), or if ``interval_ms`` is
+                passed for another channel or is out of range.
         """
-        _validate_live_subscription(channel)
-        key = self._subscription_key(channel, coin)
-        self._subscriptions.add(key)
+        _validate_live_subscription(channel, interval_ms)
+        self._remember_subscription(channel, coin, interval_ms)
 
         if self.is_connected:
-            asyncio.create_task(self._send_subscribe(channel, coin))
+            asyncio.create_task(self._send_subscribe(channel, coin, interval_ms))
 
-    async def subscribe_async(self, channel: WsChannel, coin: Optional[str] = None) -> None:
+    async def subscribe_async(
+        self,
+        channel: WsChannel,
+        coin: Optional[str] = None,
+        *,
+        interval_ms: Optional[int] = None,
+    ) -> None:
         """Subscribe asynchronously to a supported live channel.
 
-        Lighter channels are replay-only over WebSocket; use REST for current
-        data or :meth:`replay` for stored history.
+        Takes the same arguments as :meth:`subscribe`. ``lighter_candles`` and
+        ``lighter_l3_orderbook`` are replay-only; use REST for current data or
+        :meth:`replay` for stored history.
         """
-        _validate_live_subscription(channel)
-        key = self._subscription_key(channel, coin)
-        self._subscriptions.add(key)
+        _validate_live_subscription(channel, interval_ms)
+        self._remember_subscription(channel, coin, interval_ms)
 
         if self.is_connected:
-            await self._send_subscribe(channel, coin)
+            await self._send_subscribe(channel, coin, interval_ms)
 
     def subscribe_orderbook(self, coin: str) -> None:
         """Subscribe to order book updates for a coin."""
@@ -559,6 +674,7 @@ class OxArchiveWs:
         """Unsubscribe from a channel."""
         key = self._subscription_key(channel, coin)
         self._subscriptions.discard(key)
+        self._subscription_options.pop(key, None)
 
         if self.is_connected:
             asyncio.create_task(self._send_unsubscribe(channel, coin))
@@ -567,6 +683,7 @@ class OxArchiveWs:
         """Unsubscribe from a channel (async version)."""
         key = self._subscription_key(channel, coin)
         self._subscriptions.discard(key)
+        self._subscription_options.pop(key, None)
 
         if self.is_connected:
             await self._send_unsubscribe(channel, coin)
@@ -715,6 +832,72 @@ class OxArchiveWs:
         """Unsubscribe from live spot TWAP status updates for a pair."""
         self.unsubscribe("spot_twap", coin)
 
+    # -- Lighter.xyz (live) ---------------------------------------------------
+
+    def subscribe_lighter_orderbook(self, coin: str, interval_ms: Optional[int] = None) -> None:
+        """Subscribe to live Lighter L2 books for a market.
+
+        Every message is a full top-20 book per side (not a diff), bids and asks
+        best first, with ``px``/``sz`` exactly as Lighter publishes them and
+        ``n`` always 1 (Lighter does not publish per-level order counts). The
+        server sends the newest book at most once per interval: one second by
+        default, or ``interval_ms`` between 100 and 5000. Each book sent is one
+        metered message. The current book is sent right after subscribing when
+        one is available.
+
+        Books arrive on :meth:`on_lighter_orderbook` when it is set, otherwise
+        on :meth:`on_orderbook`. Symbols are the Lighter instrument symbols,
+        case-insensitive (the server echoes them uppercase).
+        """
+        self.subscribe("lighter_orderbook", coin, interval_ms=interval_ms)
+
+    def unsubscribe_lighter_orderbook(self, coin: str) -> None:
+        """Unsubscribe from live Lighter L2 books for a market."""
+        self.unsubscribe("lighter_orderbook", coin)
+
+    def subscribe_lighter_trades(self, coin: str) -> None:
+        """Subscribe to live Lighter trades for a market.
+
+        Each trade arrives as two legs (one per side) sharing ``trade_id``;
+        ``crossed`` marks the taker leg and ``account_index`` is that side's
+        Lighter account. Fee, fee token, realized PnL and direction are ``None``
+        in live messages. Live trades are preliminary; the finalized record is
+        served by ``client.lighter.trades.list()``.
+
+        Trades arrive on :meth:`on_lighter_trades` when it is set, otherwise on
+        :meth:`on_trades`.
+        """
+        self.subscribe("lighter_trades", coin)
+
+    def unsubscribe_lighter_trades(self, coin: str) -> None:
+        """Unsubscribe from live Lighter trades for a market."""
+        self.unsubscribe("lighter_trades", coin)
+
+    def subscribe_lighter_open_interest(self, coin: str) -> None:
+        """Subscribe to live Lighter market context on ``lighter_open_interest``.
+
+        ``lighter_open_interest`` and ``lighter_funding`` carry the same
+        message; subscribe to one of them unless you want each update twice.
+        Updates arrive on :meth:`on_lighter_market_context`.
+        """
+        self.subscribe("lighter_open_interest", coin)
+
+    def unsubscribe_lighter_open_interest(self, coin: str) -> None:
+        """Unsubscribe from live Lighter ``lighter_open_interest`` updates."""
+        self.unsubscribe("lighter_open_interest", coin)
+
+    def subscribe_lighter_funding(self, coin: str) -> None:
+        """Subscribe to live Lighter market context on ``lighter_funding``.
+
+        Carries the same message as ``lighter_open_interest``. Updates arrive
+        on :meth:`on_lighter_market_context`.
+        """
+        self.subscribe("lighter_funding", coin)
+
+    def unsubscribe_lighter_funding(self, coin: str) -> None:
+        """Unsubscribe from live Lighter ``lighter_funding`` updates."""
+        self.unsubscribe("lighter_funding", coin)
+
     # =========================================================================
     # Historical Replay (Option B) - Like Tardis.dev
     # =========================================================================
@@ -734,9 +917,9 @@ class OxArchiveWs:
         Hyperliquid core ``l4_diffs`` and ``l4_orders`` replay as one typed
         ``l4_snapshot`` followed by ordered ``l4_batch`` messages. HIP-3,
         HIP-4, and Hyperliquid Spot L4 channels are live-only and are rejected
-        here. All six ``lighter_*`` channels continue to support bounded
-        historical replay and do not support live subscriptions; use Lighter
-        REST for current data.
+        here. All six ``lighter_*`` channels support bounded historical replay.
+        Replay rows keep their historical shapes, which differ from the live
+        Lighter messages.
 
         Args:
             channel: Data channel to replay
@@ -985,6 +1168,32 @@ class OxArchiveWs:
         """
         self._on_outcome_settled = handler
 
+    def on_lighter_orderbook(self, handler: OrderbookHandler) -> None:
+        """Set handler for live ``lighter_orderbook`` books.
+
+        Handler receives ``(coin, OrderBook)``. When set, Lighter books go here
+        instead of :meth:`on_orderbook`, so a Lighter ``BTC`` book is never
+        mixed up with a Hyperliquid ``BTC`` book.
+        """
+        self._on_lighter_orderbook = handler
+
+    def on_lighter_trades(self, handler: TradesHandler) -> None:
+        """Set handler for live ``lighter_trades`` legs.
+
+        Handler receives ``(coin, [Trade, ...])``, two legs per trade sharing
+        ``trade_id``. When set, Lighter trades go here instead of
+        :meth:`on_trades`. Count trades by distinct ``trade_id``.
+        """
+        self._on_lighter_trades = handler
+
+    def on_lighter_market_context(self, handler: LighterMarketContextHandler) -> None:
+        """Set handler for live ``lighter_open_interest`` / ``lighter_funding`` updates.
+
+        Handler receives ``(channel, coin, LighterMarketContext)``. Both channels
+        carry the same message; ``channel`` says which subscription it came from.
+        """
+        self._on_lighter_market_context = handler
+
     def on_state_change(self, handler: StateHandler) -> None:
         """Set handler for state changes."""
         self._on_state_change = handler
@@ -1119,13 +1328,35 @@ class OxArchiveWs:
         """Create subscription key."""
         return f"{channel}:{coin}" if coin else channel
 
-    async def _send_subscribe(self, channel: WsChannel, coin: Optional[str]) -> None:
+    def _remember_subscription(
+        self, channel: WsChannel, coin: Optional[str], interval_ms: Optional[int]
+    ) -> None:
+        """Record a subscription and its options so a reconnect re-sends them.
+
+        A new subscribe to the same channel and coin replaces the previous one
+        on the server, so options left out now are cleared here too.
+        """
+        key = self._subscription_key(channel, coin)
+        self._subscriptions.add(key)
+        if interval_ms is not None:
+            self._subscription_options[key] = {"interval_ms": interval_ms}
+        else:
+            self._subscription_options.pop(key, None)
+
+    async def _send_subscribe(
+        self,
+        channel: WsChannel,
+        coin: Optional[str],
+        interval_ms: Optional[int] = None,
+    ) -> None:
         """Send subscribe message. Wire field is `symbol`; `coin` is the
         deprecated alias kept on the SDK surface for backward compatibility."""
         if self._ws:
-            msg = {"op": "subscribe", "channel": channel}
+            msg: dict[str, Any] = {"op": "subscribe", "channel": channel}
             if coin:
                 msg["symbol"] = coin
+            if interval_ms is not None:
+                msg["interval_ms"] = interval_ms
             await self._ws.send(json.dumps(msg))
 
     async def _send_unsubscribe(self, channel: WsChannel, coin: Optional[str]) -> None:
@@ -1138,11 +1369,12 @@ class OxArchiveWs:
 
     async def _resubscribe(self) -> None:
         """Resubscribe to all channels."""
-        for key in self._subscriptions:
+        for key in list(self._subscriptions):
             parts = key.split(":", 1)
             channel = parts[0]
             coin = parts[1] if len(parts) > 1 else None
-            await self._send_subscribe(channel, coin)  # type: ignore
+            options = self._subscription_options.get(key, {})
+            await self._send_subscribe(channel, coin, **options)  # type: ignore
 
     async def _ping_loop(self) -> None:
         """Send periodic pings."""
@@ -1215,12 +1447,33 @@ class OxArchiveWs:
                 coin = data.get("coin", "")
                 raw_data = data.get("data", {})
 
+                # Live Lighter channels. Books share the Hyperliquid wire shape;
+                # trades carry Lighter account indexes; OI and funding carry the
+                # same market-context message. The dedicated Lighter handlers take
+                # precedence over the generic ones, since a Lighter coin such as
+                # "BTC" is otherwise indistinguishable from the Hyperliquid one.
+                if channel == "lighter_orderbook" and self._on_lighter_orderbook:
+                    self._on_lighter_orderbook(coin, _transform_orderbook(coin, raw_data))
+
+                elif channel == "lighter_trades":
+                    trades_handler = self._on_lighter_trades or self._on_trades
+                    if trades_handler:
+                        trades_handler(coin, _transform_lighter_trades(coin, raw_data))
+
+                elif (
+                    channel in ("lighter_open_interest", "lighter_funding")
+                    and self._on_lighter_market_context
+                ):
+                    update = _transform_lighter_market_context(coin, raw_data)
+                    self._on_lighter_market_context(channel, coin, update.ctx)
+
                 # Map venue-prefixed channel variants to the same typed handler.
                 # All orderbook variants (Hyperliquid/HIP-3/HIP-4/Lighter) share
-                # the same wire shape; same for trades and liquidations. Users
-                # should not have to fall back to on_message just because they
-                # subscribed to ``hip4_orderbook`` instead of ``orderbook``.
-                if channel in (
+                # the same wire shape; same for trades (Lighter trades are
+                # handled above) and liquidations. Users should not have to fall
+                # back to on_message just because they subscribed to
+                # ``hip4_orderbook`` instead of ``orderbook``.
+                elif channel in (
                     "orderbook",
                     "hip3_orderbook",
                     "hip4_orderbook",
@@ -1235,7 +1488,6 @@ class OxArchiveWs:
                     "trades",
                     "hip3_trades",
                     "hip4_trades",
-                    "lighter_trades",
                     "spot_trades",
                 ) and self._on_trades:
                     # Transform raw Hyperliquid format to SDK Trade type
