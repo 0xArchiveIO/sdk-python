@@ -96,6 +96,10 @@ from .types import (
     WsData,
     WsL4Snapshot,
     WsL4Batch,
+    # Live Lighter payload types
+    LighterLiveTrade,
+    LighterMarketContext,
+    LighterMarketContextUpdate,
     # Replay types (Option B)
     WsReplayStarted,
     WsReplayPaused,
@@ -104,7 +108,7 @@ from .types import (
     WsReplayStopped,
     WsHistoricalData,
     WsReplaySnapshot,
-    # Stream types (Option D)
+    # Bulk stream types (deprecated: the server has discontinued bulk streaming)
     WsStreamStarted,
     WsStreamProgress,
     WsHistoricalBatch,
@@ -124,7 +128,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.10.0"
+__version__ = "1.11.0"
 
 __all__ = [
     # Client
@@ -203,6 +207,10 @@ __all__ = [
     "WsData",
     "WsL4Snapshot",
     "WsL4Batch",
+    # Live Lighter Payload Types
+    "LighterLiveTrade",
+    "LighterMarketContext",
+    "LighterMarketContextUpdate",
     # Replay Types (Option B)
     "WsReplayStarted",
     "WsReplayPaused",
@@ -211,7 +219,7 @@ __all__ = [
     "WsReplayStopped",
     "WsHistoricalData",
     "WsReplaySnapshot",
-    # Stream Types (Option D)
+    # Bulk stream types (deprecated: the server has discontinued bulk streaming)
     "WsStreamStarted",
     "WsStreamProgress",
     "WsHistoricalBatch",
