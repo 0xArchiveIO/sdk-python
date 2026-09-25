@@ -7,6 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.11.0] - 2026-09-25
 
+Versions 1.7.1, 1.8.0, 1.9.0, 1.9.1 and 1.10.0 were not published to PyPI.
+This release includes their changes, listed in the sections below. The last
+release on PyPI is 1.7.0, so upgrading from PyPI goes straight from 1.7.0 to
+1.11.0.
+
 ### Added
 - Live Lighter WebSocket subscriptions for `lighter_orderbook`,
   `lighter_trades`, `lighter_open_interest`, and `lighter_funding` on
@@ -50,6 +55,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   preliminary; `client.lighter.trades.list()` serves the reconciled record.
 - Replay of all six Lighter channels is unchanged and keeps its historical
   row shapes, which differ from the live messages.
+
+### Fixed
+- The README now lists Hyperliquid `open_interest` and `funding` as available
+  for live subscription as well as replay.
 
 ## [1.10.0] - 2026-09-23
 

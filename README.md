@@ -1304,6 +1304,8 @@ async def main():
 asyncio.run(main())
 ```
 
+Hyperliquid `open_interest` and `funding` also stream live, in addition to historical replay. Subscribe with `ws.subscribe("open_interest", "BTC")` or `ws.subscribe("funding", "BTC")`. Each update's `data` holds `coin` and a `ctx` object with fields such as `openInterest`, `funding`, `markPx`, and `oraclePx`. These channels have no typed callback, so their updates arrive on `on_message` as `WsData` messages.
+
 ### Live Lighter.xyz Data
 
 Live Lighter messages use the same `data` envelope as Hyperliquid live data. Symbols are the ones returned by `client.lighter.instruments.list()`; they are case-insensitive on subscribe and echoed uppercase. Live Lighter data is served at `wss://api.0xarchive.io/ws`, the client default; `wss://stream.0xarchive.io/ws` does not serve Lighter channels and answers a Lighter subscribe with an error pointing to `wss://api.0xarchive.io/ws`. It is available on every plan and metered per message like Hyperliquid live data, with the same per-plan subscription and connection limits and the limit of 10 subscribe operations per second.
@@ -1516,8 +1518,8 @@ ws = OxArchiveWs(WsOptions(
 | `trades` | Trade/fill updates | Yes | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | No | Yes |
 | `liquidations` | Liquidation events (May 2025+) | Yes | Yes | Yes |
-| `open_interest` | Open interest snapshots | Yes | No | Yes |
-| `funding` | Funding rate records | Yes | No | Yes |
+| `open_interest` | Open interest snapshots | Yes | Yes | Yes |
+| `funding` | Funding rate records | Yes | Yes | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
 | `all_tickers` | All market tickers | No | Yes | No |
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
@@ -1642,7 +1644,7 @@ await ws.replay(
 
 #### Open Interest / Funding Replay
 
-The `open_interest`, `funding`, `hip3_open_interest`, and `hip3_funding` channels are **historical only** (replay). They do not support real-time subscriptions. `lighter_open_interest` and `lighter_funding` support both replay and live subscriptions (see Live Lighter.xyz Data above).
+The Hyperliquid `open_interest` and `funding` channels support both replay and live subscriptions (see Real-time Streaming above). The `hip3_open_interest` and `hip3_funding` channels are **historical only** (replay). They do not support real-time subscriptions. `lighter_open_interest` and `lighter_funding` support both replay and live subscriptions (see Live Lighter.xyz Data above).
 
 ```python
 # Replay open interest at 50x speed
