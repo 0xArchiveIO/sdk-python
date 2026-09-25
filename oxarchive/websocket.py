@@ -1,5 +1,10 @@
 """
-WebSocket client for 0xarchive real-time streaming, replay, and bulk download.
+WebSocket client for 0xarchive real-time streaming and historical replay.
+
+For large dataset downloads, use the S3 Parquet bulk export at
+https://0xarchive.io/data. The server has discontinued WebSocket bulk
+streaming, so the deprecated ``stream()``, ``multi_stream()`` and
+``stream_stop()`` methods only return the server's error.
 
 Examples:
     Real-time streaming:
@@ -28,13 +33,6 @@ Examples:
         ...     ["orderbook", "trades", "funding"], "BTC",
         ...     start=time.time()*1000 - 86400000, speed=10
         ... )
-
-    Bulk streaming (like Databento):
-        >>> ws = OxArchiveWs(WsOptions(api_key="ox_..."))
-        >>> await ws.connect()
-        >>> batches = []
-        >>> ws.on_batch(lambda coin, records: batches.extend(records))
-        >>> await ws.stream("orderbook", "ETH", start=..., end=..., batch_size=1000)
 """
 
 from __future__ import annotations
@@ -42,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, Optional, Set, Union
 
@@ -154,6 +153,19 @@ L4_LIVE_ONLY_ERROR = (
 )
 
 
+# Large dataset downloads: the S3 Parquet bulk export.
+_BULK_EXPORT_URL = "https://0xarchive.io/data"
+
+
+def _bulk_stream_deprecation(name: str) -> str:
+    """Deprecation message for the discontinued WebSocket bulk streaming API."""
+    return (
+        f"OxArchiveWs.{name}() is deprecated because the server has discontinued "
+        "WebSocket bulk streaming. For large dataset downloads, use the S3 Parquet "
+        f"bulk export at {_BULK_EXPORT_URL}."
+    )
+
+
 def _validate_historical_l4_channel(channel: WsChannel) -> None:
     """Reject historical operations for L4 channels that are live-only."""
     if channel in L4_LIVE_ONLY_CHANNELS:
@@ -245,7 +257,7 @@ ReplaySnapshotHandler = Callable[[WsChannel, str, int, dict], None]  # channel, 
 ReplayStartHandler = Callable[[WsChannel, str, int, int, float], None]  # channel, coin, start, end, speed
 ReplayCompleteHandler = Callable[[WsChannel, str, int], None]  # channel, coin, snapshots_sent
 
-# Stream handlers
+# Bulk stream handlers (deprecated: the server has discontinued bulk streaming)
 BatchHandler = Callable[[str, list[TimestampedRecord]], None]
 StreamStartHandler = Callable[[WsChannel, str, int, int], None]  # channel, coin, start, end
 StreamProgressHandler = Callable[[int], None]  # snapshots_sent
@@ -534,7 +546,7 @@ class OxArchiveWs:
         self._on_replay_start: Optional[ReplayStartHandler] = None
         self._on_replay_complete: Optional[ReplayCompleteHandler] = None
 
-        # Stream handlers (Option D)
+        # Bulk stream handlers (deprecated: the server has discontinued bulk streaming)
         self._on_batch: Optional[BatchHandler] = None
         self._on_stream_start: Optional[StreamStartHandler] = None
         self._on_stream_progress: Optional[StreamProgressHandler] = None
@@ -1023,7 +1035,7 @@ class OxArchiveWs:
         await self._send(msg)
 
     # =========================================================================
-    # Bulk Streaming (Option D) - Like Databento
+    # Bulk Streaming (deprecated: the server has discontinued it)
     # =========================================================================
 
     async def stream(
@@ -1036,7 +1048,17 @@ class OxArchiveWs:
         granularity: Optional[str] = None,
         interval: Optional[str] = None,
     ) -> None:
-        """Start bulk streaming for fast data download.
+        """Request a bulk stream. Deprecated: the server has discontinued bulk streaming.
+
+        .. deprecated:: 1.11.0
+            The server no longer serves WebSocket bulk streaming. This method
+            still sends the request, and the server answers with a
+            :class:`~oxarchive.types.WsError` delivered to the ``on_message``
+            handler; no data is streamed. For large dataset downloads, use the
+            S3 Parquet bulk export at https://0xarchive.io/data. For timed
+            playback of history, use :meth:`replay`.
+
+        Calling it emits a :class:`DeprecationWarning`.
 
         Args:
             channel: Data channel to stream
@@ -1046,11 +1068,8 @@ class OxArchiveWs:
             batch_size: Records per batch message
             granularity: Data resolution for Lighter orderbook ('checkpoint', '30s', '10s', '1s', 'tick')
             interval: Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w')
-
-        Example:
-            >>> await ws.stream("orderbook", "ETH", start=..., end=..., batch_size=1000)
-            >>> await ws.stream("candles", "BTC", start=..., end=..., interval="1h")
         """
+        warnings.warn(_bulk_stream_deprecation("stream"), DeprecationWarning, stacklevel=2)
         _validate_historical_l4_channel(channel)
         msg = {
             "op": "stream",
@@ -1067,7 +1086,18 @@ class OxArchiveWs:
         await self._send(msg)
 
     async def stream_stop(self) -> None:
-        """Stop the current bulk stream."""
+        """Stop a bulk stream. Deprecated: the server has discontinued bulk streaming.
+
+        .. deprecated:: 1.11.0
+            No bulk stream can be running, so there is nothing to stop. This
+            method still sends the request, and the server answers with a
+            :class:`~oxarchive.types.WsError` delivered to the ``on_message``
+            handler. For large dataset downloads, use the S3 Parquet bulk
+            export at https://0xarchive.io/data.
+
+        Calling it emits a :class:`DeprecationWarning`.
+        """
+        warnings.warn(_bulk_stream_deprecation("stream_stop"), DeprecationWarning, stacklevel=2)
         await self._send({"op": "stream.stop"})
 
     async def multi_stream(
@@ -1078,12 +1108,17 @@ class OxArchiveWs:
         end: int,
         batch_size: int = 1000,
     ) -> None:
-        """Start a multi-channel bulk stream for fast data download.
+        """Request a multi-channel bulk stream. Deprecated: the server has discontinued it.
 
-        All channels are streamed together in a single interleaved timeline.
-        Data arrives in batches without timing delays. The ``channel`` field on
-        each ``historical_batch`` message indicates which channel the batch
-        belongs to.
+        .. deprecated:: 1.11.0
+            The server no longer serves WebSocket bulk streaming. This method
+            still sends the request, and the server answers with a
+            :class:`~oxarchive.types.WsError` delivered to the ``on_message``
+            handler; no data is streamed. For large dataset downloads, use the
+            S3 Parquet bulk export at https://0xarchive.io/data. For timed
+            playback of several channels together, use :meth:`multi_replay`.
+
+        Calling it emits a :class:`DeprecationWarning`.
 
         Args:
             channels: List of channels to stream together (e.g.,
@@ -1092,16 +1127,8 @@ class OxArchiveWs:
             start: Start timestamp (Unix ms).
             end: End timestamp (Unix ms).
             batch_size: Records per batch message.
-
-        Example:
-            >>> await ws.multi_stream(
-            ...     ["orderbook", "trades", "funding"],
-            ...     "BTC",
-            ...     start=int(time.time() * 1000) - 3600000,
-            ...     end=int(time.time() * 1000),
-            ...     batch_size=1000,
-            ... )
         """
+        warnings.warn(_bulk_stream_deprecation("multi_stream"), DeprecationWarning, stacklevel=2)
         for channel in channels:
             _validate_historical_l4_channel(channel)
 
@@ -1265,38 +1292,66 @@ class OxArchiveWs:
         """
         self._on_replay_complete = handler
 
-    # Stream event handlers (Option D)
+    # Bulk stream event handlers (deprecated: the server has discontinued bulk streaming)
 
     def on_batch(self, handler: BatchHandler) -> None:
         """Set handler for batched data (bulk stream mode).
 
+        .. deprecated:: 1.11.0
+            The server has discontinued bulk streaming, so this handler is
+            never called. For large dataset downloads, use the S3 Parquet bulk
+            export at https://0xarchive.io/data. Calling it emits a
+            :class:`DeprecationWarning`.
+
         Handler receives: (coin, records) where records is list of TimestampedRecord
         """
+        warnings.warn(_bulk_stream_deprecation("on_batch"), DeprecationWarning, stacklevel=2)
         self._on_batch = handler
 
     def on_stream_start(self, handler: StreamStartHandler) -> None:
         """Set handler for stream started event.
 
+        .. deprecated:: 1.11.0
+            The server has discontinued bulk streaming, so this handler is
+            never called. Calling it emits a :class:`DeprecationWarning`.
+
         Handler receives: (channel, coin, start, end)
         """
+        warnings.warn(
+            _bulk_stream_deprecation("on_stream_start"), DeprecationWarning, stacklevel=2
+        )
         self._on_stream_start = handler
 
     def on_stream_progress(self, handler: StreamProgressHandler) -> None:
         """Set handler for stream progress event.
 
+        .. deprecated:: 1.11.0
+            The server has discontinued bulk streaming, so this handler is
+            never called. Calling it emits a :class:`DeprecationWarning`.
+
         Handler receives: (snapshots_sent)
         """
+        warnings.warn(
+            _bulk_stream_deprecation("on_stream_progress"), DeprecationWarning, stacklevel=2
+        )
         self._on_stream_progress = handler
 
     def on_stream_complete(self, handler: StreamCompleteHandler) -> None:
         """Set handler for stream completed event.
 
+        .. deprecated:: 1.11.0
+            The server has discontinued bulk streaming, so this handler is
+            never called. Calling it emits a :class:`DeprecationWarning`.
+
         Handler receives: (channel, coin, snapshots_sent)
         """
+        warnings.warn(
+            _bulk_stream_deprecation("on_stream_complete"), DeprecationWarning, stacklevel=2
+        )
         self._on_stream_complete = handler
 
     def on_gap(self, handler: GapHandler) -> None:
-        """Set handler for gap detected events during replay or streaming.
+        """Set handler for gap detected events during replay.
 
         Called when there's a gap in the historical data exceeding the threshold.
         Thresholds: 2 minutes for orderbook/candles/liquidations, 60 minutes for trades.
@@ -1552,7 +1607,8 @@ class OxArchiveWs:
                 channel = data.get("channel") or (data.get("channels", [None])[0])
                 self._on_replay_complete(channel, data["coin"], data["snapshots_sent"])
 
-            # Stream messages (Option D)
+            # Bulk stream messages (deprecated: the server has discontinued bulk
+            # streaming and no longer sends these; kept for compatibility)
             elif msg_type == "stream_started" and self._on_stream_start:
                 channel = data.get("channel") or (data.get("channels", [None])[0])
                 self._on_stream_start(channel, data["coin"], data["start"], data["end"])

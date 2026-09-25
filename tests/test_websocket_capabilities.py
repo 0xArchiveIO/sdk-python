@@ -1,8 +1,9 @@
 import asyncio
 import json
 import re
+import warnings
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import pytest
 from websockets.protocol import State as WsState
@@ -687,3 +688,104 @@ def test_l4_replay_frames_are_typed_and_batch_order_is_preserved() -> None:
     assert messages[1].data[1]["seq"] == 2
     assert snapshots[0]["last_block_number"] == 100
     assert [record["seq"] for record in batches[0]] == [1, 2]
+
+
+# The server has discontinued WebSocket bulk streaming. The bulk stream methods
+# stay for compatibility, warn on use, and still send the request, which the
+# server answers with this error.
+SERVER_STREAM_ERROR = (
+    "Bulk streaming has been discontinued. For large dataset downloads, use our S3 "
+    "Parquet bulk export at https://0xarchive.io/data or contact enterprise@0xarchive.io."
+)
+
+
+def _offline_client() -> tuple[OxArchiveWs, list[dict[str, Any]]]:
+    ws = OxArchiveWs(WsOptions(api_key="test-key"))
+    sent: list[dict[str, Any]] = []
+
+    async def fake_send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    setattr(ws, "_send", fake_send)
+    return ws, sent
+
+
+def test_stream_emits_a_deprecation_warning_and_still_sends_the_request() -> None:
+    ws, sent = _offline_client()
+
+    with pytest.warns(DeprecationWarning, match=r"stream\(\) is deprecated") as record:
+        asyncio.run(ws.stream("orderbook", "BTC", start=1_757_000_000_000, end=1_757_003_600_000))
+
+    message = str(record[0].message)
+    assert "discontinued" in message
+    assert "S3 Parquet bulk export" in message
+    assert "https://0xarchive.io/data" in message
+    assert sent == [
+        {
+            "op": "stream",
+            "channel": "orderbook",
+            "symbol": "BTC",
+            "start": 1_757_000_000_000,
+            "end": 1_757_003_600_000,
+            "batch_size": 1000,
+        }
+    ]
+
+
+def test_stream_deprecation_warning_points_at_the_caller() -> None:
+    ws, _ = _offline_client()
+
+    async def caller() -> None:
+        await ws.stream("trades", "ETH", start=1_757_000_000_000, end=1_757_003_600_000)
+
+    with pytest.warns(DeprecationWarning) as record:
+        asyncio.run(caller())
+
+    assert record[0].filename == __file__
+
+
+def test_multi_stream_and_stream_stop_emit_deprecation_warnings() -> None:
+    ws, sent = _offline_client()
+
+    with pytest.warns(DeprecationWarning, match=r"multi_stream\(\) is deprecated"):
+        asyncio.run(
+            ws.multi_stream(
+                ["orderbook", "trades"], "BTC", start=1_757_000_000_000, end=1_757_003_600_000
+            )
+        )
+    with pytest.warns(DeprecationWarning, match=r"stream_stop\(\) is deprecated"):
+        asyncio.run(ws.stream_stop())
+
+    assert [message["op"] for message in sent] == ["stream", "stream.stop"]
+
+
+@pytest.mark.parametrize(
+    "setter",
+    ["on_batch", "on_stream_start", "on_stream_progress", "on_stream_complete"],
+)
+def test_bulk_stream_handler_setters_emit_deprecation_warnings(setter: str) -> None:
+    ws = OxArchiveWs(WsOptions(api_key="test-key"))
+    set_handler: Callable[[Callable[..., None]], None] = getattr(ws, setter)
+
+    with pytest.warns(DeprecationWarning, match=rf"{setter}\(\) is deprecated"):
+        set_handler(lambda *args: None)
+
+
+def test_replay_and_live_handlers_do_not_emit_deprecation_warnings() -> None:
+    ws, _ = _offline_client()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        asyncio.run(ws.replay("orderbook", "BTC", start=1_757_000_000_000))
+        ws.on_orderbook(lambda coin, book: None)
+
+
+def test_the_bulk_stream_rejection_reaches_on_message_as_an_error() -> None:
+    ws = OxArchiveWs(WsOptions(api_key="test-key"))
+    messages: list[object] = []
+    ws.on_message(messages.append)
+
+    ws._handle_message(json.dumps({"type": "error", "message": SERVER_STREAM_ERROR}))
+
+    assert isinstance(messages[0], WsError)
+    assert messages[0].message == SERVER_STREAM_ERROR
