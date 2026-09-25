@@ -138,6 +138,10 @@ class Trade(BaseModel):
     user_address: Optional[str] = None
     """User's wallet address (for fill-level data)."""
 
+    account_index: Optional[str] = None
+    """Lighter account index of this fill's owner, as a string. Present on Lighter
+    fills (REST trades and live ``lighter_trades`` legs); ``None`` for Hyperliquid."""
+
     maker_address: Optional[str] = None
     """Maker's wallet address (for market-level WebSocket trades)."""
 
@@ -1098,10 +1102,14 @@ Notes:
 - ticker/all_tickers are real-time only.
 - liquidations and hip3_liquidations now stream live (realtime + replay).
   Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
-- open_interest, funding, lighter_open_interest, lighter_funding,
-  hip3_open_interest, hip3_funding are historical only (replay/stream).
-- all six ``lighter_*`` channels support historical replay, not live
-  subscriptions. Use Lighter REST for current data.
+- open_interest and funding (Hyperliquid core) support live subscriptions
+  and historical replay.
+- hip3_open_interest, hip3_funding are historical only (replay).
+- lighter_orderbook, lighter_trades, lighter_open_interest and lighter_funding
+  support live subscriptions and historical replay. Live messages use the
+  Hyperliquid-style shapes described on :class:`LighterLiveTrade` and
+  :class:`LighterMarketContext`; replay rows keep their historical shapes.
+- lighter_candles and lighter_l3_orderbook support historical replay only.
 - l4_diffs, l4_orders: Hyperliquid core L4 order-level data. Historical replay
   emits one ``l4_snapshot`` followed by ordered ``l4_batch`` messages.
 - hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (live-only).
@@ -1126,6 +1134,8 @@ class WsSubscribed(BaseModel):
     type: Literal["subscribed"]
     channel: WsChannel
     coin: Optional[str] = None
+    symbol: Optional[str] = None
+    """Symbol as the server echoes it (Lighter symbols are echoed uppercase)."""
 
 
 class WsUnsubscribed(BaseModel):
@@ -1134,6 +1144,8 @@ class WsUnsubscribed(BaseModel):
     type: Literal["unsubscribed"]
     channel: WsChannel
     coin: Optional[str] = None
+    symbol: Optional[str] = None
+    """Symbol as the server echoes it."""
 
 
 class WsPong(BaseModel):
@@ -1155,11 +1167,15 @@ class WsData(BaseModel):
     Note: The `data` field can be either a dict (for orderbook) or a list (for trades).
     - Orderbook: dict with 'levels', 'time', etc.
     - Trades: list of trade objects with 'coin', 'side', 'px', 'sz', etc.
+    - lighter_open_interest / lighter_funding: dict with 'coin' and 'ctx'
+      (see :class:`LighterMarketContextUpdate`).
     """
 
     type: Literal["data"]
     channel: WsChannel
     coin: str
+    symbol: Optional[str] = None
+    """Symbol as the server echoes it."""
     data: Union[dict[str, Any], list[dict[str, Any]]]
 
 
@@ -1193,6 +1209,134 @@ class WsL4Batch(BaseModel):
 
     data: list[dict[str, Any]]
     """Events in server order; each event carries its own block/sequence data."""
+
+
+# =============================================================================
+# WebSocket Live Lighter Payload Types
+# =============================================================================
+#
+# Live Lighter channels use the same ``data`` envelope as Hyperliquid live data.
+# ``lighter_orderbook`` books share the Hyperliquid live book shape
+# (``{coin, time, levels: [bids, asks]}``) and decode to :class:`OrderBook`.
+# Trades and market context carry Lighter-specific fields and are modelled here.
+# Replay of the same channels keeps its historical row shapes.
+
+
+class LighterLiveTrade(BaseModel):
+    """One leg of a live ``lighter_trades`` trade, as sent in ``WsData.data``.
+
+    Each trade arrives as two legs, one per side, that share ``tid``. Count
+    trades by distinct ``tid``, not by list length, and compute volume from
+    ``sz`` over one leg per ``tid``. Live legs are preliminary: the finalized
+    record, with fields the live stream does not carry (such as fees), is served
+    by ``client.lighter.trades.list()``.
+    """
+
+    coin: str
+    """Market symbol."""
+
+    side: Literal["A", "B"]
+    """``'A'`` for the ask side, ``'B'`` for the bid side."""
+
+    px: str
+    """Price as a decimal string, exactly as Lighter publishes it."""
+
+    sz: str
+    """Size as a decimal string, exactly as Lighter publishes it."""
+
+    time: int
+    """Trade time in Unix milliseconds."""
+
+    hash: Optional[str] = None
+    """Lighter transaction hash."""
+
+    tid: int
+    """Trade id, shared by both legs of the trade."""
+
+    oid: Optional[int] = None
+    """This side's order id."""
+
+    crossed: bool
+    """``True`` for the taker leg, ``False`` for the maker leg."""
+
+    dir: Optional[str] = None
+    """Always ``None`` in live messages; Lighter's live stream does not carry it."""
+
+    fee: Optional[str] = None
+    """Always ``None`` in live messages; Lighter's live stream does not carry it."""
+
+    fee_token: Optional[str] = None
+    """Always ``None`` in live messages; Lighter's live stream does not carry it."""
+
+    closed_pnl: Optional[str] = None
+    """Always ``None`` in live messages; Lighter's live stream does not carry it."""
+
+    start_position: Optional[str] = None
+    """This account's signed position before the trade."""
+
+    users: list[str] = Field(default_factory=list)
+    """``[account_index]``: this side's Lighter account index as a string."""
+
+    @property
+    def account_index(self) -> Optional[str]:
+        """This side's Lighter account index, or ``None`` when absent."""
+        return self.users[0] if self.users else None
+
+
+class LighterMarketContext(BaseModel):
+    """Market context from a live ``lighter_open_interest`` or ``lighter_funding`` message.
+
+    Both channels deliver the same message, about once per second per market as
+    Lighter publishes it. Attributes use the SDK's snake_case names; the wire
+    keys are Hyperliquid-style camelCase (``openInterest``, ``markPx``, ...) and
+    are accepted as aliases. Values are decimal strings, and a field is ``None``
+    when Lighter has not reported it.
+    """
+
+    model_config = {"populate_by_name": True}
+
+    open_interest: Optional[str] = Field(default=None, alias="openInterest")
+    """Lighter's reported open interest (wire ``openInterest``). Same value as
+    ``open_interest`` from ``client.lighter.open_interest.current()``."""
+
+    funding_rate: Optional[str] = Field(default=None, alias="funding")
+    """Current funding rate as a fraction (wire ``funding``). Lighter publishes
+    percent; this value is already divided by 100, matching REST ``funding_rate``."""
+
+    premium: Optional[str] = None
+    """Premium as a fraction."""
+
+    mark_price: Optional[str] = Field(default=None, alias="markPx")
+    """Mark price (wire ``markPx``)."""
+
+    oracle_price: Optional[str] = Field(default=None, alias="oraclePx")
+    """Lighter's index price (wire ``oraclePx``)."""
+
+    mid_price: Optional[str] = Field(default=None, alias="midPx")
+    """Mid price (wire ``midPx``)."""
+
+    day_ntl_volume: Optional[str] = Field(default=None, alias="dayNtlVlm")
+    """24-hour quote volume (wire ``dayNtlVlm``)."""
+
+    day_base_volume: Optional[str] = Field(default=None, alias="dayBaseVlm")
+    """24-hour base volume (wire ``dayBaseVlm``)."""
+
+    prev_day_price: Optional[str] = Field(default=None, alias="prevDayPx")
+    """Price 24 hours ago (wire ``prevDayPx``), derived from the last trade price
+    and Lighter's 24-hour percent change."""
+
+    impact_prices: Optional[list[str]] = Field(default=None, alias="impactPxs")
+    """Always ``None`` (wire ``impactPxs``); Lighter has no impact prices."""
+
+
+class LighterMarketContextUpdate(BaseModel):
+    """Payload of a live ``lighter_open_interest`` or ``lighter_funding`` message."""
+
+    coin: str
+    """Market symbol."""
+
+    ctx: LighterMarketContext
+    """Market context values."""
 
 
 # =============================================================================
@@ -1321,12 +1465,22 @@ class WsHistoricalTickData(BaseModel):
 
 
 # =============================================================================
-# WebSocket Bulk Stream Types (Data Catalog Mode)
+# WebSocket Bulk Stream Types (deprecated)
+#
+# The server has discontinued WebSocket bulk streaming and no longer sends
+# these messages. The models stay exported for backward compatibility. For
+# large dataset downloads, use the S3 Parquet bulk export at
+# https://0xarchive.io/data.
 # =============================================================================
 
 
 class WsStreamStarted(BaseModel):
     """Stream started response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message. For large dataset downloads, use the S3 Parquet bulk export
+        at https://0xarchive.io/data.
 
     In multi-channel mode, ``channels`` lists all channels being streamed.
     """
@@ -1344,21 +1498,37 @@ class WsStreamStarted(BaseModel):
 
 
 class WsStreamProgress(BaseModel):
-    """Stream progress response (sent every ~2 seconds)."""
+    """Stream progress response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message.
+    """
 
     type: Literal["stream_progress"]
     snapshots_sent: int
 
 
 class TimestampedRecord(BaseModel):
-    """A record with timestamp for batched data."""
+    """A record with timestamp for batched data.
+
+    .. deprecated:: 1.11.0
+        Only used by :class:`WsHistoricalBatch`, which the server no longer
+        sends because it has discontinued bulk streaming.
+    """
 
     timestamp: int
     data: dict[str, Any]
 
 
 class WsHistoricalBatch(BaseModel):
-    """Batch of historical data (bulk streaming)."""
+    """Batch of historical data (bulk streaming).
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message. For large dataset downloads, use the S3 Parquet bulk export
+        at https://0xarchive.io/data.
+    """
 
     type: Literal["historical_batch"]
     channel: WsChannel
@@ -1368,6 +1538,10 @@ class WsHistoricalBatch(BaseModel):
 
 class WsStreamCompleted(BaseModel):
     """Stream completed response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message.
 
     In multi-channel mode, ``channels`` lists all channels that were streamed.
     """
@@ -1382,7 +1556,12 @@ class WsStreamCompleted(BaseModel):
 
 
 class WsStreamStopped(BaseModel):
-    """Stream stopped response."""
+    """Stream stopped response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message.
+    """
 
     type: Literal["stream_stopped"]
     snapshots_sent: int
