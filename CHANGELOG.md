@@ -17,8 +17,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `interval_ms` keyword on `subscribe()`, `subscribe_async()` and
   `subscribe_lighter_orderbook()`. Live Lighter books default to one per
   second; pass 100 to 5000 to choose the rate. Each book sent is one metered
-  message. It is accepted on `lighter_orderbook` only, is checked before
-  anything is sent, and is re-sent on reconnect.
+  message. It is accepted on `lighter_orderbook` only, must be an integer, is
+  checked before anything is sent, and is re-sent on reconnect.
+- Live Lighter subscriptions are tracked by the uppercase symbol, matching the
+  server, so subscribing as `btc` and unsubscribing as `BTC` removes the
+  subscription and it is not restored on reconnect.
 - `on_lighter_orderbook()`, `on_lighter_trades()` and
   `on_lighter_market_context()` handlers. The first two take precedence over
   `on_orderbook()` and `on_trades()` for Lighter messages, so Lighter `BTC`

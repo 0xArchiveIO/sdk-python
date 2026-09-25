@@ -164,8 +164,8 @@ def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] =
     """Reject live subscriptions the server would refuse, before any state changes.
 
     ``lighter_candles`` and ``lighter_l3_orderbook`` are replay-only, and
-    ``interval_ms`` is accepted only on ``lighter_orderbook``, between
-    ``LIGHTER_BOOK_INTERVAL_MIN_MS`` and ``LIGHTER_BOOK_INTERVAL_MAX_MS``.
+    ``interval_ms`` is accepted only on ``lighter_orderbook``, as an integer
+    between ``LIGHTER_BOOK_INTERVAL_MIN_MS`` and ``LIGHTER_BOOK_INTERVAL_MAX_MS``.
     """
     if channel in LIGHTER_REPLAY_ONLY_CHANNELS:
         raise ValueError(LIGHTER_SUBSCRIPTION_ERROR)
@@ -173,11 +173,11 @@ def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] =
         return
     if channel != "lighter_orderbook":
         raise ValueError("interval_ms is only supported on lighter_orderbook.")
-    if (
-        isinstance(interval_ms, bool)
-        or not isinstance(interval_ms, int)
-        or not LIGHTER_BOOK_INTERVAL_MIN_MS <= interval_ms <= LIGHTER_BOOK_INTERVAL_MAX_MS
-    ):
+    if isinstance(interval_ms, bool) or not isinstance(interval_ms, int):
+        raise ValueError(
+            f"interval_ms must be an integer number of milliseconds (got {interval_ms!r})."
+        )
+    if not LIGHTER_BOOK_INTERVAL_MIN_MS <= interval_ms <= LIGHTER_BOOK_INTERVAL_MAX_MS:
         raise ValueError(
             f"interval_ms must be between {LIGHTER_BOOK_INTERVAL_MIN_MS} and "
             f"{LIGHTER_BOOK_INTERVAL_MAX_MS} for lighter_orderbook (got {interval_ms!r}). "
@@ -627,7 +627,8 @@ class OxArchiveWs:
         Raises:
             ValueError: If ``channel`` is ``lighter_candles`` or
                 ``lighter_l3_orderbook`` (replay-only), or if ``interval_ms`` is
-                passed for another channel or is out of range.
+                passed for another channel, is not an integer, or is out of
+                range.
         """
         _validate_live_subscription(channel, interval_ms)
         self._remember_subscription(channel, coin, interval_ms)
@@ -1325,7 +1326,14 @@ class OxArchiveWs:
             self._on_state_change(state)
 
     def _subscription_key(self, channel: WsChannel, coin: Optional[str]) -> str:
-        """Create subscription key."""
+        """Create subscription key.
+
+        Live Lighter symbols are case-insensitive on the server, which echoes
+        them uppercase, so their keys use the uppercase symbol. ``btc`` and
+        ``BTC`` then name one subscription here, as they do on the server.
+        """
+        if coin and channel in LIGHTER_LIVE_CHANNELS:
+            coin = coin.upper()
         return f"{channel}:{coin}" if coin else channel
 
     def _remember_subscription(

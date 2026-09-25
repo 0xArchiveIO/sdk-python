@@ -243,8 +243,9 @@ def test_lighter_orderbook_interval_ms_out_of_range_is_rejected(interval_ms: int
 @pytest.mark.parametrize("interval_ms", [True, 250.0, "250"])
 def test_lighter_orderbook_interval_ms_must_be_an_integer(interval_ms: Any) -> None:
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
+    expected = f"interval_ms must be an integer number of milliseconds (got {interval_ms!r})."
 
-    with pytest.raises(ValueError, match="interval_ms must be between 100 and 5000"):
+    with pytest.raises(ValueError, match=re.escape(expected)):
         ws.subscribe("lighter_orderbook", "BTC", interval_ms=interval_ms)
 
     assert ws._subscriptions == set()
@@ -291,6 +292,45 @@ def test_reconnect_resends_interval_ms_and_a_resubscribe_replaces_it() -> None:
     asyncio.run(resubscribe_without_interval())
     assert {"op": "subscribe", "channel": "lighter_orderbook", "symbol": "BTC"} in socket.sent
     assert all("interval_ms" not in message for message in socket.sent)
+
+
+def test_lighter_symbols_are_tracked_case_insensitively() -> None:
+    ws, socket = _connected_client()
+
+    async def run() -> None:
+        await ws.subscribe_async("lighter_orderbook", "btc", interval_ms=250)
+        await ws.subscribe_async("lighter_trades", "eth")
+        await ws.unsubscribe_async("lighter_orderbook", "BTC")
+        socket.sent.clear()
+        await ws._resubscribe()
+
+    asyncio.run(run())
+    assert ws._subscriptions == {"lighter_trades:ETH"}
+    assert ws._subscription_options == {}
+    assert socket.sent == [{"op": "subscribe", "channel": "lighter_trades", "symbol": "ETH"}]
+
+
+def test_a_differently_cased_lighter_resubscribe_replaces_the_interval() -> None:
+    ws, socket = _connected_client()
+
+    async def run() -> None:
+        await ws.subscribe_async("lighter_orderbook", "btc", interval_ms=250)
+        await ws.subscribe_async("lighter_orderbook", "BTC")
+        socket.sent.clear()
+        await ws._resubscribe()
+
+    asyncio.run(run())
+    assert ws._subscriptions == {"lighter_orderbook:BTC"}
+    assert ws._subscription_options == {}
+    assert socket.sent == [{"op": "subscribe", "channel": "lighter_orderbook", "symbol": "BTC"}]
+
+
+def test_hyperliquid_symbols_keep_their_case() -> None:
+    ws, _ = _connected_client()
+
+    asyncio.run(ws.subscribe_async("trades", "kPEPE"))
+
+    assert ws._subscriptions == {"trades:kPEPE"}
 
 
 @pytest.mark.parametrize("channel", sorted(LIGHTER_REPLAY_CHANNELS))
