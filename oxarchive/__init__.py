@@ -108,7 +108,7 @@ from .types import (
     WsReplayStopped,
     WsHistoricalData,
     WsReplaySnapshot,
-    # Stream types (Option D)
+    # Bulk stream types (deprecated: the server has discontinued bulk streaming)
     WsStreamStarted,
     WsStreamProgress,
     WsHistoricalBatch,
@@ -219,7 +219,7 @@ __all__ = [
     "WsReplayStopped",
     "WsHistoricalData",
     "WsReplaySnapshot",
-    # Stream Types (Option D)
+    # Bulk stream types (deprecated: the server has discontinued bulk streaming)
     "WsStreamStarted",
     "WsStreamProgress",
     "WsHistoricalBatch",

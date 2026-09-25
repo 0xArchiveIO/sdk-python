@@ -1102,8 +1102,9 @@ Notes:
 - ticker/all_tickers are real-time only.
 - liquidations and hip3_liquidations now stream live (realtime + replay).
   Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
-- open_interest, funding, hip3_open_interest, hip3_funding are historical
-  only (replay/stream).
+- open_interest and funding (Hyperliquid core) support live subscriptions
+  and historical replay.
+- hip3_open_interest, hip3_funding are historical only (replay).
 - lighter_orderbook, lighter_trades, lighter_open_interest and lighter_funding
   support live subscriptions and historical replay. Live messages use the
   Hyperliquid-style shapes described on :class:`LighterLiveTrade` and
@@ -1464,12 +1465,22 @@ class WsHistoricalTickData(BaseModel):
 
 
 # =============================================================================
-# WebSocket Bulk Stream Types (Data Catalog Mode)
+# WebSocket Bulk Stream Types (deprecated)
+#
+# The server has discontinued WebSocket bulk streaming and no longer sends
+# these messages. The models stay exported for backward compatibility. For
+# large dataset downloads, use the S3 Parquet bulk export at
+# https://0xarchive.io/data.
 # =============================================================================
 
 
 class WsStreamStarted(BaseModel):
     """Stream started response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message. For large dataset downloads, use the S3 Parquet bulk export
+        at https://0xarchive.io/data.
 
     In multi-channel mode, ``channels`` lists all channels being streamed.
     """
@@ -1487,21 +1498,37 @@ class WsStreamStarted(BaseModel):
 
 
 class WsStreamProgress(BaseModel):
-    """Stream progress response (sent every ~2 seconds)."""
+    """Stream progress response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message.
+    """
 
     type: Literal["stream_progress"]
     snapshots_sent: int
 
 
 class TimestampedRecord(BaseModel):
-    """A record with timestamp for batched data."""
+    """A record with timestamp for batched data.
+
+    .. deprecated:: 1.11.0
+        Only used by :class:`WsHistoricalBatch`, which the server no longer
+        sends because it has discontinued bulk streaming.
+    """
 
     timestamp: int
     data: dict[str, Any]
 
 
 class WsHistoricalBatch(BaseModel):
-    """Batch of historical data (bulk streaming)."""
+    """Batch of historical data (bulk streaming).
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message. For large dataset downloads, use the S3 Parquet bulk export
+        at https://0xarchive.io/data.
+    """
 
     type: Literal["historical_batch"]
     channel: WsChannel
@@ -1511,6 +1538,10 @@ class WsHistoricalBatch(BaseModel):
 
 class WsStreamCompleted(BaseModel):
     """Stream completed response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message.
 
     In multi-channel mode, ``channels`` lists all channels that were streamed.
     """
@@ -1525,7 +1556,12 @@ class WsStreamCompleted(BaseModel):
 
 
 class WsStreamStopped(BaseModel):
-    """Stream stopped response."""
+    """Stream stopped response.
+
+    .. deprecated:: 1.11.0
+        The server has discontinued bulk streaming and no longer sends this
+        message.
+    """
 
     type: Literal["stream_stopped"]
     snapshots_sent: int

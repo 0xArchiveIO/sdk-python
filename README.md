@@ -1256,6 +1256,8 @@ trades = client.trades.list("BTC", start=..., end=...)
 
 The WebSocket client supports live subscriptions for supported Hyperliquid and Lighter.xyz channels and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
 
+> WebSocket bulk streaming has been discontinued. For large dataset downloads, use the S3 Parquet bulk export in the [Data Catalog](https://www.0xarchive.io/data). The `stream()`, `multi_stream()`, and `stream_stop()` methods remain for compatibility but are deprecated: each call emits a `DeprecationWarning`, and the server answers with an error message (a `WsError` on `on_message`) instead of data. The `on_batch`, `on_stream_start`, `on_stream_progress`, and `on_stream_complete` handler setters are deprecated too: setting one emits a `DeprecationWarning`, and the handler is never called.
+
 > Lighter supports live subscriptions on `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` at `wss://api.0xarchive.io/ws` (the client default). `lighter_candles` and `lighter_l3_orderbook` remain replay-only. All six Lighter channels support historical replay.
 
 ```python
@@ -1469,7 +1471,7 @@ from oxarchive import OxArchiveWs, WsOptions
 async def main():
     ws = OxArchiveWs(WsOptions(api_key="ox_..."))
 
-    # Handle gap notifications during replay/stream
+    # Handle gap notifications during replay
     def handle_gap(channel, coin, gap_start, gap_end, duration_minutes):
         print(f"Gap detected in {channel}/{coin}:")
         print(f"  From: {gap_start}")

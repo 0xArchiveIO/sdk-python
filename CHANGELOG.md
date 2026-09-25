@@ -56,9 +56,19 @@ release on PyPI is 1.7.0, so upgrading from PyPI goes straight from 1.7.0 to
 - Replay of all six Lighter channels is unchanged and keeps its historical
   row shapes, which differ from the live messages.
 
+### Deprecated
+- `OxArchiveWs.stream()`, `multi_stream()` and `stream_stop()`. The server has
+  discontinued WebSocket bulk streaming and answers these requests with an
+  error message instead of data. Each call now emits a `DeprecationWarning`.
+  For large dataset downloads, use the S3 Parquet bulk export at
+  https://0xarchive.io/data. The `on_batch()`, `on_stream_start()`,
+  `on_stream_progress()` and `on_stream_complete()` handler setters and the
+  bulk stream message models are deprecated with them.
+
 ### Fixed
-- The README now lists Hyperliquid `open_interest` and `funding` as available
-  for live subscription as well as replay.
+- The README and the `WsChannel` docstring now list Hyperliquid
+  `open_interest` and `funding` as available for live subscription as well as
+  replay.
 
 ## [1.10.0] - 2026-09-23
 
