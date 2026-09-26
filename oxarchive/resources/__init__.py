@@ -13,11 +13,17 @@ from .instruments import (
 from .l2_orderbook import L2OrderBookResource
 from .l3_orderbook import L3OrderBookResource
 from .l4_orderbook import L4OrderBookResource
+from .lighter_liquidations import LighterLiquidationsResource
 from .liquidations import LiquidationsResource
 from .openinterest import Hip4OpenInterestResource, OpenInterestResource
 from .orderbook import OrderBookResource
 from .orders import OrdersResource
 from .outcomes import Hip4OutcomesResource
+from .positions import (
+    HyperliquidPositionsResource,
+    LighterAccountsResource,
+    LighterPositionsResource,
+)
 from .spot import SpotPairsResource, SpotTwapResource
 from .trades import TradesResource
 from .web3 import Web3Resource
@@ -38,6 +44,7 @@ __all__ = [
     "Hip4CandlesResource",
     "SpotCandlesResource",
     "LiquidationsResource",
+    "LighterLiquidationsResource",
     "DataQualityResource",
     "Web3Resource",
     "OrdersResource",
@@ -47,4 +54,7 @@ __all__ = [
     "L3OrderBookResource",
     "SpotPairsResource",
     "SpotTwapResource",
+    "HyperliquidPositionsResource",
+    "LighterPositionsResource",
+    "LighterAccountsResource",
 ]

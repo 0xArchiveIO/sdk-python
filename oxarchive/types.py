@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Generic, Literal, Optional, TypeVar, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # =============================================================================
@@ -1088,6 +1088,8 @@ WsChannel = Literal[
     "open_interest", "funding",
     "lighter_orderbook", "lighter_trades", "lighter_candles",
     "lighter_open_interest", "lighter_funding", "lighter_l3_orderbook",
+    "rh_lighter_orderbook", "rh_lighter_trades", "rh_lighter_candles",
+    "rh_lighter_open_interest", "rh_lighter_funding",
     "hip3_orderbook", "hip3_trades", "hip3_candles",
     "hip3_open_interest", "hip3_funding", "hip3_liquidations",
     "hip4_orderbook", "hip4_trades", "hip4_open_interest",
@@ -1110,6 +1112,12 @@ Notes:
   Hyperliquid-style shapes described on :class:`LighterLiveTrade` and
   :class:`LighterMarketContext`; replay rows keep their historical shapes.
 - lighter_candles and lighter_l3_orderbook support historical replay only.
+- rh_lighter_orderbook, rh_lighter_trades, rh_lighter_open_interest and
+  rh_lighter_funding (Lighter on Robinhood Chain) support live subscriptions
+  and historical replay, with the same live message shapes as the mainnet
+  ``lighter_*`` channels. rh_lighter_orderbook accepts ``interval_ms`` like
+  lighter_orderbook. rh_lighter_candles supports historical replay only. Live
+  Robinhood Chain channels are served on wss://api.0xarchive.io/ws only.
 - l4_diffs, l4_orders: Hyperliquid core L4 order-level data. Historical replay
   emits one ``l4_snapshot`` followed by ordered ``l4_batch`` messages.
 - hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (live-only).
@@ -1167,8 +1175,8 @@ class WsData(BaseModel):
     Note: The `data` field can be either a dict (for orderbook) or a list (for trades).
     - Orderbook: dict with 'levels', 'time', etc.
     - Trades: list of trade objects with 'coin', 'side', 'px', 'sz', etc.
-    - lighter_open_interest / lighter_funding: dict with 'coin' and 'ctx'
-      (see :class:`LighterMarketContextUpdate`).
+    - lighter_open_interest / lighter_funding (and the rh_lighter_* equivalents):
+      dict with 'coin' and 'ctx' (see :class:`LighterMarketContextUpdate`).
     """
 
     type: Literal["data"]
@@ -1745,6 +1753,586 @@ class OxArchiveError(Exception):
 
 
 # =============================================================================
+# Lighter Liquidation Types (Lighter mainnet and Lighter on Robinhood Chain)
+# =============================================================================
+
+
+class LighterLiquidation(BaseModel):
+    """One Lighter liquidation event.
+
+    Returned by ``client.lighter.liquidations.history()`` and
+    ``client.rh_lighter.liquidations.history()``. Lighter liquidations are the
+    liquidation trades of the venue's trade stream. The row keeps both sides'
+    raw account fields (``ask_account``, ``bid_account``, ``is_maker_ask`` and
+    the ``*_position_sign_changed`` flags) rather than a single liquidated
+    account, because the trade payload does not always say which side was
+    liquidated. Prices and sizes are in market units; the integer margin and
+    fee fields are in the venue's raw integer units.
+    """
+
+    symbol: str
+    """Market symbol."""
+
+    timestamp: int
+    """Trade time in Unix milliseconds."""
+
+    transaction_time_us: Optional[int] = None
+    """Transaction time in microseconds (orders events within a block)."""
+
+    trade_id: int
+    """Lighter trade id."""
+
+    liquidation_type: Optional[str] = None
+    """Liquidation type as reported by Lighter."""
+
+    price: float
+    """Execution price."""
+
+    size: float
+    """Execution size in base units."""
+
+    usd_amount: Optional[float] = None
+    """Notional in the quote asset (USDC on mainnet, USDG on Robinhood Chain)."""
+
+    ask_account: Optional[str] = None
+    """Account index of the ask side, as a string."""
+
+    bid_account: Optional[str] = None
+    """Account index of the bid side, as a string."""
+
+    ask_order_id: Optional[int] = None
+    """Order id of the ask side."""
+
+    bid_order_id: Optional[int] = None
+    """Order id of the bid side."""
+
+    is_maker_ask: Optional[bool] = None
+    """``True`` when the ask side was the maker."""
+
+    taker_position_size_before: Optional[float] = None
+    """Taker's signed position before the trade (positive long, negative short)."""
+
+    maker_position_size_before: Optional[float] = None
+    """Maker's signed position before the trade."""
+
+    taker_entry_quote_before: Optional[float] = None
+    """Taker's entry quote before the trade."""
+
+    maker_entry_quote_before: Optional[float] = None
+    """Maker's entry quote before the trade."""
+
+    taker_initial_margin_fraction_before: Optional[int] = None
+    """Taker's initial margin fraction before the trade (raw integer units)."""
+
+    maker_initial_margin_fraction_before: Optional[int] = None
+    """Maker's initial margin fraction before the trade (raw integer units)."""
+
+    taker_allocated_margin_usdc_before: Optional[int] = None
+    """Taker's allocated margin before the trade (raw integer units)."""
+
+    taker_allocated_margin_usdc_after: Optional[int] = None
+    """Taker's allocated margin after the trade (raw integer units)."""
+
+    maker_allocated_margin_usdc_before: Optional[int] = None
+    """Maker's allocated margin before the trade (raw integer units)."""
+
+    maker_allocated_margin_usdc_after: Optional[int] = None
+    """Maker's allocated margin after the trade (raw integer units)."""
+
+    taker_fee: Optional[int] = None
+    """Taker fee (raw integer units)."""
+
+    maker_fee: Optional[int] = None
+    """Maker fee (raw integer units)."""
+
+    taker_position_sign_changed: Optional[bool] = None
+    """``True`` when the trade flipped the taker's position sign."""
+
+    maker_position_sign_changed: Optional[bool] = None
+    """``True`` when the trade flipped the maker's position sign."""
+
+    block_height: Optional[int] = None
+    """Block height of the trade."""
+
+    tx_hash: Optional[str] = None
+    """Transaction hash."""
+
+    raw_json: Optional[str] = None
+    """The trade object exactly as captured, as a JSON string. Empty for rows
+    backfilled from the venue's finalized export (``source == "bucket"``)."""
+
+    source: Optional[str] = None
+    """Where the row came from. ``"ws"`` marks rows captured live, which keep
+    the venue's raw JSON in ``raw_json``. ``"bucket"`` marks rows backfilled
+    from the venue's finalized export, which carry an empty ``raw_json``; on
+    Robinhood Chain these cover the span before live capture."""
+
+
+class LighterLiquidationVolume(BaseModel):
+    """Aggregated Lighter liquidation volume for one time bucket.
+
+    Lighter buckets carry the total only. There is no long/short split because
+    the trade payload does not reliably say which side was liquidated.
+    """
+
+    symbol: str
+    """Market symbol."""
+
+    timestamp: int
+    """Bucket start in Unix milliseconds."""
+
+    total_usd: float
+    """Total liquidated notional in the bucket, in the quote asset."""
+
+    count: int
+    """Number of liquidation trades in the bucket."""
+
+
+# =============================================================================
+# Account Positions Types
+# =============================================================================
+#
+# Numbers are decimal strings (sizes at the market's size precision, prices at
+# its price precision, USD values to 6 decimals); a flat position is ``"0"``.
+# A field is ``None`` when it is unknown, never a guess. Timestamps are UTC.
+
+
+class PositionLeverage(BaseModel):
+    """Leverage of a position."""
+
+    type: str
+    """``"cross"`` or ``"isolated"`` on Hyperliquid (``"unknown"`` on
+    reconstructed rows); the margin mode on Lighter."""
+
+    value: Optional[str] = None
+    """Leverage multiple, or ``None`` when not reported."""
+
+
+class PositionCumFunding(BaseModel):
+    """Cumulative funding of a position, in USD (Hyperliquid snapshot rows only)."""
+
+    all_time: Optional[str] = None
+    since_open: Optional[str] = None
+    since_change: Optional[str] = None
+
+
+class Position(BaseModel):
+    """One open position of an account.
+
+    Returned by the wallet or account routes (``positions.get()``,
+    ``positions.history()``). Hyperliquid rows carry the full snapshot fields;
+    Lighter rows carry ``account_index``, ``account_kind`` and the Lighter
+    extras, and leave the Hyperliquid-only fields ``None``.
+    """
+
+    snapshot_ts: Optional[datetime] = None
+    """Hour the row describes (hourly history rows only)."""
+
+    account_index: Optional[str] = None
+    """Lighter account index, as a string (Lighter only)."""
+
+    account_kind: Optional[str] = None
+    """Lighter only: ``"user"``, ``"settlement"``, ``"insurance"`` or ``"system"``."""
+
+    symbol: str
+    """Market symbol."""
+
+    coin: str
+    """Alias of ``symbol``."""
+
+    dex: Optional[str] = None
+    """HIP-3 dex (HIP-3 only)."""
+
+    size: str
+    """Signed position size; negative is short."""
+
+    side: Literal["long", "short"]
+    """Position side."""
+
+    entry_price: Optional[str] = None
+    mark_price: Optional[str] = None
+
+    mark_time: Optional[datetime] = None
+    """Time of the mark used for ``mark_price``, ``position_value`` and ``unrealized_pnl``."""
+
+    position_value: Optional[str] = None
+    """Absolute size times mark, in USD."""
+
+    unrealized_pnl: Optional[str] = None
+    return_on_equity: Optional[str] = None
+    leverage: PositionLeverage
+    max_leverage: Optional[int] = None
+    margin_used: Optional[str] = None
+    liquidation_price: Optional[str] = None
+
+    liquidation_price_status: str
+    """``"exact"`` when ``liquidation_price`` is set, ``"unavailable"`` otherwise."""
+
+    cum_funding: PositionCumFunding
+
+    opened_at: Optional[datetime] = None
+    """When the current position was opened."""
+
+    snapshot_as_of: Optional[datetime] = None
+    """Instant the leverage, funding and account fields describe. Size, entry
+    and mark fields describe ``snapshot_ts`` (or the response's ``as_of``)."""
+
+    quality: str
+    """Row quality: ``"complete"``, ``"partial"`` (for example no mark),
+    ``"degraded"``; Lighter also uses ``"preliminary"``, ``"unreconciled"`` and
+    ``"incomplete"``."""
+
+    initial_margin_fraction: Optional[str] = None
+    """Lighter only: initial margin fraction at the last trade, as a fraction."""
+
+    allocated_margin: Optional[str] = None
+    """Lighter only: allocated margin in the quote asset."""
+
+    margin_mode: Optional[str] = None
+    """Lighter only: margin mode."""
+
+    mark_source: Optional[str] = None
+    """Lighter only: where the mark came from (``"none"`` when there was no mark)."""
+
+    finalized: Optional[bool] = None
+    """Lighter only: ``True`` when every event behind the row is final."""
+
+
+class MarketPosition(BaseModel):
+    """One open position in a market-wide listing (``positions.market()`` and
+    ``positions.all()``). A lean record: the account plus size, price and value."""
+
+    snapshot_ts: Optional[datetime] = None
+    """Hour the row describes (bulk ``positions.all()`` rows)."""
+
+    user_address: Optional[str] = None
+    """Wallet address (Hyperliquid and HIP-3)."""
+
+    account_index: Optional[str] = None
+    """Account index, as a string (Lighter)."""
+
+    account_kind: Optional[str] = None
+    """Account kind (Lighter): ``"user"``, ``"settlement"``, ``"insurance"`` or ``"system"``."""
+
+    symbol: str
+    coin: str
+    dex: Optional[str] = None
+    size: str
+    side: Literal["long", "short"]
+    entry_price: Optional[str] = None
+    mark_price: Optional[str] = None
+    position_value: Optional[str] = None
+    unrealized_pnl: Optional[str] = None
+
+    leverage_type: str
+    """``"cross"`` or ``"isolated"`` on Hyperliquid; the margin mode on Lighter."""
+
+    liquidation_price: Optional[str] = None
+    quality: str
+
+
+class PositionChange(BaseModel):
+    """One change-log leg: a fill or event that changed an account's position.
+
+    ``side`` is ``"B"`` or ``"A"`` exactly as on trades. Hyperliquid rows carry
+    ``direction``, ``closed_pnl``, ``crossed`` and ``seq``; Lighter rows carry
+    ``realized_pnl``, ``is_maker`` and the Lighter extras.
+    """
+
+    timestamp: datetime
+    account_index: Optional[str] = None
+    account_kind: Optional[str] = None
+    symbol: str
+    coin: str
+    dex: Optional[str] = None
+    side: Literal["A", "B"]
+    price: Optional[str] = None
+    size: Optional[str] = None
+
+    start_position: Optional[str] = None
+    """Signed position before the leg."""
+
+    end_position: Optional[str] = None
+    """Signed position after the leg."""
+
+    entry_price_after: Optional[str] = None
+    """Entry price after the leg; ``None`` when the position is flat."""
+
+    event_type: str
+    """What the leg did to the position: ``"open"``, ``"increase"``,
+    ``"reduce"``, ``"close"`` or ``"flip"``. On Lighter, a leg that leaves the
+    position unchanged is ``"settlement"`` (the settlement counterparty's side
+    of a market settlement) or otherwise ``"unchanged"``."""
+
+    cause: str
+    """What produced the leg: ``"trade"``, ``"liquidation"``,
+    ``"liquidation_counterparty"``, ``"adl"``, ``"settlement"`` or ``"unknown"``."""
+
+    direction: Optional[str] = None
+    """Hyperliquid only: direction as on trades (for example ``"Open Long"``)."""
+
+    closed_pnl: Optional[str] = None
+    """Hyperliquid only: realized PnL of the leg."""
+
+    realized_pnl: Optional[str] = None
+    """Lighter only: realized PnL of the leg."""
+
+    fee: Optional[str] = None
+    fee_token: str
+
+    crossed: Optional[bool] = None
+    """Hyperliquid only: ``True`` for the taker leg."""
+
+    is_maker: Optional[bool] = None
+    """Lighter only: ``True`` for the maker leg."""
+
+    trade_id: int
+    order_id: Optional[int] = None
+    opened_at: Optional[datetime] = None
+
+    seq: Optional[int] = None
+    """Hyperliquid only: order of the leg among legs with the same timestamp."""
+
+    block_number: Optional[int] = None
+    """Hyperliquid only: block of the leg, when known."""
+
+    event_index: Optional[int] = None
+    """Hyperliquid only: index of the leg within its block, when known."""
+
+    continuity: str
+    """``"ok"``, ``"inferred"`` (the chain was re-seeded from the venue's
+    reported start position), ``"first_seen"`` or ``"quarantined"``."""
+
+    position_size_before: Optional[str] = None
+    """Lighter alias of ``start_position``."""
+
+    position_size_after: Optional[str] = None
+    """Lighter alias of ``end_position``."""
+
+    fee_rate: Optional[str] = None
+    """Lighter only: fee rate as a fraction."""
+
+    fee_usdc: Optional[str] = None
+    """Lighter only: fee in the quote asset."""
+
+    usdc_amount: Optional[str] = None
+    """Lighter only: notional of the leg in the quote asset."""
+
+    finalized: Optional[bool] = None
+    """``True`` when the leg is final and will not be re-derived."""
+
+
+class AccountSummary(BaseModel):
+    """Account summary at one snapshot.
+
+    Hyperliquid and HIP-3: the full clearinghouse summary, one row per
+    clearinghouse (Hyperliquid core has one per address, HIP-3 one per dex),
+    returned by ``positions.account()`` / ``positions.account_history()`` and
+    as ``WalletPositions.account``. ``withdrawable`` is only available for
+    older hourly history.
+
+    Lighter mainnet and Robinhood Chain: position aggregates only, as
+    ``WalletPositions.account`` on ``positions.get()``. ``account_index``,
+    ``total_position_value``, ``total_unrealized_pnl``, ``long_value``,
+    ``short_value``, ``n_positions`` and ``quality`` are set; ``dex``, the
+    margin fields (``account_value``, ``cross_account_value``, ``collateral``,
+    ``total_margin_used``, ``cross_maintenance_margin_used``,
+    ``withdrawable``), ``account_mode`` and ``snapshot_as_of`` are ``None``.
+    A Lighter total is ``None`` when any position in it has no mark, never a
+    partial sum.
+    """
+
+    snapshot_ts: Optional[datetime] = None
+    """Hour the row describes (hourly history rows only)."""
+
+    account_index: Optional[str] = None
+    """Lighter account index, as a string (Lighter summaries only)."""
+
+    dex: Optional[str] = None
+    account_value: Optional[str] = None
+    cross_account_value: Optional[str] = None
+    collateral: Optional[str] = None
+    total_margin_used: Optional[str] = None
+    cross_maintenance_margin_used: Optional[str] = None
+    withdrawable: Optional[str] = None
+    total_position_value: Optional[str] = None
+    total_unrealized_pnl: Optional[str] = None
+    long_value: Optional[str] = None
+    short_value: Optional[str] = None
+    n_positions: int
+    account_mode: Optional[str] = None
+    snapshot_as_of: Optional[datetime] = None
+    quality: str
+
+
+class MarketPositionsSummary(BaseModel):
+    """Long/short aggregates of every open position in one market at one snapshot.
+
+    Returned by ``positions.market_summary()`` and as ``meta.totals`` on the
+    first page of ``positions.market()``. Average entries cover only the
+    positions whose entry is known (``*_positions_with_entry``). A total or share
+    is ``None`` when any position in it has no mark, never a partial sum.
+    """
+
+    snapshot_ts: Optional[datetime] = None
+    symbol: str
+    coin: str
+    dex: Optional[str] = None
+    long_count: int
+    short_count: int
+    long_size: str
+    short_size: str
+    long_value: Optional[str] = None
+    short_value: Optional[str] = None
+    long_avg_entry_price: Optional[str] = None
+    short_avg_entry_price: Optional[str] = None
+    long_positions_with_entry: int
+    short_positions_with_entry: int
+
+    long_top10_value_share: Optional[str] = None
+    """Share of long value held by the 10 largest longs, as a fraction."""
+
+    short_top10_value_share: Optional[str] = None
+    """Share of short value held by the 10 largest shorts, as a fraction."""
+
+    top10_value_share: Optional[str] = None
+    """Share of total value held by the 10 largest positions, as a fraction."""
+
+    quality: str
+
+
+class WalletPositions(BaseModel):
+    """``data`` of ``positions.get()``: an account's open positions at one instant."""
+
+    positions: list[Position] = Field(default_factory=list)
+    """Open positions (flat markets are not listed)."""
+
+    account: Optional[AccountSummary] = None
+    """Account summary on the first page of a snapshot (the live snapshot, or a
+    ``timestamp`` on an exact UTC hour). Hyperliquid core: always on that page.
+    HIP-3: when ``dex`` (or a ``symbol``) names one dex. Lighter mainnet and
+    Robinhood Chain: when the request has no ``symbol`` filter; the summary
+    holds position aggregates only (see :class:`AccountSummary`). ``None`` on
+    later pages and on reconstructions (a ``timestamp`` between hours)."""
+
+    account_seen: Optional[str] = None
+    """Set only when ``positions`` is empty: ``"flat"`` (activity recorded, no
+    open position), ``"never_seen"`` (no activity recorded in the covered
+    history; see ``meta.notice`` and ``meta.coverage_from``) or
+    ``"outside_coverage"`` (the instant is before coverage begins)."""
+
+
+class LighterL1Account(BaseModel):
+    """One Lighter account owned by an L1 address."""
+
+    account_index: str
+    """Account index, as a string. Pass it to ``positions.get()``."""
+
+    account_type: int
+    """Lighter account type."""
+
+    first_seen: Optional[datetime] = None
+    """When the account was first seen."""
+
+
+class LighterL1Accounts(BaseModel):
+    """``data`` of ``client.lighter.accounts.by_l1()``."""
+
+    l1_address: str
+    """The L1 address, lowercased."""
+
+    total_accounts: int
+    """Number of accounts the address owns (across all pages)."""
+
+    accounts: list[LighterL1Account] = Field(default_factory=list)
+    """Accounts on this page, ascending by account index."""
+
+
+class ResponseMeta(BaseModel):
+    """Response metadata (the ``meta`` object of an API response).
+
+    Every field is optional; a route sets only the fields that apply to it.
+    Unknown fields are kept. Instants are UTC.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    count: Optional[int] = None
+    """Rows in this page."""
+
+    next_cursor: Optional[str] = None
+    """Cursor for the next page; ``None`` on the last page."""
+
+    request_id: Optional[str] = None
+
+    finalized_through: Optional[datetime] = None
+    """Every event before this instant is final and will not be re-derived.
+    On Lighter trades, the canonical boundary; on account positions, how far the
+    position data is final."""
+
+    requested_end: Optional[datetime] = None
+    """Set with ``clamped_to`` when the request asked past the served boundary:
+    the end (or ``timestamp``) the request asked for."""
+
+    clamped_to: Optional[datetime] = None
+    """Set when the request was clamped: the boundary it was clamped to
+    (``finalized_through`` on Lighter trades, ``built_through`` on positions)."""
+
+    preliminary_row_count: Optional[int] = None
+    """Rows in the page that are not final yet. The API sends it only on the
+    Lighter ``/trades/{symbol}/recent`` response, and ``trades.recent()``
+    returns a plain list without the meta, so no SDK method returns it in this
+    release. It is typed so the meta parses wherever it appears."""
+
+    coverage_from: Optional[datetime] = None
+    """Where coverage begins, set with ``notice`` when a window is before coverage."""
+
+    notice: Optional[str] = None
+    """Human-readable advisory about this response."""
+
+    as_of: Optional[datetime] = None
+    """Instant the returned state describes, taken from the data."""
+
+    snapshot_ts: Optional[datetime] = None
+    """Snapshot the response was read from (market routes echo ``hour`` here)."""
+
+    source: Optional[str] = None
+    """How the rows were produced: ``"snapshot"``, ``"reconstructed"`` or ``"changes"``."""
+
+    quality: Optional[str] = None
+    """Completeness of the snapshot the response was read from, for example
+    ``"complete"``, ``"partial"`` or ``"degraded"``."""
+
+    stale: Optional[bool] = None
+    """``True`` when the latest live snapshot is older than 12 minutes (with a ``notice``)."""
+
+    totals: Optional[Union[MarketPositionsSummary, dict[str, Any]]] = Field(
+        default=None, union_mode="left_to_right"
+    )
+    """Totals over the whole filtered result set, not just this page. Set on the
+    first page of ``positions.market()``."""
+
+    built_through: Optional[datetime] = None
+    """Account positions: every event before this instant is built into the
+    change log and the as-of state; reads are clamped to it. Data before it may
+    still be preliminary (see ``finalized_through``)."""
+
+    @field_validator(
+        "finalized_through",
+        "requested_end",
+        "clamped_to",
+        "coverage_from",
+        "as_of",
+        "snapshot_ts",
+        "built_through",
+        mode="before",
+    )
+    @classmethod
+    def _empty_instant_is_none(cls, value: Any) -> Any:
+        return None if value == "" else value
+
+
+# =============================================================================
 # Pagination Types
 # =============================================================================
 
@@ -1757,6 +2345,10 @@ class CursorResponse(BaseModel, Generic[T]):
 
     next_cursor: Optional[str] = None
     """Cursor for the next page (use as cursor parameter)."""
+
+    meta: Optional[ResponseMeta] = None
+    """The response's metadata, where the method exposes it: account positions,
+    trades and Lighter liquidations. ``None`` elsewhere."""
 
 
 # Type alias for timestamp parameters

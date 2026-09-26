@@ -5,7 +5,7 @@
 
 Python client for 0xArchive market data in notebooks, research scripts, and data pipelines.
 
-0xArchive is granular market data infrastructure for Hyperliquid and Lighter.xyz. Hyperliquid includes core perps, HIP-3 builder perps, HIP-4 outcome markets, and Hyperliquid Spot. HIP-3, HIP-4, and Spot live under the Hyperliquid namespace (`/v1/hyperliquid/hip3`, `client.hyperliquid.hip3`, etc.). Lighter.xyz is the second top-level venue API.
+0xArchive is granular market data infrastructure for two venues: Hyperliquid and Lighter. Hyperliquid includes core perps, HIP-3 builder perps, HIP-4 outcome markets, and Hyperliquid Spot. HIP-3, HIP-4, and Spot live under the Hyperliquid namespace (`/v1/hyperliquid/hip3`, `client.hyperliquid.hip3`, etc.). Lighter has two deployments: mainnet (`/v1/lighter`, `client.lighter`) and Robinhood Chain (`/v1/rh-lighter`, `client.rh_lighter`). Account positions are available on Hyperliquid, HIP-3, and both Lighter deployments.
 
 Use the Python SDK when the workflow already lives in Python and you want typed REST helpers, async support, WebSocket support, pagination, and reconstruction utilities before moving into a larger pipeline.
 
@@ -35,6 +35,14 @@ print(f"Hyperliquid BTC mid price: {hl_orderbook.mid_price}")
 # Lighter.xyz uses its own venue client
 lighter_orderbook = client.lighter.orderbook.get("BTC")
 print(f"Lighter BTC mid price: {lighter_orderbook.mid_price}")
+
+# Lighter on Robinhood Chain: the second Lighter deployment (USDG-quoted)
+rh_orderbook = client.rh_lighter.orderbook.get("AAPL-USDG")
+
+# Account positions: what a wallet holds now
+positions = client.hyperliquid.positions.get("0xabc...")
+for p in positions.data.positions:
+    print(p.symbol, p.side, p.size, p.unrealized_pnl)
 
 # Hyperliquid HIP-3 builder perps stay under client.hyperliquid.hip3
 hip3_instruments = client.hyperliquid.hip3.instruments.list()
@@ -77,6 +85,8 @@ history = client.hyperliquid.orderbook.history(
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side OI are served from 2026-05-02; OI updates at ~10s. No funding or liquidations. |
 | Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
 | Lighter.xyz | Observed global per-fill trade floor January 17, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
+| Lighter on Robinhood Chain | Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch); order book, OI, and funding from 2026-08-22 18:43 UTC | The second Lighter deployment. 84 USDG-quoted markets: 57 perps (`BTC`) and 27 spot (`AAPL-USDG`). Candles from 2026-06-26 once enabled. No L3. |
+| Account positions | Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13, hourly history from 2026-06-07; Lighter mainnet from 2025-01-17, Robinhood Chain from 2026-06-26 | Live snapshots every 5 minutes (Hyperliquid, HIP-3) or 2 minutes (Lighter). See [Account Positions](#account-positions). |
 
 ## Async Support
 
@@ -527,6 +537,50 @@ twap = await client.spot.twap.aby_user("0xabc...", start=..., end=...)
 fresh = await client.spot.aget_freshness("HYPE-USDC")
 ```
 
+#### Lighter on Robinhood Chain
+
+Lighter has two deployments: mainnet (`client.lighter`) and Robinhood Chain (`client.rh_lighter`, REST root `/v1/rh-lighter`). The Robinhood Chain deployment has the same resources as `client.lighter` except the L3 order book, which is not captured there, and the L1 account resolver. Markets are quoted in USDG. Perps use uppercase symbols (`BTC`); spot markets use dashed symbols (`AAPL-USDG`). Symbols are case-insensitive. Market symbols and ids belong to each deployment, so `BTC` on `client.rh_lighter` is a different market from `BTC` on `client.lighter`.
+
+Coverage: trades and liquidations from the venue launch, 2026-06-26 20:10:26 UTC; order book, open interest, and funding from 2026-08-22 18:43 UTC; account positions from 2026-06-26. A request that starts before a data type's first date is refused with the API's coverage error. Liquidations from before live capture were backfilled from the venue's finalized export: those rows have `source == "bucket"` and an empty `raw_json`, while rows captured live have `source == "ws"` and the venue's raw JSON. Candles are served from 2026-06-26 once they are enabled for this deployment; until then `candles.history()` raises `OxArchiveError` with the server's message.
+
+Trades follow the same finalization contract as mainnet Lighter. `trades.list()` returns canonical trades only: `end` is clamped to the finalization watermark, about a day behind, reported as `result.meta.finalized_through`, with `meta.requested_end` and `meta.clamped_to` set when the clamp applied. `trades.recent()` serves the preliminary tier.
+
+```python
+rh = client.rh_lighter
+
+# Markets
+markets = rh.instruments.list()
+aapl = rh.instruments.get("AAPL-USDG")
+
+# Order book (from 2026-08-22 18:43 UTC)
+book = rh.orderbook.get("AAPL-USDG")
+books = rh.orderbook.history("BTC", start="2026-09-01", end="2026-09-01T01:00:00Z")
+
+# Trades (from 2026-06-26 20:10:26 UTC)
+page = rh.trades.list("BTC", start="2026-09-20", end="2026-09-21", limit=1000)
+print(page.meta.finalized_through, page.meta.clamped_to)
+recent = rh.trades.recent("BTC")  # preliminary tier
+
+# Open interest and funding (perps)
+oi = rh.open_interest.current("BTC")
+funding = rh.funding.history("BTC", start="2026-09-01", end="2026-09-02")
+
+# Liquidations and liquidation volume (from 2026-06-26 20:10:26 UTC)
+liqs = rh.liquidations.history("BTC", start="2026-09-01", end="2026-09-08")
+volume = rh.liquidations.volume("BTC", start="2026-09-01", end="2026-09-08", interval="1d")
+
+# Freshness, summary, price history
+fresh = rh.get_freshness("BTC")
+summary = rh.get_summary("BTC")
+prices = rh.get_price_history("BTC", start="2026-09-01", end="2026-09-02", interval="1h")
+
+# Account positions by Lighter account index (perp markets)
+positions = rh.positions.get(4521)
+
+# Async versions are available on every method
+book = await rh.orderbook.aget("AAPL-USDG")
+```
+
 ### Funding Rates
 
 ```python
@@ -615,7 +669,7 @@ hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 
 ### Liquidations
 
-Get historical liquidation events. Available for Hyperliquid (May 2025+) and HIP-3. The projected forced-liquidation price-level endpoints refresh about every five minutes. This is a measured cadence, not an exact five-minute guarantee.
+Get historical liquidation events. Available for Hyperliquid (May 2025+), HIP-3, and both Lighter deployments (`client.lighter.liquidations`, `client.rh_lighter.liquidations`). The projected forced-liquidation price-level endpoints refresh about every five minutes. This is a measured cadence, not an exact five-minute guarantee.
 
 ```python
 # Get liquidation history for a coin (Hyperliquid)
@@ -662,8 +716,24 @@ hip3_volume = client.hyperliquid.hip3.liquidations.volume(
     interval="1h"
 )
 
+# Lighter liquidations (mainnet and Robinhood Chain). A row keeps both sides'
+# account fields; see LighterLiquidation. Pass next_cursor back unchanged.
+lighter_liquidations = client.lighter.liquidations.history(
+    "BTC",
+    start="2026-09-01",
+    end="2026-09-02",
+    limit=1000
+)
+for liq in lighter_liquidations.data:
+    print(liq.timestamp, liq.price, liq.size, liq.usd_amount, liq.ask_account, liq.bid_account)
+
+# Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC.
+# Rows from before live capture have source == "bucket" and an empty raw_json.
+rh_liquidations = client.rh_lighter.liquidations.history("BTC", start="2026-07-01", end="2026-07-02")
+
 # Async versions
 liquidations = await client.hyperliquid.liquidations.ahistory("BTC", start=..., end=...)
+lighter_liquidations = await client.lighter.liquidations.ahistory("BTC", start=..., end=...)
 user_liquidations = await client.hyperliquid.liquidations.aby_user("0x...", start=..., end=...)
 hip3_liquidations = await client.hyperliquid.hip3.liquidations.ahistory("km:US500", start=..., end=...)
 hip3_volume = await client.hyperliquid.hip3.liquidations.avolume("km:US500", start=..., end=...)
@@ -671,7 +741,7 @@ hip3_volume = await client.hyperliquid.hip3.liquidations.avolume("km:US500", sta
 
 ### Liquidation Volume
 
-Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records. Available for Hyperliquid and HIP-3.
+Get pre-aggregated liquidation volume in time-bucketed intervals. Returns total, long, and short USD volumes per bucket -- 100-1000x less data than individual liquidation records. Available for Hyperliquid and HIP-3, and for both Lighter deployments, where each bucket carries `total_usd` and `count` only (no long/short split).
 
 ```python
 # Get hourly liquidation volume for the last week (Hyperliquid)
@@ -692,6 +762,10 @@ hip3_volume = client.hyperliquid.hip3.liquidations.volume(
     end="2026-02-08",
     interval="1d"
 )
+
+# Lighter liquidation volume (mainnet and Robinhood Chain): total_usd and count per bucket
+lighter_volume = client.lighter.liquidations.volume("BTC", start=..., end=..., interval="1h")
+rh_volume = client.rh_lighter.liquidations.volume("BTC", start=..., end=..., interval="1d")
 
 # Convenience method on HyperliquidClient (Hyperliquid only)
 volume = client.hyperliquid.get_liquidation_volume("BTC", start=..., end=..., interval="1h")
@@ -715,6 +789,9 @@ print(f"OI last updated: {freshness.open_interest.last_updated}")
 
 # Lighter.xyz
 lighter_freshness = client.lighter.get_freshness("BTC")
+
+# Lighter on Robinhood Chain
+rh_freshness = client.rh_lighter.get_freshness("BTC")
 
 # HIP-3 (case-sensitive coins)
 hip3_freshness = client.hyperliquid.hip3.get_freshness("km:US500")
@@ -744,6 +821,9 @@ print(f"  Short: ${summary.short_liquidation_volume_24h}")
 # Lighter.xyz (price, funding, OI — no volume/liquidation data)
 lighter_summary = client.lighter.get_summary("BTC")
 
+# Lighter on Robinhood Chain (same shape as mainnet Lighter)
+rh_summary = client.rh_lighter.get_summary("BTC")
+
 # HIP-3 (includes mid_price — case-sensitive coins)
 hip3_summary = client.hyperliquid.hip3.get_summary("km:US500")
 print(f"Mid price: {hip3_summary.mid_price}")
@@ -772,6 +852,9 @@ for snapshot in prices.data:
 
 # Lighter.xyz
 lighter_prices = client.lighter.get_price_history("BTC", start="2026-01-01", end="2026-01-02", interval="1h")
+
+# Lighter on Robinhood Chain
+rh_prices = client.rh_lighter.get_price_history("BTC", start="2026-09-01", end="2026-09-02", interval="1h")
 
 # HIP-3 (case-sensitive coins)
 hip3_prices = client.hyperliquid.hip3.get_price_history("km:US500", start="2026-02-01", end="2026-02-02", interval="1d")
@@ -823,6 +906,10 @@ lighter_candles = client.lighter.candles.history(
     end="2024-01-02",
     interval="15m"
 )
+
+# Lighter on Robinhood Chain candles (from 2026-06-26, once enabled for this
+# deployment; until then the call raises OxArchiveError)
+rh_candles = client.rh_lighter.candles.history("BTC", start="2026-09-01", end="2026-09-02", interval="1h")
 
 # HIP-3 candles (case-sensitive coins)
 hip3_candles = client.hyperliquid.hip3.candles.history(
@@ -1046,9 +1133,107 @@ hip3_orders = await client.hyperliquid.hip3.orders.ahistory("km:US500", start=..
 | `flow(symbol, *, start, end, interval, limit)` | Get order flow aggregation |
 | `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history |
 
+### Account Positions
+
+What an account holds, now or at any instant, plus hourly history, the change log of every fill that moved a position, account summaries, and market-wide listings. Available on four clients with the same method names:
+
+| Client | Account key | Change log from | Hourly history from | Live snapshot |
+|--------|-------------|-----------------|---------------------|---------------|
+| `client.hyperliquid.positions` | 0x wallet address | 2025-05-25 | 2026-06-07 | every 5 minutes |
+| `client.hyperliquid.hip3.positions` | 0x wallet address (optional `dex`) | 2025-10-13 | 2026-06-07 | every 5 minutes |
+| `client.lighter.positions` | integer Lighter account index | 2025-01-17 | 2025-01-17 | every 2 minutes |
+| `client.rh_lighter.positions` | integer Lighter account index | 2026-06-26 | 2026-06-26 | every 2 minutes |
+
+Lighter positions cover perp markets. On Lighter mainnet, `client.lighter.accounts.by_l1(address)` resolves an L1 address to the account indices it owns.
+
+```python
+# Now: the latest live snapshot
+now = client.hyperliquid.positions.get("0xabc...")
+for p in now.data.positions:
+    print(p.symbol, p.side, p.size, p.entry_price, p.unrealized_pnl, p.quality)
+print(now.data.account)          # AccountSummary on the first page of a snapshot, or None
+print(now.meta.as_of, now.meta.quality, now.meta.stale)
+
+# As of an instant: the state after every event before it. An exact UTC hour
+# serves the hourly snapshot; any other instant is reconstructed from the
+# change log (meta.source == "reconstructed"; mark fields are at the instant).
+then = client.hyperliquid.positions.get("0xabc...", timestamp="2026-09-01T12:34:56Z")
+print(then.meta.source, then.meta.built_through, then.meta.clamped_to)
+
+# Hourly history and the change log in [start, end), following cursors
+for row in client.hyperliquid.positions.iterate_history("0xabc...", start="2026-09-01", end="2026-09-02"):
+    print(row.snapshot_ts, row.symbol, row.size)
+for leg in client.hyperliquid.positions.iterate_changes("0xabc...", start="2026-09-01", end="2026-09-02", symbol="BTC"):
+    print(leg.timestamp, leg.event_type, leg.start_position, "->", leg.end_position, leg.closed_pnl)
+
+# Account summaries (Hyperliquid and HIP-3)
+summary = client.hyperliquid.positions.account("0xabc...")
+hourly = client.hyperliquid.positions.account_history("0xabc...", start="2026-09-01", end="2026-09-02")
+
+# HIP-3: dex narrows a wallet to one dex; symbols are case-sensitive
+hip3 = client.hyperliquid.hip3.positions.get("0xabc...", dex="xyz")
+
+# Every open position in a market, largest value first; totals on the first page
+page = client.hyperliquid.positions.market("BTC", side="long", min_value=1_000_000)
+print(page.meta.totals.long_count, page.meta.totals.top10_value_share)
+at_hour = client.hyperliquid.positions.market("BTC", hour="2026-09-25T12:00:00Z")
+
+# Long/short aggregates: now, or one per hour over [start, end)
+now_summary = client.hyperliquid.positions.market_summary("BTC")
+series = client.hyperliquid.positions.market_summary("BTC", start="2026-09-20", end="2026-09-21")
+
+# Bulk: every open position across markets at one hourly snapshot
+for row in client.hyperliquid.positions.iterate_all("2026-09-25T12:00:00Z"):
+    print(row.user_address, row.symbol, row.size)
+
+# Lighter (mainnet and Robinhood Chain): integer account indices
+owned = client.lighter.accounts.by_l1("0xabc...")
+for account in owned.data.accounts:
+    lighter_now = client.lighter.positions.get(int(account.account_index))
+    # Without a symbol filter, the first page carries position aggregates
+    # (total_position_value, total_unrealized_pnl, long_value, short_value, n_positions).
+    print(lighter_now.data.account)
+changes = client.lighter.positions.changes(4521, start="2026-09-01", end="2026-09-02")
+print(changes.meta.finalized_through)  # legs before it are final
+market = client.lighter.positions.market("BTC", include_system=True)  # include system accounts
+rh_now = client.rh_lighter.positions.get(4521)
+
+# Async versions of every method (aget, ahistory, achanges, amarket, ...)
+# and of every iterator (aiterate_history, aiterate_changes, ...)
+now = await client.hyperliquid.positions.aget("0xabc...")
+async for leg in client.lighter.positions.aiterate_changes(4521, start=..., end=...):
+    ...
+```
+
+**Methods** (on every positions client unless noted):
+
+| Method | Returns |
+|--------|---------|
+| `get(key, *, timestamp, symbol, dex, cursor, limit)` | `CursorResponse[WalletPositions]`: `positions`, `account`, `account_seen` |
+| `history(key, *, start, end, symbol, dex, cursor, limit)` | Hourly `Position` rows |
+| `changes(key, *, start, end, symbol, dex, cursor, limit)` | `PositionChange` legs |
+| `market(symbol, *, hour, side, min_value, include_system, cursor, limit)` | `MarketPosition` rows; `meta.totals` on the first page |
+| `market_summary(symbol, *, start, end, include_system, cursor, limit)` | `MarketPositionsSummary` (one now, or one per hour) |
+| `all(hour, *, include_system, cursor, limit)` | `MarketPosition` rows across every market at one hour |
+| `account(address, *, dex)` | `AccountSummary` rows (Hyperliquid and HIP-3 only) |
+| `account_history(address, *, start, end, dex, cursor, limit)` | Hourly `AccountSummary` rows (Hyperliquid and HIP-3 only) |
+| `iterate_history`, `iterate_changes`, `iterate_market`, `iterate_market_summary`, `iterate_all`, `iterate_account_history` | Iterators that follow `next_cursor` for you |
+| `client.lighter.accounts.by_l1(l1_address, *, cursor, limit)` | `LighterL1Accounts`: `l1_address`, `total_accounts`, `accounts` (Lighter mainnet only) |
+
+`key` is a 0x address on Hyperliquid and HIP-3 and an integer account index on Lighter. `dex` applies to HIP-3 and `include_system` to Lighter. Timestamps accept Unix milliseconds, ISO strings, or datetimes; `hour` must be an exact UTC hour.
+
+Things to know:
+
+- **Numbers are decimal strings.** A flat position is `"0"`. A value is `None` when it is unknown, never a guess.
+- **`meta`** carries the context of every response: `as_of` (the instant the state describes), `snapshot_ts`, `source` (`snapshot`, `reconstructed`, or `changes`), `quality`, `stale` (the live snapshot is older than 12 minutes), `built_through` (reads are clamped to it; `clamped_to` and `requested_end` show when they were), `finalized_through` (everything before it is final), and `totals` on market listings.
+- **Quality is per row.** `quality` is `complete`, `partial` (for example no mark), or `degraded`; Lighter rows can also be `preliminary`, `unreconciled`, or `incomplete`.
+- **Empty results are explained.** When a wallet has no open positions, `account_seen` is `flat`, `never_seen` (no activity recorded in the covered history; see `meta.notice` and `meta.coverage_from`), or `outside_coverage`.
+- **Cursors are bound to their request.** Pass `next_cursor` back with every other argument unchanged. If the snapshot a market cursor was paging is replaced, the API answers 409 (`OxArchiveError.code == 409`); restart without a cursor.
+- **Billing and limits.** Position rows are billed like trades, 1,000 rows per credit; `account()`, `account_history()`, and `by_l1()` are billed at the per-request minimum. Wallet routes return up to 5,000 rows per page (default 500), market routes up to 2,000 (default 100), bulk `all()` up to 2,000 (default 1,000), and summary series up to 168 hours per page.
+
 ### Data Quality Monitoring
 
-Monitor data coverage, incidents, latency, and SLA compliance across venue APIs.
+Monitor data coverage, incidents, latency, and SLA compliance across venue APIs. Venue scopes are `hyperliquid`, `hip3`, `hip4`, `spot` (Hyperliquid spot), `lighter` (Lighter mainnet), and `rh-lighter` (Lighter on Robinhood Chain).
 
 ```python
 # Get overall system health status
@@ -1110,7 +1295,7 @@ coverage = await client.data_quality.acoverage()
 |--------|-------------|
 | `status()` | Overall system health and per-exchange status |
 | `coverage()` | Data coverage summary for venue APIs |
-| `exchange_coverage(exchange)` | Coverage details for a specific exchange |
+| `exchange_coverage(exchange)` | Coverage details for a venue scope (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`) |
 | `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage |
 | `list_incidents(...)` | List incidents with filtering and pagination |
 | `get_incident(incident_id)` | Get specific incident details |
@@ -1254,11 +1439,13 @@ trades = client.trades.list("BTC", start=..., end=...)
 
 ## WebSocket Client
 
-The WebSocket client supports live subscriptions for supported Hyperliquid and Lighter.xyz channels and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
+The WebSocket client supports live subscriptions for supported Hyperliquid and Lighter channels (mainnet and Robinhood Chain) and historical replay. For file-based historical exports, use the [Data Catalog](https://www.0xarchive.io/data).
 
 > WebSocket bulk streaming has been discontinued. For large dataset downloads, use the S3 Parquet bulk export in the [Data Catalog](https://www.0xarchive.io/data). The `stream()`, `multi_stream()`, and `stream_stop()` methods remain for compatibility but are deprecated: each call emits a `DeprecationWarning`, and the server answers with an error message (a `WsError` on `on_message`) instead of data. The `on_batch`, `on_stream_start`, `on_stream_progress`, and `on_stream_complete` handler setters are deprecated too: setting one emits a `DeprecationWarning`, and the handler is never called.
 
 > Lighter supports live subscriptions on `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` at `wss://api.0xarchive.io/ws` (the client default). `lighter_candles` and `lighter_l3_orderbook` remain replay-only. All six Lighter channels support historical replay.
+
+> Lighter on Robinhood Chain supports live subscriptions on `rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`, and `rh_lighter_funding` at `wss://api.0xarchive.io/ws` only, with the same message shapes as the mainnet Lighter channels. `rh_lighter_candles` is replay-only. All five channels support historical replay.
 
 ```python
 import asyncio
@@ -1374,6 +1561,28 @@ The generic form works too: `ws.subscribe("lighter_orderbook", "BTC", interval_m
 | `impact_prices` | `impactPxs` | Always `None` (Lighter has no impact prices) |
 
 **Falling behind**: if your connection falls behind `lighter_trades`, `lighter_open_interest`, or `lighter_funding`, the server sends an error notice (for example `Dropped ~N live lighter_trades messages for BTC: ...`) and continues. If the lag persists, it stops that subscription with `Stopped the lighter_trades stream for BTC: your connection is too slow to keep up. Re-subscribe to resume.`; call the subscribe method again to resume. `lighter_orderbook` always sends the newest book; a book skipped between intervals loses nothing because each book is a full state.
+
+### Live Lighter on Robinhood Chain Data
+
+The Robinhood Chain deployment of Lighter streams live on its own channels: `rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`, and `rh_lighter_funding`. Each message has exactly the shape of its mainnet counterpart described above, `rh_lighter_orderbook` accepts `interval_ms` (100 to 5000, default one book per second), and the metering, limits, and lag notices are the same. Symbols are those returned by `client.rh_lighter.instruments.list()`: uppercase perps (`BTC`) and dashed spot markets (`AAPL-USDG`), case-insensitive on subscribe. These channels are served at `wss://api.0xarchive.io/ws`, the client default, and not at `wss://stream.0xarchive.io/ws`.
+
+Robinhood Chain symbols collide with mainnet ones, so these messages have their own handlers: `on_rh_lighter_orderbook`, `on_rh_lighter_trades`, and `on_rh_lighter_market_context`. They never reach the mainnet `on_lighter_*` handlers. Without a dedicated handler, books and trades fall back to `on_orderbook` and `on_trades`; `WsData.channel` on `on_message` always names the channel.
+
+```python
+ws.on_rh_lighter_orderbook(lambda coin, book: print(f"Robinhood Chain {coin} mid {book.mid_price}"))
+ws.on_rh_lighter_trades(lambda coin, legs: print(f"Robinhood Chain {coin}: {len({l.trade_id for l in legs})} trades"))
+ws.on_rh_lighter_market_context(lambda channel, coin, ctx: print(f"{coin} OI {ctx.open_interest}"))
+
+ws.subscribe_rh_lighter_orderbook("AAPL-USDG")                 # one book per second (default)
+ws.subscribe_rh_lighter_orderbook("BTC", interval_ms=500)
+ws.subscribe_rh_lighter_trades("BTC")
+ws.subscribe_rh_lighter_funding("BTC")                         # same message as rh_lighter_open_interest
+
+# Generic form
+ws.subscribe("rh_lighter_orderbook", "BTC", interval_ms=250)
+```
+
+Live trades are preliminary; `client.rh_lighter.trades.list()` serves the finalized record.
 
 ### Historical Replay
 
@@ -1601,6 +1810,18 @@ ws.subscribe_spot_trades("HYPE-USDC")
 
 Live Lighter subscriptions are served at `wss://api.0xarchive.io/ws`. Replay of all six channels keeps its historical row shapes, which differ from the live messages described under Live Lighter.xyz Data above. Current Lighter data is also available through the REST resources, and historical Lighter data through REST, WebSocket replay, or exports.
 
+#### Lighter on Robinhood Chain Channels
+
+| Channel | Description | Requires Coin | Live Subscription | Historical Replay |
+|---------|-------------|---------------|-------------------|-------------------|
+| `rh_lighter_orderbook` | L2 order book (live: full top-20 book per side, 1 per second by default, `interval_ms` 100 to 5000) | Yes | Yes | Yes (from 2026-08-22) |
+| `rh_lighter_trades` | Trade/fill updates (live: two legs per trade) | Yes | Yes | Yes (from 2026-06-26) |
+| `rh_lighter_candles` | OHLCV candle data (once candles are enabled for this deployment) | Yes | No | Yes |
+| `rh_lighter_open_interest` | Open interest (live: market context, same message as `rh_lighter_funding`) | Yes | Yes | Yes (from 2026-08-22) |
+| `rh_lighter_funding` | Funding rates (live: market context, same message as `rh_lighter_open_interest`) | Yes | Yes | Yes (from 2026-08-22) |
+
+There is no L3 channel for this deployment. Live Robinhood Chain subscriptions are served at `wss://api.0xarchive.io/ws` only. Replay rows keep their historical shapes, like mainnet Lighter replay, and a multi-channel replay must stay within the `rh_lighter_*` family.
+
 #### Candle Replay
 
 ```python
@@ -1646,7 +1867,7 @@ await ws.replay(
 
 #### Open Interest / Funding Replay
 
-The Hyperliquid `open_interest` and `funding` channels support both replay and live subscriptions (see Real-time Streaming above). The `hip3_open_interest` and `hip3_funding` channels are **historical only** (replay). They do not support real-time subscriptions. `lighter_open_interest` and `lighter_funding` support both replay and live subscriptions (see Live Lighter.xyz Data above).
+The Hyperliquid `open_interest` and `funding` channels support both replay and live subscriptions (see Real-time Streaming above). The `hip3_open_interest` and `hip3_funding` channels are **historical only** (replay). They do not support real-time subscriptions. `lighter_open_interest` and `lighter_funding` support both replay and live subscriptions (see Live Lighter.xyz Data above), as do `rh_lighter_open_interest` and `rh_lighter_funding`.
 
 ```python
 # Replay open interest at 50x speed
@@ -1757,6 +1978,15 @@ await ws.multi_replay(
     speed=10,
 )
 
+# Lighter on Robinhood Chain: orderbook + trades + OI + funding
+await ws.multi_replay(
+    ["rh_lighter_orderbook", "rh_lighter_trades", "rh_lighter_open_interest", "rh_lighter_funding"],
+    "BTC",
+    start=start_ms,
+    end=end_ms,
+    speed=10,
+)
+
 # HIP-3: orderbook + trades + OI + funding
 await ws.multi_replay(
     ["hip3_orderbook", "hip3_trades", "hip3_open_interest", "hip3_funding"],
@@ -1813,6 +2043,9 @@ from oxarchive.types import (
     OrderBook, Trade, Instrument, LighterInstrument, FundingRate, OpenInterest, Candle, Liquidation,
     LiquidationVolume, CoinFreshness, CoinSummary, PriceSnapshot,
     WsReplaySnapshot, LighterLiveTrade, LighterMarketContext, LighterMarketContextUpdate,
+    LighterLiquidation, LighterLiquidationVolume, ResponseMeta,
+    Position, PositionChange, MarketPosition, MarketPositionsSummary, AccountSummary,
+    WalletPositions, LighterL1Accounts,
 )
 from oxarchive.resources.trades import CursorResponse
 
@@ -1832,6 +2065,11 @@ result: CursorResponse = client.hyperliquid.trades.list("BTC", start=..., end=..
 
 # Lighter current data is available, so recent() is available
 recent: list[Trade] = client.lighter.trades.recent("BTC")
+
+# Account positions: typed rows plus the response meta
+now: CursorResponse[WalletPositions] = client.hyperliquid.positions.get("0xabc...")
+meta: ResponseMeta = now.meta
+legs: CursorResponse[list[PositionChange]] = client.rh_lighter.positions.changes(4521, start=..., end=...)
 
 # Lighter granularity type hint
 granularity: LighterGranularity = "10s"
