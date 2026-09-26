@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from pathlib import Path
 from typing import Any, Callable, cast
 
 import pytest
@@ -37,12 +38,13 @@ from oxarchive.websocket import (
 T_START = 1790251200000
 T_END = 1790337600000
 
-# A liquidation row shaped like the API's JSON, backfilled from the venue's
-# trade export (source "bucket", empty raw_json).
+# A liquidation row shaped like the API's JSON: Robinhood Chain's first
+# liquidation, from before live capture, so backfilled from the venue's
+# finalized export (source "bucket", empty raw_json).
 RH_LIQUIDATION: dict[str, Any] = {
     "symbol": "BTC",
-    "timestamp": 1788220826000,
-    "transaction_time_us": 1788220826000123,
+    "timestamp": 1782602083534,
+    "transaction_time_us": 1782602083534123,
     "trade_id": 5501,
     "liquidation_type": "partial",
     "price": 107250.5,
@@ -71,6 +73,16 @@ RH_LIQUIDATION: dict[str, Any] = {
     "tx_hash": "0x0f",
     "raw_json": "",
     "source": "bucket",
+}
+
+# The same shape captured live: source "ws" with the venue's raw JSON.
+RH_LIQUIDATION_LIVE: dict[str, Any] = {
+    **RH_LIQUIDATION,
+    "timestamp": 1788240575923,
+    "transaction_time_us": 1788240575923456,
+    "trade_id": 324449287,
+    "raw_json": '{"trade_id":324449287,"market_id":1,"price":"78963.9"}',
+    "source": "ws",
 }
 
 LIQUIDATION_VOLUME: dict[str, Any] = {
@@ -304,13 +316,15 @@ def test_lighter_liquidations_history_and_volume(venue: str, root: str) -> None:
     def respond(path: str, q: dict[str, str]) -> dict[str, Any]:
         if path.endswith("/volume"):
             return envelope([LIQUIDATION_VOLUME], next_cursor="1788220800000")
-        return envelope([RH_LIQUIDATION], next_cursor="1788220826000_5501")
+        return envelope(
+            [RH_LIQUIDATION, RH_LIQUIDATION_LIVE], next_cursor="1788240575923_324449287"
+        )
 
     client, api = mock_client(respond)
     liquidations = getattr(client, venue).liquidations
 
     history = liquidations.history(
-        "btc", start="2026-08-22T18:43:00Z", end=T_END, cursor="1788220800000_1", limit=500
+        "btc", start="2026-06-26T20:10:26Z", end=T_END, cursor="1782602083534_5501", limit=500
     )
     volume = liquidations.volume("BTC", start=T_START, end=T_END, interval="4h", limit=10)
 
@@ -318,9 +332,9 @@ def test_lighter_liquidations_history_and_volume(venue: str, root: str) -> None:
         (
             f"{root}/liquidations/BTC",
             {
-                "start": "1787424180000",
+                "start": "1782504626000",
                 "end": str(T_END),
-                "cursor": "1788220800000_1",
+                "cursor": "1782602083534_5501",
                 "limit": "500",
             },
         ),
@@ -331,11 +345,13 @@ def test_lighter_liquidations_history_and_volume(venue: str, root: str) -> None:
     ]
     row = history.data[0]
     assert isinstance(row, LighterLiquidation)
-    assert row.timestamp == 1788220826000 and row.trade_id == 5501
+    assert row.timestamp == 1782602083534 and row.trade_id == 5501
     assert row.source == "bucket" and row.raw_json == ""
+    live = history.data[1]
+    assert live.source == "ws" and live.raw_json and live.raw_json.startswith("{")
     assert row.ask_account == "281474976710654" and row.is_maker_ask is False
     assert row.taker_position_sign_changed is True
-    assert history.next_cursor == "1788220826000_5501"
+    assert history.next_cursor == "1788240575923_324449287"
     assert isinstance(history.meta, ResponseMeta)
     bucket = volume.data[0]
     assert isinstance(bucket, LighterLiquidationVolume)
@@ -364,6 +380,31 @@ def test_lighter_liquidations_async() -> None:
     ]
     assert history.data[0].source == "bucket"
     assert volume.data[0].count == 1
+
+
+def test_rh_liquidations_copy_uses_the_venue_launch_floor() -> None:
+    # Robinhood Chain liquidations share the trades floor (venue launch); only
+    # order book, open interest and funding start at live capture.
+    root = Path(__file__).resolve().parents[1]
+    copy = {
+        name: (root / name).read_text()
+        for name in (
+            "README.md",
+            "CHANGELOG.md",
+            "oxarchive/__init__.py",
+            "oxarchive/client.py",
+            "oxarchive/exchanges.py",
+            "oxarchive/resources/lighter_liquidations.py",
+        )
+    }
+    readme = " ".join(copy["README.md"].split())
+    assert "Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch)" in readme
+    assert "trades and liquidations from the venue launch, 2026-06-26 20:10:26 UTC" in readme
+    for name, text in copy.items():
+        flat = " ".join(text.split())
+        assert "funding, and liquidations from 2026-08-22" not in flat, name
+        assert "funding and liquidations from 2026-08-22" not in flat, name
+        assert "liquidations start 2026-08-22" not in flat, name
 
 
 # ---------------------------------------------------------------------------

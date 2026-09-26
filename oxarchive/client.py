@@ -36,8 +36,8 @@ class Client:
       orderbook/L4/TWAP live from 2026-05-05; no funding, OI, or liquidations)
     - `client.lighter` - Lighter mainnet
     - `client.rh_lighter` - Lighter on Robinhood Chain (USDG-quoted perps and
-      spot; trades from 2026-06-26; order book, OI, funding and liquidations
-      from 2026-08-22)
+      spot; trades and liquidations from 2026-06-26; order book, OI and
+      funding from 2026-08-22)
 
     Account positions: `client.hyperliquid.positions`,
     `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
@@ -130,9 +130,9 @@ class Client:
         exact starts vary by market and data type."""
 
         self.rh_lighter = RhLighterClient(self._http)
-        """Lighter on Robinhood Chain data (``/v1/rh-lighter``). Trades from
-        2026-06-26 20:10:26 UTC; order book, open interest, funding and
-        liquidations from 2026-08-22 18:43 UTC. Same resources as ``client.lighter``
+        """Lighter on Robinhood Chain data (``/v1/rh-lighter``). Trades and
+        liquidations from 2026-06-26 20:10:26 UTC; order book, open interest
+        and funding from 2026-08-22 18:43 UTC. Same resources as ``client.lighter``
         except the L3 order book and the L1 account resolver."""
 
         # Data quality monitoring (cross-exchange)

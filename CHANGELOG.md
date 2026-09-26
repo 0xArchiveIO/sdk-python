@@ -19,16 +19,18 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   preliminary), `candles`, `open_interest`, `funding`, `liquidations`,
   `positions`, and `get_freshness()`, `get_summary()`, `get_price_history()`.
   Markets are USDG-quoted: perps use uppercase symbols (`BTC`), spot markets
-  dashed symbols (`AAPL-USDG`). Trades start at the venue launch,
-  2026-06-26 20:10:26 UTC; order book, open interest, funding and
-  liquidations start 2026-08-22 18:43 UTC. Candles are served from 2026-06-26 once enabled
+  dashed symbols (`AAPL-USDG`). Trades and liquidations start at the venue
+  launch, 2026-06-26 20:10:26 UTC; order book, open interest and funding
+  start 2026-08-22 18:43 UTC. Candles are served from 2026-06-26 once enabled
   for this deployment.
 - Lighter liquidations on both deployments: `client.lighter.liquidations` and
   `client.rh_lighter.liquidations` with `history()` and `volume()` (and async
   `ahistory()` / `avolume()`), typed as `LighterLiquidation` and
-  `LighterLiquidationVolume`. A row keeps both sides' account fields; rows
-  backfilled from the venue's trade export have `source == "bucket"` and an
-  empty `raw_json`. Volume buckets carry `total_usd` and `count`.
+  `LighterLiquidationVolume`. A row keeps both sides' account fields. On
+  Robinhood Chain, rows from before live capture were backfilled from the
+  venue's finalized export and have `source == "bucket"` and an empty
+  `raw_json`; rows captured live have `source == "ws"` and the venue's raw
+  JSON. Volume buckets carry `total_usd` and `count`.
 - Account positions on four clients with the same method names:
   `client.hyperliquid.positions`, `client.hyperliquid.hip3.positions`,
   `client.lighter.positions` and `client.rh_lighter.positions`.

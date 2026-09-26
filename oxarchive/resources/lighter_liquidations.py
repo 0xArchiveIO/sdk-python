@@ -38,10 +38,12 @@ class LighterLiquidationsResource:
     liquidations are the liquidation trades of the venue's trade stream, so a
     row keeps both sides' account fields; see :class:`LighterLiquidation`.
 
-    Coverage: Robinhood Chain liquidations start 2026-08-22 18:43 UTC, later
-    than its trades (2026-06-26 20:10:26 UTC); a request that starts earlier is
-    refused with the API's coverage error. Any row backfilled from the venue's
-    trade export has ``source == "bucket"`` and an empty ``raw_json``.
+    Coverage: Robinhood Chain liquidations start at the venue launch,
+    2026-06-26 20:10:26 UTC, the same floor as its trades; a request that
+    starts earlier is refused with the API's coverage error. Rows from before
+    live capture were backfilled from the venue's finalized export and have
+    ``source == "bucket"`` and an empty ``raw_json``; rows captured live have
+    ``source == "ws"`` and the venue's raw JSON in ``raw_json``.
 
     Example:
         >>> page = client.lighter.liquidations.history("BTC", start="2026-09-01", end="2026-09-02")

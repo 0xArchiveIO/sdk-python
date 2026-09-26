@@ -1859,11 +1859,13 @@ class LighterLiquidation(BaseModel):
 
     raw_json: Optional[str] = None
     """The trade object exactly as captured, as a JSON string. Empty for rows
-    backfilled from the venue's trade export (``source == "bucket"``)."""
+    backfilled from the venue's finalized export (``source == "bucket"``)."""
 
     source: Optional[str] = None
-    """Where the row came from. ``"bucket"`` marks rows backfilled from the
-    venue's trade export, which carry an empty ``raw_json``."""
+    """Where the row came from. ``"ws"`` marks rows captured live, which keep
+    the venue's raw JSON in ``raw_json``. ``"bucket"`` marks rows backfilled
+    from the venue's finalized export, which carry an empty ``raw_json``; on
+    Robinhood Chain these cover the span before live capture."""
 
 
 class LighterLiquidationVolume(BaseModel):

@@ -85,7 +85,7 @@ history = client.hyperliquid.orderbook.history(
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side OI are served from 2026-05-02; OI updates at ~10s. No funding or liquidations. |
 | Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
 | Lighter.xyz | Observed global per-fill trade floor January 17, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
-| Lighter on Robinhood Chain | Trades from 2026-06-26 20:10:26 UTC (venue launch); order book, OI, funding, and liquidations from 2026-08-22 18:43 UTC | The second Lighter deployment. 84 USDG-quoted markets: 57 perps (`BTC`) and 27 spot (`AAPL-USDG`). Candles from 2026-06-26 once enabled. No L3. |
+| Lighter on Robinhood Chain | Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch); order book, OI, and funding from 2026-08-22 18:43 UTC | The second Lighter deployment. 84 USDG-quoted markets: 57 perps (`BTC`) and 27 spot (`AAPL-USDG`). Candles from 2026-06-26 once enabled. No L3. |
 | Account positions | Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13, hourly history from 2026-06-07; Lighter mainnet from 2025-01-17, Robinhood Chain from 2026-06-26 | Live snapshots every 5 minutes (Hyperliquid, HIP-3) or 2 minutes (Lighter). See [Account Positions](#account-positions). |
 
 ## Async Support
@@ -541,7 +541,7 @@ fresh = await client.spot.aget_freshness("HYPE-USDC")
 
 Lighter has two deployments: mainnet (`client.lighter`) and Robinhood Chain (`client.rh_lighter`, REST root `/v1/rh-lighter`). The Robinhood Chain deployment has the same resources as `client.lighter` except the L3 order book, which is not captured there, and the L1 account resolver. Markets are quoted in USDG. Perps use uppercase symbols (`BTC`); spot markets use dashed symbols (`AAPL-USDG`). Symbols are case-insensitive. Market symbols and ids belong to each deployment, so `BTC` on `client.rh_lighter` is a different market from `BTC` on `client.lighter`.
 
-Coverage: trades from the venue launch, 2026-06-26 20:10:26 UTC; order book, open interest, funding, and liquidations from 2026-08-22 18:43 UTC; account positions from 2026-06-26. A request that starts before a data type's first date is refused with the API's coverage error. Candles are served from 2026-06-26 once they are enabled for this deployment; until then `candles.history()` raises `OxArchiveError` with the server's message.
+Coverage: trades and liquidations from the venue launch, 2026-06-26 20:10:26 UTC; order book, open interest, and funding from 2026-08-22 18:43 UTC; account positions from 2026-06-26. A request that starts before a data type's first date is refused with the API's coverage error. Liquidations from before live capture were backfilled from the venue's finalized export: those rows have `source == "bucket"` and an empty `raw_json`, while rows captured live have `source == "ws"` and the venue's raw JSON. Candles are served from 2026-06-26 once they are enabled for this deployment; until then `candles.history()` raises `OxArchiveError` with the server's message.
 
 Trades follow the same finalization contract as mainnet Lighter. `trades.list()` returns canonical trades only: `end` is clamped to the finalization watermark, about a day behind, reported as `result.meta.finalized_through`, with `meta.requested_end` and `meta.clamped_to` set when the clamp applied. `trades.recent()` serves the preliminary tier.
 
@@ -565,7 +565,7 @@ recent = rh.trades.recent("BTC")  # preliminary tier
 oi = rh.open_interest.current("BTC")
 funding = rh.funding.history("BTC", start="2026-09-01", end="2026-09-02")
 
-# Liquidations and liquidation volume
+# Liquidations and liquidation volume (from 2026-06-26 20:10:26 UTC)
 liqs = rh.liquidations.history("BTC", start="2026-09-01", end="2026-09-08")
 volume = rh.liquidations.volume("BTC", start="2026-09-01", end="2026-09-08", interval="1d")
 
@@ -727,8 +727,9 @@ lighter_liquidations = client.lighter.liquidations.history(
 for liq in lighter_liquidations.data:
     print(liq.timestamp, liq.price, liq.size, liq.usd_amount, liq.ask_account, liq.bid_account)
 
-# Robinhood Chain liquidations start 2026-08-22 18:43 UTC.
-rh_liquidations = client.rh_lighter.liquidations.history("BTC", start="2026-09-01", end="2026-09-02")
+# Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC.
+# Rows from before live capture have source == "bucket" and an empty raw_json.
+rh_liquidations = client.rh_lighter.liquidations.history("BTC", start="2026-07-01", end="2026-07-02")
 
 # Async versions
 liquidations = await client.hyperliquid.liquidations.ahistory("BTC", start=..., end=...)
