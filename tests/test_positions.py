@@ -155,6 +155,18 @@ LIGHTER_POSITION: dict[str, Any] = {
     "finalized": True,
 }
 
+# The Lighter account summary as the API sends it on the first page of a
+# snapshot without a symbol filter: position aggregates only, no margin fields.
+LIGHTER_ACCOUNT_SUMMARY: dict[str, Any] = {
+    "account_index": str(LIGHTER_ACCOUNT),
+    "total_position_value": "9262181.698",
+    "total_unrealized_pnl": "39898.207",
+    "long_value": "9262181.698",
+    "short_value": "0",
+    "n_positions": 1,
+    "quality": "complete",
+}
+
 LIGHTER_CHANGE: dict[str, Any] = {
     "timestamp": "2026-09-25T10:00:01.211Z",
     "account_index": str(LIGHTER_ACCOUNT),
@@ -686,12 +698,15 @@ def test_a_replaced_snapshot_surfaces_as_a_409() -> None:
 
 
 def test_lighter_get_uses_the_integer_account_index() -> None:
-    client, api = mock_client(
-        lambda path, q: envelope({"positions": [LIGHTER_POSITION], "account": None})
-    )
+    def respond(path: str, q: dict[str, str]) -> dict[str, Any]:
+        # The summary rides only on an unfiltered first page, as in the API.
+        account = None if "symbol" in q else LIGHTER_ACCOUNT_SUMMARY
+        return envelope({"positions": [LIGHTER_POSITION], "account": account})
+
+    client, api = mock_client(respond)
 
     result = client.lighter.positions.get(LIGHTER_ACCOUNT, symbol="btc")
-    client.lighter.positions.get(str(LIGHTER_ACCOUNT), timestamp=T_HOUR)
+    hourly = client.lighter.positions.get(str(LIGHTER_ACCOUNT), timestamp=T_HOUR)
 
     assert api.calls == [
         (f"/v1/lighter/accounts/{LIGHTER_ACCOUNT}/positions", {"symbol": "BTC"}),
@@ -704,6 +719,17 @@ def test_lighter_get_uses_the_integer_account_index() -> None:
     assert position.allocated_margin is None
     assert position.margin_mode == "cross" and position.mark_source == "mark"
     assert position.finalized is True
+
+    assert result.data.account is None
+    summary = hourly.data.account
+    assert isinstance(summary, AccountSummary)
+    assert summary.account_index == str(LIGHTER_ACCOUNT)
+    assert summary.total_position_value == "9262181.698"
+    assert summary.total_unrealized_pnl == "39898.207"
+    assert (summary.long_value, summary.short_value) == ("9262181.698", "0")
+    assert summary.n_positions == 1 and summary.quality == "complete"
+    assert summary.account_value is None and summary.total_margin_used is None
+    assert summary.dex is None and summary.account_mode is None
 
 
 @pytest.mark.parametrize("bad", ["0x1111111111111111111111111111111111111111", True, -1, "12a"])
@@ -821,6 +847,7 @@ def test_lighter_accounts_by_l1_and_its_iterator() -> None:
 def test_rh_lighter_positions_use_the_robinhood_chain_root() -> None:
     rh_position = _with(LIGHTER_POSITION, account_index="7")
     rh_change = _with(LIGHTER_CHANGE, account_index="7", fee_token="USDG")
+    rh_account = _with(LIGHTER_ACCOUNT_SUMMARY, account_index="7")
 
     def respond(path: str, q: dict[str, str]) -> dict[str, Any]:
         if path.endswith("/changes"):
@@ -830,13 +857,13 @@ def test_rh_lighter_positions_use_the_robinhood_chain_root() -> None:
         if path.endswith("/summary"):
             return envelope([SUMMARY])
         if path.startswith("/v1/rh-lighter/accounts/"):
-            return envelope({"positions": [rh_position], "account": None})
+            return envelope({"positions": [rh_position], "account": rh_account})
         return envelope([LIGHTER_MARKET_ROW])
 
     client, api = mock_client(respond)
     rh = client.rh_lighter.positions
 
-    rh.get(7)
+    now = rh.get(7)
     rh.history(7, start=T_START, end=T_END)
     changes = rh.changes(7, start=T_START, end=T_END)
     rh.market("btc")
@@ -852,6 +879,9 @@ def test_rh_lighter_positions_use_the_robinhood_chain_root() -> None:
         "/v1/rh-lighter/positions",
     ]
     assert changes.data[0].fee_token == "USDG"
+    assert isinstance(now.data.account, AccountSummary)
+    assert now.data.account.account_index == "7"
+    assert now.data.account.account_value is None
     assert not hasattr(client.rh_lighter, "accounts")
     assert not hasattr(rh, "account") and not hasattr(client.lighter.positions, "account")
 
@@ -877,7 +907,7 @@ def test_async_positions_methods_match_the_sync_requests() -> None:
         if path == "/v1/lighter/accounts":
             return envelope({"l1_address": ADDRESS, "total_accounts": 0, "accounts": []})
         if path.startswith("/v1/lighter/accounts/"):
-            return envelope({"positions": [LIGHTER_POSITION], "account": None})
+            return envelope({"positions": [LIGHTER_POSITION], "account": LIGHTER_ACCOUNT_SUMMARY})
         if path.endswith("/account"):
             return envelope([HL_ACCOUNT])
         return envelope([HL_MARKET_ROW])
@@ -909,6 +939,8 @@ def test_async_positions_methods_match_the_sync_requests() -> None:
     assert isinstance(out["account"].data[0], AccountSummary)
     assert isinstance(out["summary"].data[0], MarketPositionsSummary)
     assert isinstance(out["lighter"].data.positions[0], Position)
+    assert isinstance(out["lighter"].data.account, AccountSummary)
+    assert out["lighter"].data.account.n_positions == 1
     assert out["l1"].data.total_accounts == 0
     assert [path for path, _ in api.calls] == [
         f"/v1/hyperliquid/wallets/{ADDRESS}/positions",

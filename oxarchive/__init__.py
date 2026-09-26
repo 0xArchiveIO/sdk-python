@@ -10,7 +10,8 @@ two deployments: mainnet and Robinhood Chain.
   from 2025-03-22, candle floor 2025-03-22T10:50:22Z, rest live from 2026-05-05)
 - Lighter mainnet at /v1/lighter and client.lighter
 - Lighter on Robinhood Chain at /v1/rh-lighter and client.rh_lighter (USDG-quoted;
-  trades from 2026-06-26, order book, open interest and funding from 2026-08-22)
+  trades from 2026-06-26; order book, open interest, funding and liquidations
+  from 2026-08-22)
 - Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
   client.lighter.positions and client.rh_lighter.positions
 

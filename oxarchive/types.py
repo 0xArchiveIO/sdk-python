@@ -2121,16 +2121,31 @@ class PositionChange(BaseModel):
 
 
 class AccountSummary(BaseModel):
-    """Account summary of a Hyperliquid or HIP-3 wallet.
+    """Account summary at one snapshot.
 
-    One row per clearinghouse: Hyperliquid core has one per address, HIP-3 one
-    per dex. ``withdrawable`` is only available for older hourly history.
+    Hyperliquid and HIP-3: the full clearinghouse summary, one row per
+    clearinghouse (Hyperliquid core has one per address, HIP-3 one per dex),
+    returned by ``positions.account()`` / ``positions.account_history()`` and
+    as ``WalletPositions.account``. ``withdrawable`` is only available for
+    older hourly history.
+
+    Lighter mainnet and Robinhood Chain: position aggregates only, as
+    ``WalletPositions.account`` on ``positions.get()``. ``account_index``,
+    ``total_position_value``, ``total_unrealized_pnl``, ``long_value``,
+    ``short_value``, ``n_positions`` and ``quality`` are set; ``dex``, the
+    margin fields (``account_value``, ``cross_account_value``, ``collateral``,
+    ``total_margin_used``, ``cross_maintenance_margin_used``,
+    ``withdrawable``), ``account_mode`` and ``snapshot_as_of`` are ``None``.
+    A Lighter total is ``None`` when any position in it has no mark, never a
+    partial sum.
     """
 
     snapshot_ts: Optional[datetime] = None
     """Hour the row describes (hourly history rows only)."""
 
     account_index: Optional[str] = None
+    """Lighter account index, as a string (Lighter summaries only)."""
+
     dex: Optional[str] = None
     account_value: Optional[str] = None
     cross_account_value: Optional[str] = None
@@ -2191,9 +2206,12 @@ class WalletPositions(BaseModel):
     """Open positions (flat markets are not listed)."""
 
     account: Optional[AccountSummary] = None
-    """Account summary on the first page of a Hyperliquid core snapshot, or of a
-    HIP-3 snapshot filtered to one dex. ``None`` otherwise (including every
-    reconstruction and every Lighter response)."""
+    """Account summary on the first page of a snapshot (the live snapshot, or a
+    ``timestamp`` on an exact UTC hour). Hyperliquid core: always on that page.
+    HIP-3: when ``dex`` (or a ``symbol``) names one dex. Lighter mainnet and
+    Robinhood Chain: when the request has no ``symbol`` filter; the summary
+    holds position aggregates only (see :class:`AccountSummary`). ``None`` on
+    later pages and on reconstructions (a ``timestamp`` between hours)."""
 
     account_seen: Optional[str] = None
     """Set only when ``positions`` is empty: ``"flat"`` (activity recorded, no
@@ -2259,7 +2277,10 @@ class ResponseMeta(BaseModel):
     (``finalized_through`` on Lighter trades, ``built_through`` on positions)."""
 
     preliminary_row_count: Optional[int] = None
-    """Rows in this page that are not final yet (Lighter ``trades.recent()``)."""
+    """Rows in the page that are not final yet. The API sends it only on the
+    Lighter ``/trades/{symbol}/recent`` response, and ``trades.recent()``
+    returns a plain list without the meta, so no SDK method returns it in this
+    release. It is typed so the meta parses wherever it appears."""
 
     coverage_from: Optional[datetime] = None
     """Where coverage begins, set with ``notice`` when a window is before coverage."""

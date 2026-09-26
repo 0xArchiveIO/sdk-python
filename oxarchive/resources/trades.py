@@ -170,7 +170,8 @@ class TradesResource:
             limit: Number of trades to return (default: 100)
 
         Returns:
-            List of recent trades
+            List of recent trades. The response meta is not returned: on
+            Lighter, use ``trades.list()`` for ``meta.finalized_through``.
         """
         if not self._allow_recent:
             raise OxArchiveError(

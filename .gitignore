@@ -1,4 +1,6 @@
-# Tests (internal only, not published)
+# Tests: only the files listed below are published in this repository; any
+# other file under tests/ stays local. No test file is packaged: the sdist
+# and wheel allowlists in pyproject.toml cover oxarchive/ and metadata only.
 tests/*
 !tests/test_coverage_contract.py
 !tests/test_websocket_capabilities.py

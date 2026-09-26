@@ -1097,9 +1097,9 @@ class RhLighterClient(_LighterDeploymentClient):
     dashed symbols (``AAPL-USDG``). Symbols and market ids are this
     deployment's own; ``BTC`` here is not the mainnet ``BTC`` market.
 
-    Coverage: trades and liquidations from the venue launch,
-    2026-06-26 20:10:26 UTC; order book, open interest and funding from
-    2026-08-22 18:43 UTC; account positions from 2026-06-26. Candles are
+    Coverage: trades from the venue launch, 2026-06-26 20:10:26 UTC; order
+    book, open interest, funding and liquidations from 2026-08-22 18:43 UTC;
+    account positions from 2026-06-26. Candles are
     served once enabled for this deployment (from 2026-06-26); until then the
     candles route answers with an error. Trades follow the same finalization
     contract as mainnet Lighter: ``trades.list()`` is canonical up to

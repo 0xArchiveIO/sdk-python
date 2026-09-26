@@ -947,6 +947,12 @@ class LighterPositionsResource(_PositionsBase):
         is reconstructed and clamped to ``meta.built_through``). Rows carry
         ``finalized``: ``True`` once every event behind them is final.
 
+        On the first page of a snapshot without a ``symbol`` filter,
+        ``data.account`` is an :class:`AccountSummary` of position aggregates
+        (``total_position_value``, ``total_unrealized_pnl``, ``long_value``,
+        ``short_value``, ``n_positions``, ``quality``); its margin fields are
+        ``None``.
+
         Args:
             account_index: Integer Lighter account index.
             timestamp: As-of instant; omit for the latest live snapshot.
@@ -955,7 +961,8 @@ class LighterPositionsResource(_PositionsBase):
             limit: Rows per page (default 500, max 5,000).
 
         Returns:
-            ``CursorResponse`` whose ``data`` is :class:`WalletPositions`.
+            ``CursorResponse`` whose ``data`` is :class:`WalletPositions`
+            (``positions``, ``account``, ``account_seen``).
         """
         return self._fetch(self._get_ep(account_index, timestamp, symbol, cursor, limit))
 

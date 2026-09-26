@@ -19,9 +19,9 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   preliminary), `candles`, `open_interest`, `funding`, `liquidations`,
   `positions`, and `get_freshness()`, `get_summary()`, `get_price_history()`.
   Markets are USDG-quoted: perps use uppercase symbols (`BTC`), spot markets
-  dashed symbols (`AAPL-USDG`). Trades and liquidations start at the venue
-  launch, 2026-06-26 20:10:26 UTC; order book, open interest and funding
-  start 2026-08-22 18:43 UTC. Candles are served from 2026-06-26 once enabled
+  dashed symbols (`AAPL-USDG`). Trades start at the venue launch,
+  2026-06-26 20:10:26 UTC; order book, open interest, funding and
+  liquidations start 2026-08-22 18:43 UTC. Candles are served from 2026-06-26 once enabled
   for this deployment.
 - Lighter liquidations on both deployments: `client.lighter.liquidations` and
   `client.rh_lighter.liquidations` with `history()` and `volume()` (and async
@@ -35,7 +35,8 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   - `get(key, timestamp=None, symbol=None)`: open positions now, or as of any
     instant (an exact hour serves the hourly snapshot; any other instant is
     reconstructed from the change log). Returns `WalletPositions`
-    (`positions`, `account`, `account_seen`).
+    (`positions`, `account`, `account_seen`). On Lighter, `account` holds
+    position aggregates only (totals, long/short value, `n_positions`).
   - `history(key, start, end)`, `changes(key, start, end)`: hourly position
     rows and the change log of every leg that moved a position.
   - `market(symbol, hour=None, side=None, min_value=None)`,
@@ -64,11 +65,13 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
     the account summary routes and `by_l1()` are billed at the per-request
     minimum.
 - `ResponseMeta` and `CursorResponse.meta`: the response's `meta`, typed, with
-  `finalized_through`, `requested_end`, `clamped_to`, `preliminary_row_count`,
-  `coverage_from`, `notice`, and the new optional fields `as_of`,
-  `snapshot_ts`, `source`, `quality`, `stale`, `totals` and `built_through`.
-  Set on account positions, `trades.list()` and Lighter liquidations; `None`
-  elsewhere. Unknown fields are kept.
+  `finalized_through`, `requested_end`, `clamped_to`, `coverage_from`,
+  `notice`, and the new optional fields `as_of`, `snapshot_ts`, `source`,
+  `quality`, `stale`, `totals` and `built_through`. Set on account positions,
+  `trades.list()` and Lighter liquidations; `None` elsewhere. Unknown fields
+  are kept. `trades.recent()` still returns a plain list, so the
+  `preliminary_row_count` the API sends on the Lighter `/recent` response is
+  not surfaced in this release.
 - Live Lighter on Robinhood Chain WebSocket channels `rh_lighter_orderbook`,
   `rh_lighter_trades`, `rh_lighter_open_interest` and `rh_lighter_funding`,
   with the same message shapes as the mainnet `lighter_*` channels, served on
