@@ -1,13 +1,18 @@
 """
 oxarchive - Official Python SDK for 0xarchive
 
-Historical Market Data API for the following venue APIs:
+Historical Market Data API for two venues, Hyperliquid and Lighter. Lighter has
+two deployments: mainnet and Robinhood Chain.
 - Hyperliquid (perpetuals data from April 2023)
 - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
 - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
 - Hyperliquid spot pairs under /v1/hyperliquid/spot and client.spot (trades and candles
   from 2025-03-22, candle floor 2025-03-22T10:50:22Z, rest live from 2026-05-05)
-- Lighter.xyz (perpetuals data)
+- Lighter mainnet at /v1/lighter and client.lighter
+- Lighter on Robinhood Chain at /v1/rh-lighter and client.rh_lighter (USDG-quoted;
+  trades from 2026-06-26, order book, open interest and funding from 2026-08-22)
+- Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
+  client.lighter.positions and client.rh_lighter.positions
 
 Example:
     >>> from oxarchive import Client
@@ -21,6 +26,9 @@ Example:
     >>> # Lighter.xyz data
     >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
     >>>
+    >>> # Lighter on Robinhood Chain
+    >>> rh_orderbook = client.rh_lighter.orderbook.get("AAPL-USDG")
+    >>>
     >>> # Hyperliquid HIP-3 data
     >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
     >>>
@@ -32,7 +40,14 @@ Example:
 """
 
 from .client import Client
-from .exchanges import HyperliquidClient, Hip3Client, Hip4Client, LighterClient, SpotClient
+from .exchanges import (
+    HyperliquidClient,
+    Hip3Client,
+    Hip4Client,
+    LighterClient,
+    RhLighterClient,
+    SpotClient,
+)
 from .resources.orderbook import LighterGranularity
 from .orderbook_reconstructor import (
     OrderBookReconstructor,
@@ -65,6 +80,8 @@ from .types import (
     OpenInterest,
     Liquidation,
     LiquidationVolume,
+    LighterLiquidation,
+    LighterLiquidationVolume,
     LiquidationLevelBucket,
     LiquidationLevels,
     LiquidationLevelsHistoryItem,
@@ -78,6 +95,19 @@ from .types import (
     Candle,
     CandleInterval,
     OxArchiveError,
+    CursorResponse,
+    ResponseMeta,
+    # Account positions types
+    Position,
+    PositionLeverage,
+    PositionCumFunding,
+    PositionChange,
+    MarketPosition,
+    MarketPositionsSummary,
+    AccountSummary,
+    WalletPositions,
+    LighterL1Account,
+    LighterL1Accounts,
     # Web3 Auth types
     SiweChallenge,
     Web3SignupResult,
@@ -128,7 +158,7 @@ except ImportError:
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
 
-__version__ = "1.11.0"
+__version__ = "1.12.0"
 
 __all__ = [
     # Client
@@ -138,6 +168,7 @@ __all__ = [
     "Hip3Client",
     "Hip4Client",
     "LighterClient",
+    "RhLighterClient",
     "SpotClient",
     # WebSocket Client
     "OxArchiveWs",
@@ -176,6 +207,8 @@ __all__ = [
     "OpenInterest",
     "Liquidation",
     "LiquidationVolume",
+    "LighterLiquidation",
+    "LighterLiquidationVolume",
     "LiquidationLevelBucket",
     "LiquidationLevels",
     "LiquidationLevelsHistoryItem",
@@ -189,6 +222,19 @@ __all__ = [
     "Candle",
     "CandleInterval",
     "OxArchiveError",
+    "CursorResponse",
+    "ResponseMeta",
+    # Account Positions Types
+    "Position",
+    "PositionLeverage",
+    "PositionCumFunding",
+    "PositionChange",
+    "MarketPosition",
+    "MarketPositionsSummary",
+    "AccountSummary",
+    "WalletPositions",
+    "LighterL1Account",
+    "LighterL1Accounts",
     # Web3 Auth Types
     "SiweChallenge",
     "Web3SignupResult",

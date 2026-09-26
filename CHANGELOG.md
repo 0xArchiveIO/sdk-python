@@ -5,6 +5,100 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-09-26
+
+Builds on 1.11.0. Two venues, Hyperliquid and Lighter; Lighter now has two
+deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
+(`client.rh_lighter`).
+
+### Added
+- Lighter on Robinhood Chain: `client.rh_lighter` (`RhLighterClient`), served
+  under `/v1/rh-lighter`. It has the same resources as `client.lighter` except
+  the L3 order book and the L1 account resolver: `instruments`, `orderbook`,
+  `trades` (`list()` canonical up to `meta.finalized_through`, `recent()`
+  preliminary), `candles`, `open_interest`, `funding`, `liquidations`,
+  `positions`, and `get_freshness()`, `get_summary()`, `get_price_history()`.
+  Markets are USDG-quoted: perps use uppercase symbols (`BTC`), spot markets
+  dashed symbols (`AAPL-USDG`). Trades and liquidations start at the venue
+  launch, 2026-06-26 20:10:26 UTC; order book, open interest and funding
+  start 2026-08-22 18:43 UTC. Candles are served from 2026-06-26 once enabled
+  for this deployment.
+- Lighter liquidations on both deployments: `client.lighter.liquidations` and
+  `client.rh_lighter.liquidations` with `history()` and `volume()` (and async
+  `ahistory()` / `avolume()`), typed as `LighterLiquidation` and
+  `LighterLiquidationVolume`. A row keeps both sides' account fields; rows
+  backfilled from the venue's trade export have `source == "bucket"` and an
+  empty `raw_json`. Volume buckets carry `total_usd` and `count`.
+- Account positions on four clients with the same method names:
+  `client.hyperliquid.positions`, `client.hyperliquid.hip3.positions`,
+  `client.lighter.positions` and `client.rh_lighter.positions`.
+  - `get(key, timestamp=None, symbol=None)`: open positions now, or as of any
+    instant (an exact hour serves the hourly snapshot; any other instant is
+    reconstructed from the change log). Returns `WalletPositions`
+    (`positions`, `account`, `account_seen`).
+  - `history(key, start, end)`, `changes(key, start, end)`: hourly position
+    rows and the change log of every leg that moved a position.
+  - `market(symbol, hour=None, side=None, min_value=None)`,
+    `market_summary(symbol, start=None, end=None)`, `all(hour)`: every open
+    position in a market (with `meta.totals`), long/short aggregates, and a
+    bulk listing across markets at one hour.
+  - Hyperliquid and HIP-3 only: `account(address)` and
+    `account_history(address, start, end)`. HIP-3 methods take an optional
+    `dex`; Lighter market methods take `include_system`.
+  - `key` is a 0x address on Hyperliquid and HIP-3, and an integer account
+    index on Lighter. `client.lighter.accounts.by_l1(l1_address)` resolves an
+    L1 address to its account indices (Lighter mainnet only).
+  - Cursor-following iterators: `iterate_history()`, `iterate_changes()`,
+    `iterate_market()`, `iterate_market_summary()`, `iterate_all()`,
+    `iterate_account_history()`, `client.lighter.accounts.iterate_by_l1()`,
+    and `aiterate_*` async versions. Every method has an `a`-prefixed async
+    version.
+  - Typed models: `Position`, `PositionLeverage`, `PositionCumFunding`,
+    `PositionChange`, `MarketPosition`, `MarketPositionsSummary`,
+    `AccountSummary`, `WalletPositions`, `LighterL1Account`,
+    `LighterL1Accounts`.
+  - Coverage: Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13,
+    hourly history from 2026-06-07, live every 5 minutes; Lighter mainnet from
+    2025-01-17 and Robinhood Chain from 2026-06-26, hourly, live every
+    2 minutes. Position rows are billed like trades, 1,000 rows per credit;
+    the account summary routes and `by_l1()` are billed at the per-request
+    minimum.
+- `ResponseMeta` and `CursorResponse.meta`: the response's `meta`, typed, with
+  `finalized_through`, `requested_end`, `clamped_to`, `preliminary_row_count`,
+  `coverage_from`, `notice`, and the new optional fields `as_of`,
+  `snapshot_ts`, `source`, `quality`, `stale`, `totals` and `built_through`.
+  Set on account positions, `trades.list()` and Lighter liquidations; `None`
+  elsewhere. Unknown fields are kept.
+- Live Lighter on Robinhood Chain WebSocket channels `rh_lighter_orderbook`,
+  `rh_lighter_trades`, `rh_lighter_open_interest` and `rh_lighter_funding`,
+  with the same message shapes as the mainnet `lighter_*` channels, served on
+  `wss://api.0xarchive.io/ws`. `rh_lighter_orderbook` accepts `interval_ms`
+  (100 to 5000, default one book per second). New helpers
+  `subscribe_rh_lighter_orderbook()`, `subscribe_rh_lighter_trades()`,
+  `subscribe_rh_lighter_open_interest()`, `subscribe_rh_lighter_funding()`
+  and their `unsubscribe_*` counterparts, and handlers
+  `on_rh_lighter_orderbook()`, `on_rh_lighter_trades()` and
+  `on_rh_lighter_market_context()`. Robinhood Chain messages never reach the
+  mainnet `on_lighter_*` handlers; without a dedicated handler, books and
+  trades fall back to `on_orderbook()` and `on_trades()`.
+- `rh_lighter_candles` for replay. All five `rh_lighter_*` channels support
+  historical replay and multi-channel replay within their family.
+- `RH_LIGHTER_LIVE_CHANNELS`, `RH_LIGHTER_REPLAY_ONLY_CHANNELS`,
+  `RH_LIGHTER_REPLAY_CHANNELS`, `RH_LIGHTER_SUBSCRIPTION_ERROR` and
+  `LIGHTER_BOOK_CHANNELS` in `oxarchive.websocket`.
+
+### Changed
+- `WsChannel` includes the five `rh_lighter_*` channels.
+- `rh_lighter_candles` raises `ValueError` with `RH_LIGHTER_SUBSCRIPTION_ERROR`
+  on a live subscribe, like the other replay-only Lighter channels.
+- `interval_ms` is accepted on `rh_lighter_orderbook` as well as
+  `lighter_orderbook`. The out-of-range error names the channel it was
+  passed for.
+- Data quality docstrings list every venue scope: `hyperliquid`, `hip3`,
+  `hip4`, `spot`, `lighter` and `rh-lighter`.
+- `LighterClient` shares its resources with `RhLighterClient` through a common
+  base class; its paths and behavior are unchanged.
+
 ## [1.11.0] - 2026-09-25
 
 Versions 1.7.1, 1.8.0, 1.9.0, 1.9.1 and 1.10.0 were not published to PyPI.

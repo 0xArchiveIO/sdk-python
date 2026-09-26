@@ -18,11 +18,15 @@ from .resources import (
     Hip4InstrumentsResource,
     Hip4OpenInterestResource,
     Hip4OutcomesResource,
+    HyperliquidPositionsResource,
     InstrumentsResource,
     L2OrderBookResource,
     L3OrderBookResource,
     L4OrderBookResource,
+    LighterAccountsResource,
     LighterInstrumentsResource,
+    LighterLiquidationsResource,
+    LighterPositionsResource,
     LiquidationsResource,
     OpenInterestResource,
     OrderBookResource,
@@ -109,6 +113,11 @@ class HyperliquidClient:
 
         self.l2_orderbook = L2OrderBookResource(http, base_path)
         """L2 full-depth orderbook (derived from L4)"""
+
+        self.positions = HyperliquidPositionsResource(http, base_path)
+        """Account positions by wallet address: current, as-of, hourly history,
+        change log, account summaries, and market-wide listings. Change log from
+        2025-05-25, hourly history from 2026-06-07, live every 5 minutes."""
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (February 2026+)"""
@@ -375,6 +384,11 @@ class Hip3Client:
 
         self.l2_orderbook = L2OrderBookResource(http, base_path, coin_transform=coin_transform)
         """L2 full-depth orderbook (derived from L4)"""
+
+        self.positions = HyperliquidPositionsResource(http, base_path, hip3=True)
+        """HIP-3 account positions by wallet address (optional ``dex`` filter).
+        Change log from 2025-10-13, hourly history from 2026-06-07, live every
+        5 minutes."""
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -872,29 +886,23 @@ class Hip4Client:
         return await self.l4_orderbook.ahistory(symbol, **kwargs)
 
 
-class LighterClient:
-    """
-    Lighter.xyz exchange client.
+class _LighterDeploymentClient:
+    """Resources shared by both Lighter deployments (mainnet and Robinhood Chain)."""
 
-    Access Lighter.xyz market data through the 0xarchive API.
-
-    Example:
-        >>> client = oxarchive.Client(api_key="...")
-        >>> orderbook = client.lighter.orderbook.get("BTC")
-        >>> trades = client.lighter.trades.list("ETH", start=..., end=...)
-        >>> instruments = client.lighter.instruments.list()
-        >>> print(f"ETH taker fee: {instruments[0].taker_fee}")
-    """
+    _BASE_PATH = "/v1/lighter"
 
     def __init__(self, http: HttpClient):
         self._http = http
-        base_path = "/v1/lighter"
+        base_path = self._BASE_PATH
+        self._base_path = base_path
 
         self.orderbook = OrderBookResource(http, base_path, coin_transform=_lighter_encode)
         """Order book data (L2 snapshots)"""
 
         self.trades = TradesResource(http, base_path, coin_transform=_lighter_encode)
-        """Trade/fill history"""
+        """Trade/fill history. ``list()`` serves canonical trades up to the
+        finalization watermark (``meta.finalized_through``); ``recent()`` serves
+        the preliminary tier."""
 
         self.instruments = LighterInstrumentsResource(
             http, base_path, coin_transform=_lighter_encode
@@ -910,8 +918,10 @@ class LighterClient:
         self.candles = CandlesResource(http, base_path, coin_transform=_lighter_encode)
         """OHLCV candle data"""
 
-        self.l3_orderbook = L3OrderBookResource(http, base_path, coin_transform=_lighter_encode)
-        """L3 individual order-level orderbook data"""
+        self.liquidations = LighterLiquidationsResource(
+            http, base_path, coin_transform=_lighter_encode
+        )
+        """Liquidation events (``history()``) and aggregated volume (``volume()``)"""
 
     def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
         """Convert timestamp to Unix milliseconds."""
@@ -940,13 +950,13 @@ class LighterClient:
             CoinFreshness with per-data-type lag information
         """
         symbol = _resolve_symbol(symbol, kwargs)
-        data = self._http.get(f"/v1/lighter/freshness/{_lighter_encode(symbol)}")
+        data = self._http.get(f"{self._base_path}/freshness/{_lighter_encode(symbol)}")
         return CoinFreshness.model_validate(data["data"])
 
     async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
         symbol = _resolve_symbol(symbol, kwargs)
-        data = await self._http.aget(f"/v1/lighter/freshness/{_lighter_encode(symbol)}")
+        data = await self._http.aget(f"{self._base_path}/freshness/{_lighter_encode(symbol)}")
         return CoinFreshness.model_validate(data["data"])
 
     def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
@@ -960,13 +970,13 @@ class LighterClient:
             CoinSummary with all market metrics
         """
         symbol = _resolve_symbol(symbol, kwargs)
-        data = self._http.get(f"/v1/lighter/summary/{_lighter_encode(symbol)}")
+        data = self._http.get(f"{self._base_path}/summary/{_lighter_encode(symbol)}")
         return CoinSummary.model_validate(data["data"])
 
     async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
         symbol = _resolve_symbol(symbol, kwargs)
-        data = await self._http.aget(f"/v1/lighter/summary/{_lighter_encode(symbol)}")
+        data = await self._http.aget(f"{self._base_path}/summary/{_lighter_encode(symbol)}")
         return CoinSummary.model_validate(data["data"])
 
     def get_price_history(
@@ -1003,7 +1013,7 @@ class LighterClient:
             "cursor": cursor,
         }
         data = self._http.get(
-            f"/v1/lighter/prices/{_lighter_encode(symbol)}",
+            f"{self._base_path}/prices/{_lighter_encode(symbol)}",
             params=params,
         )
         return CursorResponse(
@@ -1032,13 +1042,85 @@ class LighterClient:
             "cursor": cursor,
         }
         data = await self._http.aget(
-            f"/v1/lighter/prices/{_lighter_encode(symbol)}",
+            f"{self._base_path}/prices/{_lighter_encode(symbol)}",
             params=params,
         )
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
+
+
+class LighterClient(_LighterDeploymentClient):
+    """
+    Lighter.xyz exchange client (Lighter mainnet).
+
+    Access Lighter.xyz market data through the 0xarchive API. Lighter has two
+    deployments: mainnet (this client, ``client.lighter``) and Robinhood Chain
+    (``client.rh_lighter``, see :class:`RhLighterClient`).
+
+    Example:
+        >>> client = oxarchive.Client(api_key="...")
+        >>> orderbook = client.lighter.orderbook.get("BTC")
+        >>> trades = client.lighter.trades.list("ETH", start=..., end=...)
+        >>> instruments = client.lighter.instruments.list()
+        >>> print(f"ETH taker fee: {instruments[0].taker_fee}")
+        >>> positions = client.lighter.positions.get(281474976623827)
+    """
+
+    _BASE_PATH = "/v1/lighter"
+
+    def __init__(self, http: HttpClient):
+        super().__init__(http)
+        base_path = self._base_path
+
+        self.l3_orderbook = L3OrderBookResource(http, base_path, coin_transform=_lighter_encode)
+        """L3 individual order-level orderbook data"""
+
+        self.positions = LighterPositionsResource(http, base_path)
+        """Account positions by Lighter account index: current, as-of, hourly
+        history, change log, and market-wide listings. From 2025-01-17; live
+        every 2 minutes."""
+
+        self.accounts = LighterAccountsResource(http, base_path)
+        """Resolve an L1 address to the Lighter account indices it owns."""
+
+
+class RhLighterClient(_LighterDeploymentClient):
+    """
+    Lighter on Robinhood Chain client (``client.rh_lighter``).
+
+    The Robinhood Chain deployment of Lighter, served under ``/v1/rh-lighter``.
+    It has the same resources as ``client.lighter`` except the L3 order book
+    (not captured on this deployment) and the L1 account resolver. Markets are
+    quoted in USDG: perps use uppercase symbols (``BTC``), spot markets use
+    dashed symbols (``AAPL-USDG``). Symbols and market ids are this
+    deployment's own; ``BTC`` here is not the mainnet ``BTC`` market.
+
+    Coverage: trades and liquidations from the venue launch,
+    2026-06-26 20:10:26 UTC; order book, open interest and funding from
+    2026-08-22 18:43 UTC; account positions from 2026-06-26. Candles are
+    served once enabled for this deployment (from 2026-06-26); until then the
+    candles route answers with an error. Trades follow the same finalization
+    contract as mainnet Lighter: ``trades.list()`` is canonical up to
+    ``meta.finalized_through`` and ``trades.recent()`` is the preliminary tier.
+
+    Example:
+        >>> client = oxarchive.Client(api_key="...")
+        >>> markets = client.rh_lighter.instruments.list()
+        >>> book = client.rh_lighter.orderbook.get("AAPL-USDG")
+        >>> page = client.rh_lighter.trades.list("BTC", start=..., end=...)
+        >>> print(page.meta.finalized_through)
+    """
+
+    _BASE_PATH = "/v1/rh-lighter"
+
+    def __init__(self, http: HttpClient):
+        super().__init__(http)
+
+        self.positions = LighterPositionsResource(http, self._base_path, l1_resolver=False)
+        """Account positions by Lighter account index (perp markets). From
+        2026-06-26; live every 2 minutes."""
 
 
 class SpotClient:

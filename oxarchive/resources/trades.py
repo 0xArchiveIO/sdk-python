@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from ..http import HttpClient
-from ..types import CursorResponse, OxArchiveError, Trade, Timestamp
+from ..types import CursorResponse, OxArchiveError, ResponseMeta, Trade, Timestamp
 
 
 class TradesResource:
@@ -86,7 +86,10 @@ class TradesResource:
             side: Filter by trade side
 
         Returns:
-            CursorResponse with trades and next_cursor for pagination
+            CursorResponse with trades and next_cursor for pagination. On
+            Lighter (mainnet and Robinhood Chain), ``meta.finalized_through`` is
+            the canonical boundary: ``end`` is clamped to it, and
+            ``meta.requested_end`` / ``meta.clamped_to`` are set when it was.
 
         Example:
             >>> # First page
@@ -114,6 +117,7 @@ class TradesResource:
         return CursorResponse(
             data=[Trade.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.model_validate(data.get("meta") or {}),
         )
 
     async def alist(
@@ -146,13 +150,15 @@ class TradesResource:
         return CursorResponse(
             data=[Trade.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.model_validate(data.get("meta") or {}),
         )
 
     def recent(self, symbol: str, limit: Optional[int] = None, **kwargs) -> list[Trade]:
         """
         Get most recent trades for a symbol.
 
-        Note: This method is available for Lighter (``client.lighter.trades.recent()``),
+        Note: This method is available for Lighter (``client.lighter.trades.recent()``
+        and ``client.rh_lighter.trades.recent()``, the preliminary tier),
         HIP-3 (``client.hyperliquid.hip3.trades.recent()``), and HIP-4
         (``client.hyperliquid.hip4.trades.recent()``), all of which have
         real-time data ingestion. Hyperliquid uses hourly S3 backfill so this

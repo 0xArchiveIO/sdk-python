@@ -1,6 +1,10 @@
 # Tests (internal only, not published)
 tests/*
 !tests/test_coverage_contract.py
+!tests/test_websocket_capabilities.py
+!tests/test_positions.py
+!tests/test_rh_lighter.py
+!tests/_mock_api.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
