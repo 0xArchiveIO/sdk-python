@@ -5,6 +5,17 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `client.hyperliquid.hip3.breadth.history()` and `ahistory()` accept
+  `interval="1m"`. The API now serves 1-minute buckets on breadth, open
+  interest, funding, price and liquidation-volume history for every venue.
+  The other methods already pass `interval` through unchanged.
+- The order-flow docstring and README list the buckets the API serves: `1m`
+  (the default), `5m`, `15m` and `1h`. The docstring used to suggest `4h` and
+  `1d`, which the API refuses.
+
 ## [1.11.0] - 2026-09-25
 
 Versions 1.7.1, 1.8.0, 1.9.0, 1.9.1 and 1.10.0 were not published to PyPI.

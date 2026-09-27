@@ -580,11 +580,11 @@ def test_hip3_breadth_exposes_typed_current_and_history_contract() -> None:
     with pytest.raises(ValueError, match="1000"):
         client.breadth.history(limit=1001)
     with pytest.raises(ValueError, match="interval"):
-        client.breadth.history(interval=cast(Any, "1m"))
+        client.breadth.history(interval=cast(Any, "2h"))
     assert len(http.calls) == 2
 
 
-@pytest.mark.parametrize("interval", ["5m", "15m", "30m", "1h", "4h", "1d"])
+@pytest.mark.parametrize("interval", ["1m", "5m", "15m", "30m", "1h", "4h", "1d"])
 def test_hip3_breadth_accepts_every_served_history_interval(interval: str) -> None:
     response = {
         "data": [_breadth_snapshot()],
