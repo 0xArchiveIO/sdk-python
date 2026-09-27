@@ -1009,13 +1009,25 @@ result = client.hyperliquid.orders.history(
     order_type="limit"
 )
 
-# Get order flow aggregation
+# Get order flow aggregation: one page of time buckets
 flow = client.hyperliquid.orders.flow(
     "BTC",
-    start="2024-01-01",
-    end="2024-01-02",
-    interval="1h"  # 1m (default), 5m, 15m, 1h
+    start="2026-07-13T00:00:00Z",
+    end="2026-07-14T00:00:00Z",
+    interval="1m",  # 1m (default), 5m, 15m, 1h
 )
+buckets = list(flow.data)
+# A page holds up to `limit` buckets (default 1000, max 10000); follow the
+# cursor with the same start, end and interval until it is None
+while flow.next_cursor:
+    flow = client.hyperliquid.orders.flow(
+        "BTC",
+        start="2026-07-13T00:00:00Z",
+        end="2026-07-14T00:00:00Z",
+        interval="1m",
+        cursor=flow.next_cursor,
+    )
+    buckets.extend(flow.data)
 
 # Get TP/SL history
 tpsl = client.hyperliquid.orders.tpsl(
