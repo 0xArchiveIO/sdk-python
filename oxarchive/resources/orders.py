@@ -142,24 +142,23 @@ class OrdersResource:
         **kwargs,
     ) -> CursorResponse:
         """
-        Get order flow aggregation, one page of time buckets.
+        Get order flow aggregation in time buckets.
 
         Buckets are labelled by their open time in UTC, and buckets with no
-        events are omitted. A page holds the oldest ``limit`` buckets of the
-        window. While ``next_cursor`` is set, pass it back as ``cursor`` with
-        the same ``start``, ``end`` and ``interval``; stop when it is None.
+        events are omitted. A response holds the oldest ``limit`` buckets of
+        the window.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp, inclusive (required)
             end: End timestamp, exclusive (required)
             interval: Bucket width: '1m' (default), '5m', '15m' or '1h'
-            cursor: The previous response's next_cursor (a numeric
-                millisecond timestamp string); pass it back unchanged
-            limit: Buckets per page (default: 1000, max: 10000)
+            cursor: Optional resume point, a Unix millisecond timestamp; the
+                response starts at the first bucket that opens after it
+            limit: Maximum number of buckets (default: 1000, max: 10000)
 
         Returns:
-            CursorResponse with order flow buckets and next_cursor for pagination
+            CursorResponse with order flow buckets
         """
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(

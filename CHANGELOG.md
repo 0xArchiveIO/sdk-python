@@ -8,12 +8,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
-- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4).
-  The API now pages order flow: a page holds the oldest `limit` buckets of
-  the window, and `next_cursor` is set while more may follow. Pass it back as
-  `cursor` with the same `start`, `end` and `interval` until it is `None`.
-  Before this, a `cursor` keyword was accepted and silently dropped, so every
-  call returned the first page.
+- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4)
+  and send it; the API starts the response at the first bucket that opens
+  after it. Before this, a `cursor` keyword was accepted and silently dropped.
+  The API does not return `next_cursor` on order flow yet: it arrives with an
+  API switch, and until then `next_cursor` on an order-flow response is
+  `None`.
 
 ### Changed
 - `client.hyperliquid.hip3.breadth.history()` and `ahistory()` accept
