@@ -8,8 +8,8 @@ from typing import Any, Literal, Optional
 from ..http import HttpClient
 from ..types import BreadthSnapshot, CursorResponse, Timestamp
 
-BreadthInterval = Literal["5m", "15m", "30m", "1h", "4h", "1d"]
-BREADTH_INTERVALS = frozenset({"5m", "15m", "30m", "1h", "4h", "1d"})
+BreadthInterval = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+BREADTH_INTERVALS = frozenset({"1m", "5m", "15m", "30m", "1h", "4h", "1d"})
 
 
 class BreadthResource:

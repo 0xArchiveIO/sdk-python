@@ -147,7 +147,7 @@ class OrdersResource:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
-            interval: Aggregation interval (e.g., '1h', '4h', '1d')
+            interval: Bucket width: '1m' (default), '5m', '15m' or '1h'
             limit: Maximum number of results
 
         Returns:
