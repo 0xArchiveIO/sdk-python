@@ -137,21 +137,29 @@ class OrdersResource:
         start: Timestamp,
         end: Timestamp,
         interval: Optional[str] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """
-        Get order flow aggregation.
+        Get order flow aggregation, one page of time buckets.
+
+        Buckets are labelled by their open time in UTC, and buckets with no
+        events are omitted. A page holds the oldest ``limit`` buckets of the
+        window. While ``next_cursor`` is set, pass it back as ``cursor`` with
+        the same ``start``, ``end`` and ``interval``; stop when it is None.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
-            start: Start timestamp (required)
-            end: End timestamp (required)
+            start: Start timestamp, inclusive (required)
+            end: End timestamp, exclusive (required)
             interval: Bucket width: '1m' (default), '5m', '15m' or '1h'
-            limit: Maximum number of results
+            cursor: The previous response's next_cursor (a numeric
+                millisecond timestamp string); pass it back unchanged
+            limit: Buckets per page (default: 1000, max: 10000)
 
         Returns:
-            CursorResponse with order flow data and next_cursor for pagination
+            CursorResponse with order flow buckets and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
@@ -160,6 +168,7 @@ class OrdersResource:
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
                 "interval": interval,
+                "cursor": cursor,
                 "limit": limit,
             },
         )
@@ -175,6 +184,7 @@ class OrdersResource:
         start: Timestamp,
         end: Timestamp,
         interval: Optional[str] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
@@ -186,6 +196,7 @@ class OrdersResource:
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
                 "interval": interval,
+                "cursor": cursor,
                 "limit": limit,
             },
         )
