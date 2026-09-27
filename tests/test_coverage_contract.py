@@ -4,7 +4,13 @@ from typing import Any, cast
 
 import pytest
 
-from oxarchive.exchanges import Hip3Client, Hip4Client, LighterClient, SpotClient
+from oxarchive.exchanges import (
+    Hip3Client,
+    Hip4Client,
+    HyperliquidClient,
+    LighterClient,
+    SpotClient,
+)
 from oxarchive.http import HttpClient
 from oxarchive.resources.l3_orderbook import L3OrderBookResource
 from oxarchive.types import (
@@ -580,11 +586,11 @@ def test_hip3_breadth_exposes_typed_current_and_history_contract() -> None:
     with pytest.raises(ValueError, match="1000"):
         client.breadth.history(limit=1001)
     with pytest.raises(ValueError, match="interval"):
-        client.breadth.history(interval=cast(Any, "1m"))
+        client.breadth.history(interval=cast(Any, "2h"))
     assert len(http.calls) == 2
 
 
-@pytest.mark.parametrize("interval", ["5m", "15m", "30m", "1h", "4h", "1d"])
+@pytest.mark.parametrize("interval", ["1m", "5m", "15m", "30m", "1h", "4h", "1d"])
 def test_hip3_breadth_accepts_every_served_history_interval(interval: str) -> None:
     response = {
         "data": [_breadth_snapshot()],
@@ -640,3 +646,51 @@ def test_hip3_breadth_supports_async_methods_and_null_is_not_zero() -> None:
     assert history.data[0].value_pct is None
     assert http.calls[-1][1] is not None
     assert http.calls[-1][1]["cursor"] == "1788036840000"
+
+
+def _flow_page(next_cursor: str | None) -> dict[str, Any]:
+    return {
+        "data": [{"timestamp": "2026-07-13T16:39:00Z", "limit_orders_placed": 3}],
+        "meta": {"count": 1, "request_id": "flow", "next_cursor": next_cursor},
+    }
+
+
+def test_order_flow_forwards_its_cursor_and_returns_next_cursor() -> None:
+    http = FakeHttp(_flow_page("1783960740000"))
+    client = HyperliquidClient(cast(HttpClient, http))
+    window = {"start": 1783900800000, "end": 1783987200000, "interval": "1m"}
+
+    first = client.orders.flow("BTC", **window)
+    assert first.next_cursor == "1783960740000"
+    assert http.calls[-1][0] == "/v1/hyperliquid/orders/BTC/flow"
+    first_params = http.calls[-1][1]
+    assert first_params is not None
+    assert "cursor" not in first_params or first_params["cursor"] is None
+
+    http.response = _flow_page(None)
+    last = client.orders.flow("BTC", cursor=first.next_cursor, **window)
+    assert last.next_cursor is None
+    params = http.calls[-1][1]
+    assert params is not None
+    assert params["cursor"] == "1783960740000"
+    assert params["start"] == 1783900800000
+    assert params["end"] == 1783987200000
+    assert params["interval"] == "1m"
+
+
+def test_order_flow_cursor_on_hip3_hip4_and_async() -> None:
+    http = FakeHttp(_flow_page(None))
+    window = {"start": 1783900800000, "end": 1783987200000, "cursor": "1783960740000"}
+
+    Hip3Client(cast(HttpClient, http)).orders.flow("km:US500", **window)
+    asyncio.run(Hip4Client(cast(HttpClient, http)).orders.aflow("0", **window))
+    asyncio.run(HyperliquidClient(cast(HttpClient, http)).orders.aflow("BTC", **window))
+
+    assert [path for path, _ in http.calls] == [
+        "/v1/hyperliquid/hip3/orders/km:US500/flow",
+        "/v1/hyperliquid/hip4/orders/0/flow",
+        "/v1/hyperliquid/orders/BTC/flow",
+    ]
+    for _, params in http.calls:
+        assert params is not None
+        assert params["cursor"] == "1783960740000"

@@ -137,21 +137,28 @@ class OrdersResource:
         start: Timestamp,
         end: Timestamp,
         interval: Optional[str] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """
-        Get order flow aggregation.
+        Get order flow aggregation in time buckets.
+
+        Buckets are labelled by their open time in UTC, and buckets with no
+        events are omitted. A response holds the oldest ``limit`` buckets of
+        the window.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
-            start: Start timestamp (required)
-            end: End timestamp (required)
-            interval: Aggregation interval (e.g., '1h', '4h', '1d')
-            limit: Maximum number of results
+            start: Start timestamp, inclusive (required)
+            end: End timestamp, exclusive (required)
+            interval: Bucket width: '1m' (default), '5m', '15m' or '1h'
+            cursor: Optional resume point, a Unix millisecond timestamp; the
+                response starts at the first bucket that opens after it
+            limit: Maximum number of buckets (default: 1000, max: 10000)
 
         Returns:
-            CursorResponse with order flow data and next_cursor for pagination
+            CursorResponse with order flow buckets
         """
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
@@ -160,6 +167,7 @@ class OrdersResource:
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
                 "interval": interval,
+                "cursor": cursor,
                 "limit": limit,
             },
         )
@@ -175,6 +183,7 @@ class OrdersResource:
         start: Timestamp,
         end: Timestamp,
         interval: Optional[str] = None,
+        cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
@@ -186,6 +195,7 @@ class OrdersResource:
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
                 "interval": interval,
+                "cursor": cursor,
                 "limit": limit,
             },
         )

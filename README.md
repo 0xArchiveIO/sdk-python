@@ -414,7 +414,7 @@ print(f"{current.value_pct}% above VWAP ({current.counts.eligible} eligible)")
 history = client.hyperliquid.hip3.breadth.history(
     start="2026-08-28T00:00:00Z",
     end="2026-08-29T00:00:00Z",
-    interval="5m",  # 5m, 15m, 30m, 1h, 4h, 1d
+    interval="5m",  # 1m, 5m, 15m, 30m, 1h, 4h, 1d
     limit=1000,
 )
 while history.next_cursor:
@@ -569,7 +569,7 @@ hip3_current = await client.hyperliquid.hip3.funding.acurrent("km:US500")
 | `end` | `Timestamp` | Yes | End timestamp |
 | `cursor` | `Timestamp` | No | Cursor from previous response for pagination |
 | `limit` | `int` | No | Max results (default: 100, max: 1000) |
-| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: Hyperliquid core funding is ~1 min; HIP-3 and Lighter funding are ~10s. HIP-4 has no funding. |
+| `interval` | `str` | No | Aggregation interval: `'1m'`, `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: Hyperliquid core funding is ~1 min; HIP-3 and Lighter funding are ~10s. HIP-4 has no funding. |
 
 ### Open Interest
 
@@ -611,7 +611,7 @@ hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 | `end` | `Timestamp` | Yes | End timestamp |
 | `cursor` | `str` | No | Numeric timestamp string returned as `next_cursor`; pass it back unchanged |
 | `limit` | `int` | No | Max results (default: 100, max: 1000) |
-| `interval` | `str` | No | Aggregation interval: `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: HIP-3, HIP-4 outcome-side OI, and Lighter update at ~10s. |
+| `interval` | `str` | No | Aggregation interval: `'1m'`, `'5m'`, `'15m'`, `'30m'`, `'1h'`, `'4h'`, `'1d'`. Omit for raw rows: HIP-3, HIP-4 outcome-side OI, and Lighter update at ~10s. |
 
 ### Liquidations
 
@@ -679,7 +679,7 @@ volume = client.hyperliquid.liquidations.volume(
     "BTC",
     start="2026-01-01",
     end="2026-01-08",
-    interval="1h"  # 5m, 15m, 30m, 1h, 4h, 1d
+    interval="1h"  # 1m, 5m, 15m, 30m, 1h, 4h, 1d
 )
 
 for bucket in volume.data:
@@ -764,7 +764,7 @@ prices = client.hyperliquid.get_price_history(
     "BTC",
     start="2026-01-01",
     end="2026-01-02",
-    interval="1h"  # 5m, 15m, 30m, 1h, 4h, 1d
+    interval="1h"  # 1m, 5m, 15m, 30m, 1h, 4h, 1d
 )
 
 for snapshot in prices.data:
@@ -1009,12 +1009,13 @@ result = client.hyperliquid.orders.history(
     order_type="limit"
 )
 
-# Get order flow aggregation
+# Get order flow aggregation: time buckets, oldest first
 flow = client.hyperliquid.orders.flow(
     "BTC",
-    start="2024-01-01",
-    end="2024-01-02",
-    interval="1h"
+    start="2026-07-13T00:00:00Z",
+    end="2026-07-14T00:00:00Z",
+    interval="15m",  # 1m (default), 5m, 15m, 1h
+    limit=1000,  # buckets (default 1000, max 10000)
 )
 
 # Get TP/SL history
