@@ -25,6 +25,10 @@ class DataQualityResource:
 
     Provides endpoints for monitoring data quality, coverage, incidents, and SLA metrics.
 
+    Venue scopes: ``hyperliquid``, ``hip3``, ``hip4``, ``spot`` (Hyperliquid
+    spot), ``lighter`` (Lighter mainnet) and ``rh-lighter`` (Lighter on
+    Robinhood Chain).
+
     Example:
         >>> # Get system status
         >>> status = client.data_quality.status()
@@ -117,7 +121,8 @@ class DataQualityResource:
         Get data coverage for a specific venue scope.
 
         Args:
-            exchange: Venue scope ('hyperliquid', 'lighter', 'hip3', or 'hip4')
+            exchange: Venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot',
+                'lighter' or 'rh-lighter' (Lighter on Robinhood Chain)
 
         Returns:
             ExchangeCoverage with coverage info for all data types on this venue scope.
@@ -149,7 +154,8 @@ class DataQualityResource:
         historical coverage.
 
         Args:
-            exchange: Venue scope ('hyperliquid', 'lighter', 'hip3', or 'hip4')
+            exchange: Venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot',
+                'lighter' or 'rh-lighter' (Lighter on Robinhood Chain)
             symbol: Symbol name (e.g., 'BTC', 'ETH', HIP3 coins like 'xyz:XYZ100', or HIP4 coins like '#0')
             from_time: Start of gap detection window (default: now - 30 days).
                 Accepts Unix ms, datetime, or ISO string.
@@ -222,7 +228,8 @@ class DataQualityResource:
 
         Args:
             status: Filter by incident status
-            exchange: Filter by exchange
+            exchange: Filter by venue scope ('hyperliquid', 'hip3', 'hip4',
+                'spot', 'lighter' or 'rh-lighter')
             since: Only show incidents starting after this timestamp
             limit: Maximum results per page (default: 20, max: 100)
             offset: Pagination offset
