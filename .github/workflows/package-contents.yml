@@ -19,9 +19,9 @@ jobs:
       - run: pip install build
       - name: Plant untracked files that must not be packaged
         run: |
-          mkdir -p .claude/worktrees/probe && echo stray > .claude/worktrees/probe/stray.rs
+          mkdir -p .scratch/probe && echo stray > .scratch/probe/stray.rs
           echo stray > oxarchive/stray.txt
-          mkdir -p oxarchive/.claude && echo stray > oxarchive/.claude/stray.py
+          mkdir -p oxarchive/.scratch && echo stray > oxarchive/.scratch/stray.py
       - run: python -m build --outdir dist-check
       - name: Every packaged file is tracked source or build metadata
         run: |
