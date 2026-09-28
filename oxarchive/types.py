@@ -533,7 +533,7 @@ class SpotTableFreshness(BaseModel):
     """When this freshness was measured."""
 
     tables: dict[str, Any] = Field(default_factory=dict)
-    """Per-table freshness lag, keyed by ClickHouse table name. Values are
+    """Per-dataset freshness lag, keyed by dataset name. Values are
     typically ``{last_updated, lag_ms}`` dicts but the schema is permissive."""
 
     model_config = {"extra": "allow"}
