@@ -91,6 +91,11 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - `RH_LIGHTER_LIVE_CHANNELS`, `RH_LIGHTER_REPLAY_ONLY_CHANNELS`,
   `RH_LIGHTER_REPLAY_CHANNELS`, `RH_LIGHTER_SUBSCRIPTION_ERROR` and
   `LIGHTER_BOOK_CHANNELS` in `oxarchive.websocket`.
+- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4)
+  and send it; the API starts the response at the first bucket that opens
+  after it. Before this, a `cursor` keyword was accepted and silently dropped.
+  The API does not return `next_cursor` on order flow yet, so `next_cursor`
+  on an order-flow response is `None`.
 
 ### Changed
 - `WsChannel` includes the five `rh_lighter_*` channels.
@@ -103,6 +108,13 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `hip4`, `spot`, `lighter` and `rh-lighter`.
 - `LighterClient` shares its resources with `RhLighterClient` through a common
   base class; its paths and behavior are unchanged.
+- `client.hyperliquid.hip3.breadth.history()` and `ahistory()` accept
+  `interval="1m"`. The API serves 1-minute buckets on breadth, open
+  interest, funding, price and liquidation-volume history for every venue.
+  The other methods already pass `interval` through unchanged.
+- The order-flow docstring and README list the buckets the API serves: `1m`
+  (the default), `5m`, `15m` and `1h`. The docstring used to suggest `4h` and
+  `1d`, which the API refuses.
 
 ## [1.11.0] - 2026-09-25
 

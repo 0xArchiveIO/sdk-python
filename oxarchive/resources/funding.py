@@ -62,7 +62,7 @@ class FundingResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor (timestamp)
             limit: Maximum number of results (default: 100, max: 1000)
-            interval: Aggregation interval (e.g., '5m', '15m', '30m', '1h', '4h', '1d').
+            interval: Aggregation interval (e.g., '1m', '5m', '15m', '30m', '1h', '4h', '1d').
                 Raw cadence is route-specific: Hyperliquid core is roughly one
                 minute; HIP-3 and Lighter are roughly 10 seconds. HIP-4 has no funding.
 
