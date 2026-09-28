@@ -1901,8 +1901,8 @@ class PositionLeverage(BaseModel):
     """Leverage of a position."""
 
     type: str
-    """``"cross"`` or ``"isolated"`` on Hyperliquid (``"unknown"`` on
-    reconstructed rows); the margin mode on Lighter."""
+    """``"cross"``, ``"isolated"`` or ``"unknown"`` (always ``"unknown"`` on
+    reconstructed Hyperliquid rows). On Lighter, the margin mode."""
 
     value: Optional[str] = None
     """Leverage multiple, or ``None`` when not reported."""
@@ -1966,7 +1966,9 @@ class Position(BaseModel):
     liquidation_price: Optional[str] = None
 
     liquidation_price_status: str
-    """``"exact"`` when ``liquidation_price`` is set, ``"unavailable"`` otherwise."""
+    """How ``liquidation_price`` was determined: ``"exact"`` (set),
+    ``"not_published_cross"`` (Hyperliquid does not publish cross-margin
+    liquidation prices), ``"changed_since_snapshot"`` or ``"unavailable"``."""
 
     cum_funding: PositionCumFunding
 
@@ -2025,7 +2027,7 @@ class MarketPosition(BaseModel):
     unrealized_pnl: Optional[str] = None
 
     leverage_type: str
-    """``"cross"`` or ``"isolated"`` on Hyperliquid; the margin mode on Lighter."""
+    """``"cross"``, ``"isolated"`` or ``"unknown"``; on Lighter, the margin mode."""
 
     liquidation_price: Optional[str] = None
     quality: str
@@ -2209,8 +2211,9 @@ class WalletPositions(BaseModel):
 
     account: Optional[AccountSummary] = None
     """Account summary on the first page of a snapshot (the live snapshot, or a
-    ``timestamp`` on an exact UTC hour). Hyperliquid core: always on that page.
-    HIP-3: when ``dex`` (or a ``symbol``) names one dex. Lighter mainnet and
+    ``timestamp`` on an exact UTC hour). Hyperliquid core: when the wallet has
+    an account in that snapshot. HIP-3: when ``dex`` (or a ``symbol``) names
+    one dex. Lighter mainnet and
     Robinhood Chain: when the request has no ``symbol`` filter; the summary
     holds position aggregates only (see :class:`AccountSummary`). ``None`` on
     later pages and on reconstructions (a ``timestamp`` between hours)."""
