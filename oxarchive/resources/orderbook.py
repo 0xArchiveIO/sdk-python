@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import AsyncIterator, Iterator, Literal, Optional
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, OrderBook, Timestamp
 from ..orderbook_reconstructor import (
@@ -42,22 +42,7 @@ class OrderBookResource:
         self._base_path = base_path
         self._coin_transform = coin_transform
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            # Try parsing ISO format
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     def get(
         self,
@@ -227,8 +212,8 @@ class OrderBookResource:
         Example:
             >>> tick_data = client.lighter.orderbook.history_tick(
             ...     "BTC",
-            ...     start=datetime.now() - timedelta(hours=1),
-            ...     end=datetime.now()
+            ...     start=datetime.now(timezone.utc) - timedelta(hours=1),
+            ...     end=datetime.now(timezone.utc)
             ... )
             >>> print(f"Checkpoint: {tick_data.checkpoint}")
             >>> print(f"Deltas: {len(tick_data.deltas)}")
@@ -350,8 +335,8 @@ class OrderBookResource:
             >>> # Get all snapshots
             >>> snapshots = client.lighter.orderbook.history_reconstructed(
             ...     "BTC",
-            ...     start=datetime.now() - timedelta(hours=1),
-            ...     end=datetime.now()
+            ...     start=datetime.now(timezone.utc) - timedelta(hours=1),
+            ...     end=datetime.now(timezone.utc)
             ... )
             >>> for ob in snapshots:
             ...     print(ob.timestamp, "Best bid:", ob.bids[0].px, "Best ask:", ob.asks[0].px)
@@ -477,8 +462,8 @@ class OrderBookResource:
             >>> # Process 24 hours of tick data with automatic pagination
             >>> for snapshot in client.lighter.orderbook.iterate_tick_history(
             ...     "BTC",
-            ...     start=datetime.now() - timedelta(days=1),
-            ...     end=datetime.now()
+            ...     start=datetime.now(timezone.utc) - timedelta(days=1),
+            ...     end=datetime.now(timezone.utc)
             ... ):
             ...     print(snapshot.timestamp, "Mid:", snapshot.mid_price)
             ...     if some_condition:
@@ -558,8 +543,8 @@ class OrderBookResource:
             >>> # Process 24 hours of tick data with automatic pagination
             >>> async for snapshot in client.lighter.orderbook.aiterate_tick_history(
             ...     "BTC",
-            ...     start=datetime.now() - timedelta(days=1),
-            ...     end=datetime.now()
+            ...     start=datetime.now(timezone.utc) - timedelta(days=1),
+            ...     end=datetime.now(timezone.utc)
             ... ):
             ...     print(snapshot.timestamp, "Mid:", snapshot.mid_price)
             ...     if some_condition:

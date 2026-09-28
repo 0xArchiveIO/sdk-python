@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal, Optional
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import (
     CoverageResponse,
@@ -12,6 +12,7 @@ from ..types import (
     Incident,
     IncidentsResponse,
     LatencyResponse,
+    PositionsFreshness,
     SlaResponse,
     StatusResponse,
     SymbolCoverageResponse,
@@ -48,21 +49,7 @@ class DataQualityResource:
         self._http = http
         self._base_path = base_path
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     # =========================================================================
     # Status Endpoints
@@ -378,3 +365,29 @@ class DataQualityResource:
             },
         )
         return SlaResponse.model_validate(data)
+
+    # =========================================================================
+    # Account Positions Freshness
+    # =========================================================================
+
+    def positions_freshness(self) -> list[PositionsFreshness]:
+        """
+        Get the freshness of the account positions data, one row per venue.
+
+        Returns:
+            One :class:`PositionsFreshness` per venue (Hyperliquid core, HIP-3,
+            Lighter and Lighter on Robinhood Chain): the latest live snapshot
+            and its age, whether it is stale, the latest hourly snapshot, and
+            the ``built_through`` and ``finalized_through`` boundaries.
+
+        Example:
+            >>> for venue in client.data_quality.positions_freshness():
+            ...     print(venue.venue, venue.product, venue.live_age_seconds, venue.stale)
+        """
+        data = self._http.get(f"{self._base_path}/positions")
+        return [PositionsFreshness.model_validate(item) for item in data["data"]]
+
+    async def apositions_freshness(self) -> list[PositionsFreshness]:
+        """Async version of positions_freshness()."""
+        data = await self._http.aget(f"{self._base_path}/positions")
+        return [PositionsFreshness.model_validate(item) for item in data["data"]]

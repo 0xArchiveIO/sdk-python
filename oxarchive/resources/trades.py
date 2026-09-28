@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal, Optional
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, OxArchiveError, ResponseMeta, Trade, Timestamp
 
@@ -44,21 +44,7 @@ class TradesResource:
         # with a clear pointer instead of letting the user 404 against the API.
         self._allow_recent = allow_recent
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     def list(
         self,

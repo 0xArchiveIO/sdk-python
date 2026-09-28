@@ -2133,7 +2133,8 @@ class AccountSummary(BaseModel):
     as ``WalletPositions.account``. ``withdrawable`` is only available for
     older hourly history.
 
-    Lighter mainnet and Robinhood Chain: position aggregates only, as
+    Lighter mainnet and Robinhood Chain: position aggregates only, returned by
+    ``positions.account()`` / ``positions.account_history()`` and as
     ``WalletPositions.account`` on ``positions.get()``. ``account_index``,
     ``total_position_value``, ``total_unrealized_pnl``, ``long_value``,
     ``short_value``, ``n_positions`` and ``quality`` are set; ``dex``, the
@@ -2223,6 +2224,44 @@ class WalletPositions(BaseModel):
     open position), ``"never_seen"`` (no activity recorded in the covered
     history; see ``meta.notice`` and ``meta.coverage_from``) or
     ``"outside_coverage"`` (the instant is before coverage begins)."""
+
+
+class PositionsFreshness(BaseModel):
+    """Freshness of the account positions data of one venue.
+
+    Returned by ``client.data_quality.positions_freshness()``, one row per
+    venue: Hyperliquid core (``venue="hyperliquid"``, ``product="core"``),
+    HIP-3 (``"hyperliquid"``, ``"hip3"``), Lighter (``"lighter"``,
+    ``"lighter"``) and Lighter on Robinhood Chain (``"rh_lighter"``,
+    ``"rh_lighter"``).
+    """
+
+    venue: str
+    """Venue: ``"hyperliquid"``, ``"lighter"`` or ``"rh_lighter"``."""
+
+    product: str
+    """Product within the venue: ``"core"``, ``"hip3"``, ``"lighter"`` or ``"rh_lighter"``."""
+
+    live_snapshot_ts: Optional[datetime] = None
+    """Time of the latest live snapshot."""
+
+    live_age_seconds: Optional[int] = None
+    """Age of the latest live snapshot, in seconds."""
+
+    stale: bool
+    """``True`` when the latest live snapshot is older than 12 minutes (or there is none)."""
+
+    live_quality: Optional[str] = None
+    """Quality of the latest live snapshot: ``"complete"``, ``"partial"`` or ``"degraded"``."""
+
+    hourly_snapshot_ts: Optional[datetime] = None
+    """Hour of the latest hourly snapshot."""
+
+    built_through: Optional[datetime] = None
+    """Every event before this instant is built into the change log and the as-of state."""
+
+    finalized_through: Optional[datetime] = None
+    """Every event before this instant is final and will not be re-derived."""
 
 
 class LighterL1Account(BaseModel):
@@ -2356,7 +2395,11 @@ class CursorResponse(BaseModel, Generic[T]):
 
 # Type alias for timestamp parameters
 Timestamp = Union[int, str, datetime]
-"""Timestamp can be Unix ms (int), ISO string, or datetime object."""
+"""Timestamp can be Unix ms (int), an ISO 8601 string, or a datetime.
+
+A time without a time zone is UTC: a naive datetime, an ISO string without an
+offset (``"2026-09-01T12:00:00"``) and a date alone (``"2026-09-01"``, midnight
+UTC) mean the same instant on every machine."""
 
 
 # =============================================================================

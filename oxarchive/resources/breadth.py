@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Literal, Optional
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import BreadthSnapshot, CursorResponse, Timestamp
 
@@ -40,22 +40,7 @@ class BreadthResource:
             choices = ", ".join(sorted(BREADTH_INTERVALS))
             raise ValueError(f"interval must be one of {choices} for HIP-3 breadth")
 
-    @staticmethod
-    def _convert_timestamp(ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert an ISO timestamp or datetime to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(parsed.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     @staticmethod
     def _history_response(payload: dict[str, Any]) -> CursorResponse[list[BreadthSnapshot]]:

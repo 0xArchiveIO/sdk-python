@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import warnings
-from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
+from ._time import to_unix_ms
 from .http import HttpClient
 from .resources import (
     BreadthResource,
@@ -125,21 +125,7 @@ class HyperliquidClient:
         self.hip4 = Hip4Client(http)
         """HIP-4 outcome markets (May 2026+)"""
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     # -----------------------------------------------------------------
     # Convenience methods (not tied to a specific resource)
@@ -390,21 +376,7 @@ class Hip3Client:
         Change log from 2025-10-13, hourly history from 2026-06-07, live every
         5 minutes."""
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """
@@ -604,21 +576,7 @@ class Hip4Client:
         self.l2_orderbook = L2OrderBookResource(http, base_path, coin_transform=_hip4_encode)
         """L2 full-depth orderbook (derived from L4)."""
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     # -----------------------------------------------------------------
     # Discovery / metadata flat helpers
@@ -923,21 +881,7 @@ class _LighterDeploymentClient:
         )
         """Liquidation events (``history()``) and aggregated volume (``volume()``)"""
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """
@@ -1079,8 +1023,8 @@ class LighterClient(_LighterDeploymentClient):
 
         self.positions = LighterPositionsResource(http, base_path)
         """Account positions by Lighter account index: current, as-of, hourly
-        history, change log, and market-wide listings. From 2025-01-17; live
-        every 2 minutes."""
+        history, change log, account summaries (position aggregates), and
+        market-wide listings. From 2025-01-17; live every 2 minutes."""
 
         self.accounts = LighterAccountsResource(http, base_path)
         """Resolve an L1 address to the Lighter account indices it owns."""
@@ -1173,21 +1117,7 @@ class SpotClient:
         self.twap = SpotTwapResource(http, base_path)
         """TWAP status records by pair or by user wallet."""
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     def get_freshness(self, symbol: str, **kwargs) -> SpotTableFreshness:
         """
