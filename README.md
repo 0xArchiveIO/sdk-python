@@ -226,14 +226,14 @@ history = client.lighter.orderbook.history(
 For tick-level data, the SDK provides client-side orderbook reconstruction. This efficiently reconstructs full orderbook state from a checkpoint and incremental deltas.
 
 ```python
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from oxarchive import OrderBookReconstructor
 
 # Option 1: Get fully reconstructed snapshots (simplest)
 snapshots = client.lighter.orderbook.history_reconstructed(
     "BTC",
-    start=datetime.now() - timedelta(hours=1),
-    end=datetime.now()
+    start=datetime.now(timezone.utc) - timedelta(hours=1),
+    end=datetime.now(timezone.utc)
 )
 
 for ob in snapshots:
@@ -242,8 +242,8 @@ for ob in snapshots:
 # Option 2: Get raw tick data for custom reconstruction
 tick_data = client.lighter.orderbook.history_tick(
     "BTC",
-    start=datetime.now() - timedelta(hours=1),
-    end=datetime.now()
+    start=datetime.now(timezone.utc) - timedelta(hours=1),
+    end=datetime.now(timezone.utc)
 )
 
 print(f"Checkpoint: {len(tick_data.checkpoint.bids)} bids")
@@ -253,8 +253,8 @@ print(f"Deltas: {len(tick_data.deltas)} updates")
 # Automatically handles pagination, fetching up to 1,000 deltas per request
 for snapshot in client.lighter.orderbook.iterate_tick_history(
     "BTC",
-    start=datetime.now() - timedelta(days=1),  # 24 hours of data
-    end=datetime.now()
+    start=datetime.now(timezone.utc) - timedelta(days=1),  # 24 hours of data
+    end=datetime.now(timezone.utc)
 ):
     print(snapshot.timestamp, "Mid:", snapshot.mid_price)
     if some_condition:
@@ -1167,9 +1167,12 @@ for row in client.hyperliquid.positions.iterate_history("0xabc...", start="2026-
 for leg in client.hyperliquid.positions.iterate_changes("0xabc...", start="2026-09-01", end="2026-09-02", symbol="BTC"):
     print(leg.timestamp, leg.event_type, leg.start_position, "->", leg.end_position, leg.closed_pnl)
 
-# Account summaries (Hyperliquid and HIP-3)
+# Account summaries: the clearinghouse summary on Hyperliquid and HIP-3,
+# position aggregates on Lighter and Robinhood Chain
 summary = client.hyperliquid.positions.account("0xabc...")
 hourly = client.hyperliquid.positions.account_history("0xabc...", start="2026-09-01", end="2026-09-02")
+lighter_summary = client.lighter.positions.account(4521)
+lighter_hourly = client.rh_lighter.positions.account_history(4521, start="2026-09-01", end="2026-09-02")
 
 # HIP-3: dex narrows a wallet to one dex; symbols are case-sensitive
 hip3 = client.hyperliquid.hip3.positions.get("0xabc...", dex="xyz")
@@ -1216,12 +1219,12 @@ async for leg in client.lighter.positions.aiterate_changes(4521, start=..., end=
 | `market(symbol, *, hour, side, min_value, include_system, cursor, limit)` | `MarketPosition` rows; `meta.totals` on the first page |
 | `market_summary(symbol, *, start, end, include_system, cursor, limit)` | `MarketPositionsSummary` (one now, or one per hour) |
 | `all(hour, *, include_system, cursor, limit)` | `MarketPosition` rows across every market at one hour |
-| `account(address, *, dex)` | `AccountSummary` rows (Hyperliquid and HIP-3 only) |
-| `account_history(address, *, start, end, dex, cursor, limit)` | Hourly `AccountSummary` rows (Hyperliquid and HIP-3 only) |
+| `account(key, *, dex)` | `AccountSummary` rows at the latest live snapshot: the clearinghouse summary on Hyperliquid and HIP-3, position aggregates on Lighter |
+| `account_history(key, *, start, end, dex, cursor, limit)` | Hourly `AccountSummary` rows (on Lighter, one per hour, at most 744 per page) |
 | `iterate_history`, `iterate_changes`, `iterate_market`, `iterate_market_summary`, `iterate_all`, `iterate_account_history` | Iterators that follow `next_cursor` for you |
 | `client.lighter.accounts.by_l1(l1_address, *, cursor, limit)` | `LighterL1Accounts`: `l1_address`, `total_accounts`, `accounts` (Lighter mainnet only) |
 
-`key` is a 0x address on Hyperliquid and HIP-3 and an integer account index on Lighter. `dex` applies to HIP-3 and `include_system` to Lighter. Timestamps accept Unix milliseconds, ISO strings, or datetimes; `hour` must be an exact UTC hour.
+`key` is a 0x address on Hyperliquid and HIP-3 and an integer account index on Lighter. `dex` applies to HIP-3 and `include_system` to Lighter. Timestamps accept Unix milliseconds, ISO strings, or datetimes, and a time without a time zone is UTC; `hour` must be an exact UTC hour.
 
 Things to know:
 
@@ -1279,6 +1282,10 @@ latency = client.data_quality.latency()
 for exchange, metrics in latency.exchanges.items():
     print(f"{exchange}: OB lag {metrics.data_freshness.orderbook_lag_ms}ms")
 
+# Account positions freshness, one row per venue
+for venue in client.data_quality.positions_freshness():
+    print(venue.venue, venue.product, venue.live_age_seconds, venue.stale, venue.finalized_through)
+
 # Get SLA compliance metrics for a specific month
 sla = client.data_quality.sla(year=2026, month=1)
 print(f"Period: {sla.period}")
@@ -1302,6 +1309,7 @@ coverage = await client.data_quality.acoverage()
 | `get_incident(incident_id)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
 | `sla(year, month)` | SLA compliance metrics for a specific month |
+| `positions_freshness()` | Account positions freshness per venue: latest live and hourly snapshots, staleness, `built_through`, `finalized_through` |
 
 **Note:** Data Quality endpoints (`coverage()`, `exchange_coverage()`, `symbol_coverage()`) perform complex aggregation queries and may take 30-60 seconds on first request (results are cached server-side for 5 minutes). If you encounter timeout errors, create a client with a longer timeout:
 
@@ -2000,22 +2008,22 @@ await ws.multi_replay(
 
 ## Timestamp Formats
 
-The SDK accepts timestamps in multiple formats:
+The SDK accepts timestamps in multiple formats and sends them as Unix milliseconds. A time without a time zone is UTC: a naive `datetime`, an ISO string without an offset (`"2024-01-01T12:00:00"`), and a date alone (`"2024-01-01"`, midnight UTC) mean the same instant on every machine, whatever its local time zone. For the current time, use an aware datetime such as `datetime.now(timezone.utc)`; a naive `datetime.now()` is local wall-clock time and would be read as UTC.
 
 ```python
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Unix milliseconds (int)
 client.hyperliquid.orderbook.get("BTC", timestamp=1704067200000)
 
-# ISO string
-client.hyperliquid.orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+# ISO string: a date alone is midnight UTC; a time without an offset is UTC
+client.hyperliquid.orderbook.history("BTC", start="2024-01-01", end="2024-01-01T12:00:00")
 
-# datetime object
+# datetime object: naive datetimes are UTC, aware ones keep their offset
 client.hyperliquid.orderbook.history(
     "BTC",
     start=datetime(2024, 1, 1),
-    end=datetime(2024, 1, 2)
+    end=datetime(2024, 1, 2, tzinfo=timezone.utc)
 )
 ```
 

@@ -24,6 +24,7 @@ from oxarchive import (
     OxArchiveError,
     Position,
     PositionChange,
+    PositionsFreshness,
     ResponseMeta,
     WalletPositions,
 )
@@ -883,7 +884,7 @@ def test_rh_lighter_positions_use_the_robinhood_chain_root() -> None:
     assert now.data.account.account_index == "7"
     assert now.data.account.account_value is None
     assert not hasattr(client.rh_lighter, "accounts")
-    assert not hasattr(rh, "account") and not hasattr(client.lighter.positions, "account")
+    assert callable(rh.account) and callable(client.lighter.positions.account)
 
 
 # ---------------------------------------------------------------------------
@@ -957,6 +958,105 @@ def test_async_positions_methods_match_the_sync_requests() -> None:
     ]
 
 
+def test_lighter_account_summary_routes_on_both_deployments() -> None:
+    summary = _with(LIGHTER_ACCOUNT_SUMMARY, account_index="7")
+    hourly = [
+        _with(summary, snapshot_ts="2026-09-25T10:00:00Z"),
+        _with(
+            summary,
+            snapshot_ts="2026-09-25T11:00:00Z",
+            total_position_value="0",
+            total_unrealized_pnl="0",
+            long_value="0",
+            short_value="0",
+            n_positions=0,
+        ),
+    ]
+
+    def responder(path: str, q: dict[str, str]) -> dict[str, Any]:
+        if path.endswith("/account"):
+            return envelope([summary], source="snapshot", quality="complete", stale=False)
+        if q.get("cursor") is None:
+            return envelope(hourly[:1], next_cursor="h2", source="snapshot")
+        return envelope(hourly[1:], source="snapshot")
+
+    client, api = mock_client(responder)
+    for root, positions in (
+        ("/v1/lighter", client.lighter.positions),
+        ("/v1/rh-lighter", client.rh_lighter.positions),
+    ):
+        api.requests.clear()
+        now = positions.account(7)
+        page = positions.account_history("7", start=T_START, end=T_END, limit=1)
+        rows = list(positions.iterate_account_history(7, start=T_START, end=T_END, limit=1))
+        async_now = asyncio.run(positions.aaccount(7))
+        async_page = asyncio.run(positions.aaccount_history(7, start=T_START, end=T_END))
+
+        window = {"start": str(T_START), "end": str(T_END)}
+        assert api.calls == [
+            (f"{root}/accounts/7/account", {}),
+            (f"{root}/accounts/7/account/history", {**window, "limit": "1"}),
+            (f"{root}/accounts/7/account/history", {**window, "limit": "1"}),
+            (f"{root}/accounts/7/account/history", {**window, "limit": "1", "cursor": "h2"}),
+            (f"{root}/accounts/7/account", {}),
+            (f"{root}/accounts/7/account/history", window),
+        ]
+        assert isinstance(now.data[0], AccountSummary)
+        assert now.data[0].account_index == "7"
+        assert now.data[0].account_value is None
+        assert now.meta is not None and now.meta.source == "snapshot"
+        assert page.next_cursor == "h2"
+        assert [r.n_positions for r in rows] == [summary["n_positions"], 0]
+        assert rows[1].snapshot_ts == _utc("2026-09-25T11:00:00Z")
+        assert async_now.data == now.data
+        assert async_page.data[0].snapshot_ts == _utc("2026-09-25T10:00:00Z")
+
+    with pytest.raises(ValueError, match="account_index"):
+        client.lighter.positions.account("0xabc")
+
+
+def test_data_quality_positions_freshness() -> None:
+    rows = [
+        {
+            "venue": "hyperliquid",
+            "product": "core",
+            "live_snapshot_ts": "2026-09-28T22:54:27.000Z",
+            "live_age_seconds": 119,
+            "stale": False,
+            "live_quality": "complete",
+            "hourly_snapshot_ts": "2026-09-28T22:00:00.000Z",
+            "built_through": "2026-09-28T22:00:00.000Z",
+            "finalized_through": "2026-09-28T19:00:00.000Z",
+        },
+        {
+            "venue": "rh_lighter",
+            "product": "rh_lighter",
+            "live_snapshot_ts": None,
+            "live_age_seconds": None,
+            "stale": True,
+            "live_quality": None,
+            "hourly_snapshot_ts": None,
+            "built_through": None,
+            "finalized_through": None,
+        },
+    ]
+    client, api = mock_client(lambda path, q: envelope(rows))
+
+    venues = client.data_quality.positions_freshness()
+    async_venues = asyncio.run(client.data_quality.apositions_freshness())
+
+    assert api.calls == [("/v1/data-quality/positions", {})] * 2
+    assert [(v.venue, v.product) for v in venues] == [
+        ("hyperliquid", "core"),
+        ("rh_lighter", "rh_lighter"),
+    ]
+    assert isinstance(venues[0], PositionsFreshness)
+    assert venues[0].live_age_seconds == 119
+    assert venues[0].finalized_through == _utc("2026-09-28T19:00:00Z")
+    assert venues[1].stale is True and venues[1].live_snapshot_ts is None
+    assert async_venues == venues
+
+
 def test_positions_resources_expose_the_same_method_names_on_every_venue() -> None:
     client, _ = mock_client(lambda path, q: envelope([]))
     shared = {
@@ -972,21 +1072,20 @@ def test_positions_resources_expose_the_same_method_names_on_every_venue() -> No
         "iterate_market_summary",
         "iterate_all",
     }
-    shared |= {"a" + name for name in shared}
-    hl_only = {
+    shared |= {
         "account",
         "account_history",
-        "aaccount",
-        "aaccount_history",
         "iterate_account_history",
-        "aiterate_account_history",
     }
+    shared |= {"a" + name for name in shared}
 
-    for resource in (client.hyperliquid.positions, client.hyperliquid.hip3.positions):
-        assert shared | hl_only <= set(dir(resource))
-    for resource in (client.lighter.positions, client.rh_lighter.positions):
+    for resource in (
+        client.hyperliquid.positions,
+        client.hyperliquid.hip3.positions,
+        client.lighter.positions,
+        client.rh_lighter.positions,
+    ):
         assert shared <= set(dir(resource))
-        assert not hl_only & set(dir(resource))
     assert {"by_l1", "aby_l1", "iterate_by_l1", "aiterate_by_l1"} <= set(
         dir(client.lighter.accounts)
     )

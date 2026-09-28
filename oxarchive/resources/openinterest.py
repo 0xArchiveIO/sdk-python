@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Generic, Optional, TypeVar
 
 from pydantic import BaseModel
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, Hip4OpenInterestRecord, OpenInterest, Timestamp
 
@@ -37,21 +37,7 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         self._coin_transform = coin_transform
         self._record_model = record_model
 
-    def _convert_timestamp(self, ts: Optional[Timestamp]) -> Optional[int]:
-        """Convert timestamp to Unix milliseconds."""
-        if ts is None:
-            return None
-        if isinstance(ts, int):
-            return ts
-        if isinstance(ts, datetime):
-            return int(ts.timestamp() * 1000)
-        if isinstance(ts, str):
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                return int(dt.timestamp() * 1000)
-            except ValueError:
-                return int(ts)
-        return None
+    _convert_timestamp = staticmethod(to_unix_ms)
 
     def history(
         self,

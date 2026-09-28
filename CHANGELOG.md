@@ -45,9 +45,11 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
     `market_summary(symbol, start=None, end=None)`, `all(hour)`: every open
     position in a market (with `meta.totals`), long/short aggregates, and a
     bulk listing across markets at one hour.
-  - Hyperliquid and HIP-3 only: `account(address)` and
-    `account_history(address, start, end)`. HIP-3 methods take an optional
-    `dex`; Lighter market methods take `include_system`.
+  - `account(key)` and `account_history(key, start, end)`: the account
+    summary now and hourly. On Hyperliquid and HIP-3 it is the clearinghouse
+    summary (HIP-3 takes an optional `dex`); on Lighter and Robinhood Chain it
+    holds position aggregates (totals, long/short value, `n_positions`).
+    Lighter market methods take `include_system`.
   - `key` is a 0x address on Hyperliquid and HIP-3, and an integer account
     index on Lighter. `client.lighter.accounts.by_l1(l1_address)` resolves an
     L1 address to its account indices (Lighter mainnet only).
@@ -60,6 +62,10 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
     `PositionChange`, `MarketPosition`, `MarketPositionsSummary`,
     `AccountSummary`, `WalletPositions`, `LighterL1Account`,
     `LighterL1Accounts`.
+  - `client.data_quality.positions_freshness()` (and
+    `apositions_freshness()`): one `PositionsFreshness` row per venue with
+    the latest live and hourly snapshots, the live snapshot's age and
+    quality, `stale`, `built_through` and `finalized_through`.
   - Coverage: Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13,
     hourly history from 2026-06-07, live every 5 minutes; Lighter mainnet from
     2025-01-17 and Robinhood Chain from 2026-06-26, hourly, live every
@@ -115,6 +121,18 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - The order-flow docstring and README list the buckets the API serves: `1m`
   (the default), `5m`, `15m` and `1h`. The docstring used to suggest `4h` and
   `1d`, which the API refuses.
+
+### Fixed
+- Times without a time zone are UTC on every method. Before, a naive
+  `datetime` and an ISO string without an offset (`"2026-09-01"`,
+  `"2026-09-01T00:00:00"`) were read as the machine's local time, so the
+  same call asked for a different window on machines in different time
+  zones. A date alone is now midnight UTC and an offset-less date-time is
+  UTC. A naive `datetime.now()` is local wall-clock time; for the current
+  time pass an aware datetime such as `datetime.now(timezone.utc)`. Every
+  resource now converts times with one shared helper, and a value that is
+  not a timestamp raises `ValueError` instead of being dropped from the
+  request.
 
 ## [1.11.0] - 2026-09-25
 

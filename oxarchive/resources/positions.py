@@ -25,7 +25,6 @@ minimum.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import (
     Any,
     AsyncIterator,
@@ -38,6 +37,7 @@ from typing import (
 )
 from urllib.parse import quote
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import (
     AccountSummary,
@@ -64,23 +64,7 @@ HOUR_MS = 3_600_000
 Params = dict[str, Any]
 
 
-def _to_ms(ts: Optional[Timestamp]) -> Optional[int]:
-    """Convert a timestamp (Unix ms, ISO string or datetime) to Unix milliseconds."""
-    if ts is None:
-        return None
-    if isinstance(ts, bool):
-        raise ValueError("timestamps must be Unix milliseconds, ISO strings or datetimes")
-    if isinstance(ts, int):
-        return ts
-    if isinstance(ts, datetime):
-        return int(ts.timestamp() * 1000)
-    if isinstance(ts, str):
-        try:
-            parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            return int(parsed.timestamp() * 1000)
-        except ValueError:
-            return int(ts)
-    raise ValueError("timestamps must be Unix milliseconds, ISO strings or datetimes")
+_to_ms = to_unix_ms
 
 
 def _hour_ms(hour: Timestamp) -> int:
@@ -1138,6 +1122,107 @@ class LighterPositionsResource(_PositionsBase):
                 account_index, "positions/changes", start, end, symbol, None, limit, _changes
             ),
             _change_rows,
+        )
+
+    # ---- account: position aggregates -----------------------------------
+
+    def account(self, account_index: AccountIndex) -> CursorResponse[list[AccountSummary]]:
+        """Position aggregates of a Lighter account at the latest live snapshot.
+
+        One :class:`AccountSummary` with ``account_index``,
+        ``total_position_value``, ``total_unrealized_pnl``, ``long_value``,
+        ``short_value``, ``n_positions`` and ``quality``. Lighter does not
+        report margin or account value here, so those fields are ``None``. An
+        account with no open position has zero totals. Billed at the
+        per-request minimum.
+
+        Args:
+            account_index: Integer Lighter account index.
+        """
+        return self._fetch(
+            _Endpoint(self._account_path(account_index, "account"), {}, _accounts)
+        )
+
+    async def aaccount(self, account_index: AccountIndex) -> CursorResponse[list[AccountSummary]]:
+        """Async version of :meth:`account`."""
+        return await self._afetch(
+            _Endpoint(self._account_path(account_index, "account"), {}, _accounts)
+        )
+
+    def account_history(
+        self,
+        account_index: AccountIndex,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> CursorResponse[list[AccountSummary]]:
+        """Hourly position aggregates of a Lighter account in ``[start, end)``.
+
+        One row per hourly snapshot, stamped with ``snapshot_ts``; an hour
+        with no open position has zero totals. Billed at the per-request
+        minimum.
+
+        Args:
+            account_index: Integer Lighter account index.
+            start: Inclusive start.
+            end: Exclusive end.
+            cursor: ``next_cursor`` of the previous page.
+            limit: Hours per page (default 500, at most 744).
+        """
+        return self._fetch(
+            self._range_ep(
+                account_index, "account/history", start, end, None, cursor, limit, _accounts
+            )
+        )
+
+    async def aaccount_history(
+        self,
+        account_index: AccountIndex,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> CursorResponse[list[AccountSummary]]:
+        """Async version of :meth:`account_history`."""
+        return await self._afetch(
+            self._range_ep(
+                account_index, "account/history", start, end, None, cursor, limit, _accounts
+            )
+        )
+
+    def iterate_account_history(
+        self,
+        account_index: AccountIndex,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        limit: Optional[int] = None,
+    ) -> Iterator[AccountSummary]:
+        """Yield every hourly row of :meth:`account_history`, following cursors."""
+        return self._iterate(
+            self._range_ep(
+                account_index, "account/history", start, end, None, None, limit, _accounts
+            ),
+            _account_rows,
+        )
+
+    def aiterate_account_history(
+        self,
+        account_index: AccountIndex,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[AccountSummary]:
+        """Async version of :meth:`iterate_account_history`."""
+        return self._aiterate(
+            self._range_ep(
+                account_index, "account/history", start, end, None, None, limit, _accounts
+            ),
+            _account_rows,
         )
 
     # ---- market routes ---------------------------------------------------

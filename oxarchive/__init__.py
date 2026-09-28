@@ -109,6 +109,7 @@ from .types import (
     WalletPositions,
     LighterL1Account,
     LighterL1Accounts,
+    PositionsFreshness,
     # Web3 Auth types
     SiweChallenge,
     Web3SignupResult,
@@ -236,6 +237,7 @@ __all__ = [
     "WalletPositions",
     "LighterL1Account",
     "LighterL1Accounts",
+    "PositionsFreshness",
     # Web3 Auth Types
     "SiweChallenge",
     "Web3SignupResult",

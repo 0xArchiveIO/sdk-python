@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Callable, Optional
 
+from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import (
     CursorResponse,
@@ -14,19 +14,7 @@ from ..types import (
     Timestamp,
 )
 
-
-def _to_ms(ts: Optional[Timestamp]) -> Optional[int]:
-    """Convert a timestamp (Unix ms, ISO string or datetime) to Unix milliseconds."""
-    if ts is None:
-        return None
-    if isinstance(ts, int):
-        return ts
-    if isinstance(ts, datetime):
-        return int(ts.timestamp() * 1000)
-    try:
-        return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000)
-    except ValueError:
-        return int(ts)
+_to_ms = to_unix_ms
 
 
 class LighterLiquidationsResource:
