@@ -6,7 +6,7 @@ import os
 from typing import Optional
 
 from .http import HttpClient
-from .exchanges import HyperliquidClient, LighterClient, SpotClient
+from .exchanges import HyperliquidClient, LighterClient, RhLighterClient, SpotClient
 from .resources import (
     OrderBookResource,
     TradesResource,
@@ -26,13 +26,22 @@ class Client:
     """
     0xarchive API client.
 
-    Supports the following venue APIs:
+    Two venues: Hyperliquid and Lighter. Lighter has two deployments: mainnet
+    and Robinhood Chain.
+
     - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
       - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
       - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace
     - `client.spot` - Hyperliquid spot pairs (trades and candles from 2025-03-22,
       orderbook/L4/TWAP live from 2026-05-05; no funding, OI, or liquidations)
-    - `client.lighter` - Lighter.xyz perpetuals
+    - `client.lighter` - Lighter mainnet
+    - `client.rh_lighter` - Lighter on Robinhood Chain (USDG-quoted perps and
+      spot; trades and liquidations from 2026-06-26; order book, OI and
+      funding from 2026-08-22)
+
+    Account positions: `client.hyperliquid.positions`,
+    `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
+    `client.rh_lighter.positions`.
 
     Example:
         >>> from oxarchive import Client
@@ -45,6 +54,12 @@ class Client:
         >>>
         >>> # Lighter.xyz data
         >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
+        >>>
+        >>> # Lighter on Robinhood Chain
+        >>> rh_orderbook = client.rh_lighter.orderbook.get("AAPL-USDG")
+        >>>
+        >>> # Account positions
+        >>> positions = client.hyperliquid.positions.get("0x...")
         >>>
         >>> # Hyperliquid HIP-3 data
         >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
@@ -111,8 +126,14 @@ class Client:
         TWAP, and orders live from 2026-05-05. No funding, OI, or liquidations."""
 
         self.lighter = LighterClient(self._http)
-        """Lighter.xyz exchange data. Trade history begins January 17, 2025;
+        """Lighter mainnet data. Trade history begins January 17, 2025;
         exact starts vary by market and data type."""
+
+        self.rh_lighter = RhLighterClient(self._http)
+        """Lighter on Robinhood Chain data (``/v1/rh-lighter``). Trades and
+        liquidations from 2026-06-26 20:10:26 UTC; order book, open interest
+        and funding from 2026-08-22 18:43 UTC. Same resources as ``client.lighter``
+        except the L3 order book and the L1 account resolver."""
 
         # Data quality monitoring (cross-exchange)
         self.data_quality = DataQualityResource(self._http)
