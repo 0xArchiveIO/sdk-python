@@ -97,11 +97,12 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - `RH_LIGHTER_LIVE_CHANNELS`, `RH_LIGHTER_REPLAY_ONLY_CHANNELS`,
   `RH_LIGHTER_REPLAY_CHANNELS`, `RH_LIGHTER_SUBSCRIPTION_ERROR` and
   `LIGHTER_BOOK_CHANNELS` in `oxarchive.websocket`.
-- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4)
-  and send it; the API starts the response at the first bucket that opens
-  after it. Before this, a `cursor` keyword was accepted and silently dropped.
-  The API does not return `next_cursor` on order flow yet, so `next_cursor`
-  on an order-flow response is `None`.
+- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4).
+  The API pages order flow: a page holds the oldest `limit` buckets of the
+  window, and `next_cursor` is set while more may follow. Pass it back as
+  `cursor` with the same `start`, `end` and `interval` until it is `None`.
+  Before this, a `cursor` keyword was accepted and silently dropped, so every
+  call returned the first page.
 
 ### Changed
 - `WsChannel` includes the five `rh_lighter_*` channels.
@@ -152,6 +153,9 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - The HIP-3 coin table is removed, since builders list and delist markets;
   call `client.hyperliquid.hip3.instruments.list()` for the current set.
 - Documentation links point at docs.0xarchive.io.
+- The README's order-flow example pages a full day at `1m`, following
+  `next_cursor` until it is `None`, and the `flow()` docstring describes
+  paging.
 
 ## [1.11.0] - 2026-09-25
 
