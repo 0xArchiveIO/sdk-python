@@ -97,14 +97,90 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - `RH_LIGHTER_LIVE_CHANNELS`, `RH_LIGHTER_REPLAY_ONLY_CHANNELS`,
   `RH_LIGHTER_REPLAY_CHANNELS`, `RH_LIGHTER_SUBSCRIPTION_ERROR` and
   `LIGHTER_BOOK_CHANNELS` in `oxarchive.websocket`.
-- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4)
-  and send it; the API starts the response at the first bucket that opens
-  after it. Before this, a `cursor` keyword was accepted and silently dropped.
-  The API does not return `next_cursor` on order flow yet, so `next_cursor`
-  on an order-flow response is `None`.
+- `orders.flow()` and `aflow()` take `cursor` (Hyperliquid, HIP-3 and HIP-4).
+  The API pages order flow: a page holds the oldest `limit` buckets of the
+  window, and `next_cursor` is set while more may follow. Pass it back as
+  `cursor` with the same `start`, `end` and `interval` until it is `None`.
+  Before this, a `cursor` keyword was accepted and silently dropped, so every
+  call returned the first page.
+- Webhooks: `client.webhooks` (`WebhooksResource`) covers all 21 operations
+  under `/v1/webhooks`, each with an `a`-prefixed async version:
+  `event_types()`, `limits()`; `list_endpoints()`, `create_endpoint()`,
+  `delete_endpoint()`, `enable_endpoint()`, `rotate_secret()`,
+  `test_endpoint()`; `list_deliveries()`, `redeliver()`;
+  `list_subscriptions()`, `create_subscription()`, `update_subscription()`,
+  `delete_subscription()`, `resume_subscription()`,
+  `resume_all_subscriptions()`; `dry_run()`, `estimate()`;
+  `list_addresses()`, `add_address()`, `delete_address()`. A subscription
+  configuration is passed as `config`, a dict or a
+  `WebhookSubscriptionConfig`. Subscriptions report their pause state
+  (`status`, `pause_reason`, `pause_message`, suppressed counts), and a
+  resume returns the missed window as `WebhookResumeGap`. `limits()`
+  reports the plan's caps, today's delivery budget and the paused count.
+  Webhook delivery needs a paid plan; `estimate()` and `dry_run()` are
+  available on every plan.
+- Webhook signature verification in `oxarchive.webhook_signature`:
+  `WebhookVerifier`, `verify_webhook()`, `verify_webhook_signature()`,
+  `parse_signature_header()`, `WebhookEvent`, `WebhookSignature`,
+  `WebhookSignatureError` and the header name constants. It verifies the raw
+  request bytes, accepts every `v1=` signature in the header (two during a
+  secret rotation), enforces a replay window (5 minutes by default) and
+  compares in constant time.
+- Webhook models: `WebhookEventType` (with `WebhookEventTypeParam`,
+  `WebhookEventTypeMetric`, `WebhookCostFloor`), `WebhookEndpoint`,
+  `WebhookEndpointCreated`, `WebhookEndpointSecret`,
+  `WebhookSubscriptionConfig`, `WebhookSubscriptionCondition`,
+  `WebhookSubscription`, `WebhookSubscriptionResume`,
+  `WebhookSubscriptionResumeAll`, `WebhookResumeGap`,
+  `WebhookResumeReplayWindow`, `WebhookDelivery`, `WebhookDeliveryQueued`,
+  `WebhookRedelivery`, `WebhookWatchedAddress`, `WebhookLimits`,
+  `WebhookLimitUsage`, `WebhookDeliveryBudget`, `WebhookPausedSubscriptions`,
+  `WebhookDryRun`, `WebhookEstimate`, `WebhookPreviewWindow`,
+  `WebhookPreviewOccurrence`, `WebhookEstimateDayCount`,
+  `WebhookEstimateRung`, `WebhookEstimateDistribution` and
+  `WebhookEstimateBasis`. Every webhook model keeps unknown fields.
+- Cumulative volume delta: `client.hyperliquid.cvd` and
+  `client.hyperliquid.hip3.cvd` with `history()` (one page; pass
+  `next_cursor` back unchanged with the same `start`, `end` and `interval`)
+  and `iterate()`, which follows the cursor, plus `ahistory()` and
+  `aiterate()`. Buckets are `CvdBucket`; intervals `1m` to `1w`
+  (`CvdInterval`). `cumulative_delta` restarts on every page.
+- HIP-3 oracle: `client.hyperliquid.hip3.oracle.external_price(symbol)` and
+  `discovery_bounds(symbol)` (and `aexternal_price()`,
+  `adiscovery_bounds()`), typed as `Hip3OracleExternalPrice` and
+  `Hip3OracleDiscoveryBounds`.
+- HIP-4 questions: `client.hyperliquid.hip4.questions.list()` (cursor paged)
+  and `get(question_id)`, the flat helpers
+  `client.hyperliquid.hip4.list_questions()` and `get_question()`, and their
+  async versions, typed as `Hip4Question`.
+- Wallet classification: `client.hyperliquid.wallets.classify()` and
+  `client.hyperliquid.hip3.wallets.classify()` (and `aclassify()`), with
+  every filter, sort and `limit`/`offset` paging, typed as
+  `WalletClassification`, `ClassifiedWallet` and `WalletClassifyMetrics`.
+  `date` takes a date, a `YYYY-MM-DD` string or a datetime (a datetime
+  without a time zone is UTC).
+- Hyperliquid core breadth: `client.hyperliquid.breadth` with `current()` and
+  `history()` (and `acurrent()`, `ahistory()`), the same resource as HIP-3
+  breadth, served from 2026-08-24. Core responses carry empty `namespaces`.
+- The public symbol universe: `client.symbols.list()` and `alist()`, one
+  `SymbolEntry` per market across every venue family, with data types and
+  coverage dates.
+- Full-depth L2 WebSocket channels `orderbook_full` (Hyperliquid core) and
+  `hip3_orderbook_full` (HIP-3) for live subscription, with helpers
+  `subscribe_orderbook_full()`, `subscribe_hip3_orderbook_full()` and their
+  `unsubscribe_*` counterparts, and `FULL_DEPTH_L2_CHANNELS` in
+  `oxarchive.websocket`. A subscription opens with an `l4_snapshot` of every
+  price level, then `l4_batch` messages of changed levels, delivered to
+  `on_l4_snapshot()` and `on_l4_batch()`. They are live-only: `replay()`
+  and `multi_replay()` reject them with `ValueError`
+  (`FULL_DEPTH_LIVE_ONLY_ERROR`) before anything is sent. Stored full-depth
+  history is on REST `l2_orderbook.history()` and `diffs()`.
+- `client.lighter.l3_orderbook.get()` and `history()` take `account`.
 
 ### Changed
-- `WsChannel` includes the five `rh_lighter_*` channels.
+- `WsChannel` includes the five `rh_lighter_*` channels, `orderbook_full` and
+  `hip3_orderbook_full`. Before, the acknowledgement, snapshot and batch
+  messages of the two full-depth channels failed to parse.
 - `rh_lighter_candles` raises `ValueError` with `RH_LIGHTER_SUBSCRIPTION_ERROR`
   on a live subscribe, like the other replay-only Lighter channels.
 - `interval_ms` is accepted on `rh_lighter_orderbook` as well as
@@ -114,6 +190,12 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `hip4`, `spot`, `lighter` and `rh-lighter`.
 - `LighterClient` shares its resources with `RhLighterClient` through a common
   base class; its paths and behavior are unchanged.
+- Parameters the API never applied are removed, and passing one now raises
+  `TypeError` before anything is sent instead of returning unfiltered data:
+  `side` on `trades.list()`; `user`, `status` and `order_type` on
+  `client.spot.orders.history()` (core, HIP-3 and HIP-4 order history keep
+  them); `depth` on `l2_orderbook.history()`, `l4_orderbook.history()` and
+  `lighter.l3_orderbook.history()` (it still applies to `get()`).
 - `client.hyperliquid.hip3.breadth.history()` and `ahistory()` accept
   `interval="1m"`. The API serves 1-minute buckets on breadth, open
   interest, funding, price and liquidation-volume history for every venue.
@@ -122,7 +204,43 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   (the default), `5m`, `15m` and `1h`. The docstring used to suggest `4h` and
   `1d`, which the API refuses.
 
+### Removed
+- Methods that called routes the API does not serve, so every call failed
+  with a 404:
+  - `client.hyperliquid.hip4.l2_orderbook` (`get()`, `history()`,
+    `diffs()` and their async versions). HIP-4 has no full-depth L2 route;
+    use `hip4.orderbook` and `hip4.l4_orderbook`.
+  - `client.hyperliquid.hip4.orders.trigger_levels()` and
+    `trigger_levels_history()`.
+  - `client.spot.orders.flow()`, `tpsl()`, `trigger_levels()` and
+    `trigger_levels_history()`. Spot serves order history only.
+  - `client.hyperliquid.hip3.liquidations.by_user()`. The per-user route
+    exists for Hyperliquid core only.
+- The async versions of those methods go with them. The affected resources
+  are now `Hip4OrdersResource`, `SpotOrdersResource` and
+  `Hip3LiquidationsResource`; Hyperliquid core and HIP-3 keep
+  `OrdersResource`, and Hyperliquid core keeps `LiquidationsResource`.
+
 ### Fixed
+- `trades.list()` and `alist()` send `cursor` back exactly as the API
+  returned it. A trades cursor is an opaque string such as
+  `"1790640000578_218303497631402"` (Lighter adds a third part), and it was
+  converted as if it were a timestamp, so asking for the second page raised
+  `ValueError` or sent a different cursor. Integer and datetime cursors are
+  still accepted.
+- `CoinFreshness.funding` is optional. HIP-4 has no funding, and
+  `client.hyperliquid.hip4.get_freshness()` raised a validation error on
+  every response.
+- `data_quality.symbol_coverage()` and `asymbol_coverage()` send the symbol
+  as given, URL-encoded as one path segment. They upper-cased it, which
+  turned case-sensitive HIP-3 symbols such as `km:US500` into a symbol
+  with no data, and they did not encode the `#` of HIP-4 symbols, which cut
+  the path short.
+- `SpotTableFreshness` has the shape the API returns: `symbol`, `coin`,
+  `exchange`, `measured_at`, and `orderbook`, `trades`, `l4_diffs`,
+  `l4_checkpoints`, `orders` and `twap` as `DataTypeFreshness`. Its
+  `tables` field was never filled; `tables` is now a property that returns
+  the datasets present.
 - Times without a time zone are UTC on every method. Before, a naive
   `datetime` and an ISO string without an offset (`"2026-09-01"`,
   `"2026-09-01T00:00:00"`) were read as the machine's local time, so the
@@ -143,6 +261,17 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - The HIP-3 coin table is removed, since builders list and delist markets;
   call `client.hyperliquid.hip3.instruments.list()` for the current set.
 - Documentation links point at docs.0xarchive.io.
+- The breadth `history()` docstring says `start` defaults to 24 hours before
+  now, as the API applies it, rather than 24 hours before `end`.
+- The README's order-flow example pages a full day at `1m`, following
+  `next_cursor` until it is `None`, and the `flow()` docstring describes
+  paging.
+- A README section on webhooks: plan limits, pauses and resumes, the event
+  catalog, configuration, previews, verifying deliveries, secret rotation and
+  retries.
+- README sections for cumulative volume delta, the HIP-3 oracle, HIP-4
+  questions, wallet classification, the symbol universe and the full-depth L2
+  WebSocket channels.
 
 ## [1.11.0] - 2026-09-25
 

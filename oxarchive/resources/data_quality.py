@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal, Optional
+from urllib.parse import quote
 
 from .._time import to_unix_ms
 from ..http import HttpClient
@@ -143,7 +144,10 @@ class DataQualityResource:
         Args:
             exchange: Venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot',
                 'lighter' or 'rh-lighter' (Lighter on Robinhood Chain)
-            symbol: Symbol name (e.g., 'BTC', 'ETH', HIP3 coins like 'xyz:XYZ100', or HIP4 coins like '#0')
+            symbol: Symbol exactly as the venue's routes take it: 'BTC', a
+                case-sensitive HIP-3 coin such as 'km:US500', a spot pair such as
+                'HYPE-USDC', or a HIP-4 coin such as '#0'. It is sent as one
+                URL-encoded path segment and is not re-cased.
             from_time: Start of gap detection window (default: now - 30 days).
                 Accepts Unix ms, datetime, or ISO string.
             to_time: End of gap detection window (default: now).
@@ -171,7 +175,7 @@ class DataQualityResource:
             ...     print(f"Cadence: {btc.data_types['orderbook'].cadence.median_interval_seconds}s")
         """
         data = self._http.get(
-            f"{self._base_path}/coverage/{exchange.lower()}/{symbol.upper()}",
+            f"{self._base_path}/coverage/{exchange.lower()}/{quote(symbol, safe='')}",
             params={
                 "from": self._convert_timestamp(from_time),
                 "to": self._convert_timestamp(to_time),
@@ -189,7 +193,7 @@ class DataQualityResource:
     ) -> SymbolCoverageResponse:
         """Async version of symbol_coverage()."""
         data = await self._http.aget(
-            f"{self._base_path}/coverage/{exchange.lower()}/{symbol.upper()}",
+            f"{self._base_path}/coverage/{exchange.lower()}/{quote(symbol, safe='')}",
             params={
                 "from": self._convert_timestamp(from_time),
                 "to": self._convert_timestamp(to_time),

@@ -1,4 +1,4 @@
-"""HIP-3 market breadth API resource."""
+"""Market breadth API resource (Hyperliquid core and HIP-3)."""
 
 from __future__ import annotations
 
@@ -13,32 +13,38 @@ BREADTH_INTERVALS = frozenset({"1m", "5m", "15m", "30m", "1h", "4h", "1d"})
 
 
 class BreadthResource:
-    """HIP-3 percent-above-session-VWAP market breadth.
+    """Percent-above-session-VWAP market breadth.
 
-    The current route returns one validated snapshot. History defaults to the
-    last 24 hours of raw one-minute snapshots; the server applies the
-    last-snapshot-per-bucket rule when ``interval`` is supplied. Collection
-    began on 2026-08-28, so callers must not infer synthetic pre-launch history.
+    Served for HIP-3 (``client.hyperliquid.hip3.breadth``, history from
+    2026-08-28) and Hyperliquid core perpetuals (``client.hyperliquid.breadth``,
+    history from 2026-08-24). The current route returns one validated
+    snapshot. History defaults to the last 24 hours of raw one-minute
+    snapshots; the server applies the last-snapshot-per-bucket rule when
+    ``interval`` is supplied. Do not infer history before collection began.
+    Core responses carry empty ``namespaces`` maps.
     """
 
     def __init__(
         self,
         http: HttpClient,
         base_path: str = "/v1/hyperliquid/hip3",
+        label: str = "HIP-3",
     ) -> None:
         self._http = http
         self._base_path = base_path
+        self._label = label
         self._max_limit = 1000
 
     def _validate_limit(self, limit: Optional[int]) -> None:
         if limit is not None and not 1 <= limit <= self._max_limit:
-            raise ValueError(f"limit must be between 1 and {self._max_limit} for HIP-3 breadth")
+            raise ValueError(
+                f"limit must be between 1 and {self._max_limit} for {self._label} breadth"
+            )
 
-    @staticmethod
-    def _validate_interval(interval: Optional[BreadthInterval]) -> None:
+    def _validate_interval(self, interval: Optional[BreadthInterval]) -> None:
         if interval is not None and interval not in BREADTH_INTERVALS:
             choices = ", ".join(sorted(BREADTH_INTERVALS))
-            raise ValueError(f"interval must be one of {choices} for HIP-3 breadth")
+            raise ValueError(f"interval must be one of {choices} for {self._label} breadth")
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
@@ -50,7 +56,7 @@ class BreadthResource:
         )
 
     def current(self) -> BreadthSnapshot:
-        """Return the latest validated HIP-3 breadth snapshot."""
+        """Return the latest validated breadth snapshot."""
         payload = self._http.get(f"{self._base_path}/breadth/above-vwap/current")
         return BreadthSnapshot.model_validate(payload["data"])
 
@@ -68,12 +74,13 @@ class BreadthResource:
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> CursorResponse[list[BreadthSnapshot]]:
-        """Return ascending HIP-3 breadth history with cursor pagination.
+        """Return ascending breadth history with cursor pagination.
 
-        ``start`` defaults to 24 hours before ``end`` and ``end`` defaults to
+        ``start`` defaults to 24 hours before now and ``end`` defaults to
         now. ``cursor`` is the epoch-millisecond string returned by
-        ``meta.next_cursor`` and is passed back unchanged. History begins on
-        2026-08-28; a pre-launch window may be empty with coverage metadata.
+        ``meta.next_cursor`` and is passed back unchanged. HIP-3 history
+        begins on 2026-08-28 and core history on 2026-08-24; a window before
+        that may be empty with coverage metadata.
         """
         self._validate_interval(interval)
         self._validate_limit(limit)

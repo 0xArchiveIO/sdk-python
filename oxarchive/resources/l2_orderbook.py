@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, Timestamp
+
+_UNSUPPORTED_HISTORY = {
+    "depth": (
+        "history returns every price level of each snapshot. depth applies to get() only."
+    ),
+}
 
 
 class L2OrderBookResource:
@@ -87,7 +94,6 @@ class L2OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-        depth: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """
@@ -99,12 +105,12 @@ class L2OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
-            depth: Number of price levels per side
 
         Returns:
             CursorResponse with L2 orderbook checkpoints and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
+        reject_unsupported("history", kwargs, _UNSUPPORTED_HISTORY)
         data = self._http.get(
             f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/l2/history",
             params={
@@ -112,7 +118,6 @@ class L2OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
-                "depth": depth,
             },
         )
         return CursorResponse(
@@ -128,11 +133,11 @@ class L2OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-        depth: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """Async version of history()."""
         symbol = self._resolve_symbol(symbol, kwargs)
+        reject_unsupported("ahistory", kwargs, _UNSUPPORTED_HISTORY)
         data = await self._http.aget(
             f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/l2/history",
             params={
@@ -140,7 +145,6 @@ class L2OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
-                "depth": depth,
             },
         )
         return CursorResponse(

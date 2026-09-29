@@ -8,6 +8,11 @@ tests/*
 !tests/test_rh_lighter.py
 !tests/_mock_api.py
 !tests/test_timestamps.py
+!tests/test_spec_fixes.py
+!tests/test_websocket_full_depth.py
+!tests/test_webhooks.py
+!tests/test_webhook_signature.py
+!tests/test_surface_parity.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

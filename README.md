@@ -324,8 +324,8 @@ while result.next_cursor:
     )
     trades.extend(result.data)
 
-# Filter by side
-buys = client.hyperliquid.trades.list("BTC", start=..., end=..., side="buy")
+# The API does not filter trades by side; filter the returned rows
+buys = [t for t in result.data if t.side == "B"]
 
 # Get recent trades (Lighter and HIP-3 - have real-time data)
 recent = client.lighter.trades.recent("BTC", limit=100)
@@ -435,6 +435,31 @@ while history.next_cursor:
 
 The session resets at 00:00 UTC and compares the close of the most recently completed one-minute candle with session VWAP. Instruments without session volume or with a completed candle older than five minutes are excluded, so `coverage_ratio` varies with market hours. `value_pct` is `None`, not zero, when no instrument is eligible. History begins on 2026-08-28; the SDK does not imply synthetic pre-launch history. Interval downsampling uses the last snapshot in each bucket, never an average of percentages.
 
+The same breadth is served for Hyperliquid core perpetuals on `client.hyperliquid.breadth`, with the same methods, intervals and cursor paging. Core history begins on 2026-08-24, and core responses carry empty `namespaces` maps.
+
+```python
+current = client.hyperliquid.breadth.current()
+history = client.hyperliquid.breadth.history(start="2026-08-24T00:00:00Z", interval="1h")
+```
+
+#### HIP-3 Oracle
+
+The deployer-pushed external price of a HIP-3 market, and its instantaneous discovery bounds:
+
+```python
+price = client.hyperliquid.hip3.oracle.external_price("km:US500")
+print(price.external_price, price.mark_price, price.block_number)
+
+bounds = client.hyperliquid.hip3.oracle.discovery_bounds("km:US500")
+print(bounds.reference_source, bounds.lower_bound, bounds.upper_bound)
+
+# Async versions
+price = await client.hyperliquid.hip3.oracle.aexternal_price("km:US500")
+bounds = await client.hyperliquid.hip3.oracle.adiscovery_bounds("km:US500")
+```
+
+`external_price` and `mark_price` are `None` when the market has none. The discovery bounds are `reference_price` times one minus and one plus `bound_fraction`, where the reference is the external price when available and the mark price otherwise (`reference_source`) and the fraction follows from the market's max leverage. The full ratcheted range can be wider when a deployer's reset configuration applies. `timestamp` is Unix milliseconds.
+
 #### HIP-4 Outcome Markets
 
 HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 serves candles and outcome-side OI from 2026-05-02, with raw OI updates at ~10s. HIP-3 and Lighter candle pages accept up to 10,000 rows; HIP-4 candle pages are capped at 1,000 rows. HIP-4 has **no funding and no liquidations**. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
@@ -456,6 +481,14 @@ outcome = client.hyperliquid.hip4.get_outcome_by_slug("btc-above-78213-may-04-06
 
 # Filter the list endpoint by slug. Short-circuits to a one-item response.
 result = client.hyperliquid.hip4.list_outcomes(slug="btc-above-78213-yes-may-04-0600")
+
+# Questions group several binary outcomes under one multi-choice resolver:
+# one named outcome per choice, plus a fallback outcome that resolves Yes when
+# no named choice does. Page with next_cursor, passed back unchanged.
+page = client.hyperliquid.hip4.list_questions(limit=100)
+question = client.hyperliquid.hip4.get_question(0)
+print(question.named_outcome_ids, question.fallback_outcome_id, question.settled_named_outcomes)
+# Also: client.hyperliquid.hip4.questions.list() / .get(), and alist() / aget()
 
 # Per-side instruments. Either bare or "#"-prefixed works.
 yes = client.hyperliquid.hip4.instruments.get("0")     # bare, recommended
@@ -520,11 +553,12 @@ orders = client.spot.orders.history("HYPE-USDC", start=..., end=...)
 twap_pair = client.spot.twap.by_symbol("HYPE-USDC", start=..., end=...)
 twap_user = client.spot.twap.by_user("0xabc...", start=..., end=...)
 
-# Per-table freshness lag
+# Per-dataset freshness lag: orderbook, trades, l4_diffs, l4_checkpoints,
+# orders and twap, each with optional lag_ms and last_updated
 fresh = client.spot.get_freshness("HYPE-USDC")
-for table, lag in fresh.tables.items():
-    # Values are dicts with optional `lag_ms` and `last_updated` keys.
-    print(f"{table}: lag={lag.get('lag_ms')}ms last_updated={lag.get('last_updated')}")
+print(fresh.orderbook.lag_ms, fresh.trades.last_updated)
+for dataset, lag in fresh.tables.items():
+    print(f"{dataset}: lag={lag.lag_ms}ms last_updated={lag.last_updated}")
 
 # Async versions are available on every method:
 ob = await client.spot.orderbook.aget("HYPE-USDC")
@@ -688,7 +722,7 @@ while liquidations.next_cursor:
     )
     all_liquidations.extend(liquidations.data)
 
-# Get liquidations for a specific user
+# Get liquidations for a specific user (Hyperliquid core; HIP-3 has no per-user route)
 user_liquidations = client.hyperliquid.liquidations.by_user(
     "0x1234...",
     start="2025-06-01",
@@ -814,13 +848,13 @@ print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
 print(f"  Long: ${summary.long_liquidation_volume_24h}")
 print(f"  Short: ${summary.short_liquidation_volume_24h}")
 
-# Lighter.xyz (price, funding, OI — no volume/liquidation data)
+# Lighter.xyz (price, funding, OI; no volume/liquidation data)
 lighter_summary = client.lighter.get_summary("BTC")
 
 # Lighter on Robinhood Chain (same shape as mainnet Lighter)
 rh_summary = client.rh_lighter.get_summary("BTC")
 
-# HIP-3 (includes mid_price — case-sensitive coins)
+# HIP-3 (includes mid_price; case-sensitive coins)
 hip3_summary = client.hyperliquid.hip3.get_summary("km:US500")
 print(f"Mid price: {hip3_summary.mid_price}")
 
@@ -945,6 +979,52 @@ spot_candles = await client.spot.candles.ahistory(
 | `1d` | 1 day |
 | `1w` | 1 week |
 
+### Cumulative Volume Delta
+
+Taker buy and sell notional per bucket, their difference, and a running total, for Hyperliquid core and HIP-3. Intervals of `1h` and longer roll up hourly totals; `1m`, `5m`, `15m` and `30m` are summed from taker fills.
+
+```python
+# One page. Without start (and without a cursor) the response is the newest
+# `limit` buckets of the 24 hours before `end`.
+page = client.hyperliquid.cvd.history(
+    "BTC",
+    start="2026-09-01T00:00:00Z",
+    end="2026-09-02T00:00:00Z",
+    interval="1m",  # 1m, 5m, 15m, 30m, 1h (default), 4h, 1d, 1w
+    limit=500,      # buckets per page (default 500, max 10000)
+)
+for bucket in page.data:
+    print(bucket.timestamp, bucket.buy_volume, bucket.sell_volume, bucket.delta)
+
+# Follow next_cursor with the same start, end and interval. Stop on the
+# cursor, not on a short page: below 1h a page can be short and still carry one.
+while page.next_cursor:
+    page = client.hyperliquid.cvd.history(
+        "BTC",
+        start="2026-09-01T00:00:00Z",
+        end="2026-09-02T00:00:00Z",
+        interval="1m",
+        cursor=page.next_cursor,
+    )
+
+# Or let the iterator follow the cursor
+running = 0.0
+for bucket in client.hyperliquid.cvd.iterate(
+    "BTC", start="2026-09-01T00:00:00Z", end="2026-09-02T00:00:00Z", interval="1m"
+):
+    running += bucket.delta
+
+# HIP-3 (case-sensitive coins)
+hip3 = client.hyperliquid.hip3.cvd.history("km:US500", start="2026-09-01T00:00:00Z", interval="1h")
+
+# Async versions
+page = await client.hyperliquid.cvd.ahistory("BTC", start="2026-09-01T00:00:00Z")
+async for bucket in client.hyperliquid.hip3.cvd.aiterate("km:US500", start="2026-09-01T00:00:00Z"):
+    ...
+```
+
+Buckets are labelled by their open time in UTC (`timestamp`, Unix milliseconds) and omitted when they hold no trades. `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so `1w` buckets open on Thursdays, and at those widths the first and last bucket of a window can be partial. `cumulative_delta` restarts on every page: to join pages, rebuild the running total from `delta`. A response that is one page of several says so in `meta.notice`.
+
 ### L4 Orderbook (Order-Level)
 
 Get L4 order-level orderbook data with user attribution. Available for Hyperliquid and HIP-3.
@@ -965,12 +1045,11 @@ diffs = client.hyperliquid.l4_orderbook.diffs(
     limit=1000
 )
 
-# Get L4 orderbook history (full snapshots over time)
+# Get L4 orderbook history (full checkpoints over time)
 history = client.hyperliquid.l4_orderbook.history(
     "BTC",
     start="2024-01-01",
     end="2024-01-02",
-    depth=20,
     limit=100
 )
 
@@ -992,7 +1071,7 @@ hip3_snapshot = await client.hyperliquid.hip3.l4_orderbook.aget("km:US500")
 |--------|-------------|
 | `get(symbol, *, timestamp, depth)` | Get L4 orderbook snapshot |
 | `diffs(symbol, *, start, end, cursor, limit)` | Get L4 orderbook diffs (order-level changes) |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get L4 orderbook history (full snapshots) |
+| `history(symbol, *, start, end, cursor, limit)` | Get L4 orderbook history (full checkpoints; `depth` applies to `get()` only) |
 
 ### L3 Orderbook (Lighter.xyz Only)
 
@@ -1006,12 +1085,16 @@ snapshot = client.lighter.l3_orderbook.get("BTC", depth=20)
 # Get L3 orderbook at a specific timestamp
 historical = client.lighter.l3_orderbook.get("BTC", timestamp=1704067200000)
 
+# Only one account's resting orders
+mine = client.lighter.l3_orderbook.get("BTC", account=281474976710654)
+
 # Get L3 orderbook history
 history = client.lighter.l3_orderbook.history(
     "BTC",
     start="2026-03-05",
     end="2026-03-06",
-    depth=250,
+    granularity="checkpoint",  # checkpoint (default), 30s, 10s, 1s, tick
+    account=281474976710654,   # optional: one account's orders
     limit=100
 )
 
@@ -1034,8 +1117,8 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 
 | Method | Description |
 |--------|-------------|
-| `get(symbol, *, timestamp, depth)` | Get an L3 snapshot, up to 250 orders per side |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get tick-level L3 history from March 5, 2026, up to 250 orders per side |
+| `get(symbol, *, timestamp, depth, account)` | Get an L3 snapshot, up to 250 orders per side |
+| `history(symbol, *, start, end, cursor, limit, account)` | Get L3 history from March 5, 2026, up to 250 orders per side |
 
 ### L2 Orderbook (Full-Depth)
 
@@ -1066,7 +1149,7 @@ l2_diffs = await client.hyperliquid.l2_orderbook.adiffs("BTC", start=..., end=..
 | Method | Description |
 |--------|-------------|
 | `get(symbol, *, timestamp, depth)` | Get L2 full-depth orderbook snapshot |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get L2 orderbook history |
+| `history(symbol, *, start, end, cursor, limit)` | Get L2 orderbook history (every level; `depth` applies to `get()` only) |
 | `diffs(symbol, *, start, end, cursor, limit)` | Get L2 tick-level diffs |
 
 ### Orders (L4 Order History)
@@ -1092,14 +1175,25 @@ result = client.hyperliquid.orders.history(
     order_type="limit"
 )
 
-# Get order flow aggregation: time buckets, oldest first
+# Get order flow aggregation: one page of time buckets
 flow = client.hyperliquid.orders.flow(
     "BTC",
     start="2026-07-13T00:00:00Z",
     end="2026-07-14T00:00:00Z",
-    interval="15m",  # 1m (default), 5m, 15m, 1h
-    limit=1000,  # buckets (default 1000, max 10000)
+    interval="1m",  # 1m (default), 5m, 15m, 1h
 )
+buckets = list(flow.data)
+# A page holds up to `limit` buckets (default 1000, max 10000); follow the
+# cursor with the same start, end and interval until it is None
+while flow.next_cursor:
+    flow = client.hyperliquid.orders.flow(
+        "BTC",
+        start="2026-07-13T00:00:00Z",
+        end="2026-07-14T00:00:00Z",
+        interval="1m",
+        cursor=flow.next_cursor,
+    )
+    buckets.extend(flow.data)
 
 # Get TP/SL history
 tpsl = client.hyperliquid.orders.tpsl(
@@ -1127,8 +1221,10 @@ hip3_orders = await client.hyperliquid.hip3.orders.ahistory("km:US500", start=..
 | Method | Description |
 |--------|-------------|
 | `history(symbol, *, start, end, user, status, order_type, cursor, limit)` | Get order history |
-| `flow(symbol, *, start, end, interval, limit)` | Get order flow aggregation |
+| `flow(symbol, *, start, end, interval, cursor, limit)` | Get order flow aggregation, one page of buckets |
 | `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history |
+
+Hyperliquid core and HIP-3 also have `trigger_levels()` and `trigger_levels_history()`. HIP-4 serves `history()`, `flow()` and `tpsl()`. Spot serves `history(symbol, *, start, end, cursor, limit)` only, without user, status or order-type filters.
 
 ### Account Positions
 
@@ -1231,6 +1327,53 @@ Things to know:
 - **Cursors are bound to their request.** Pass `next_cursor` back with every other argument unchanged. If the snapshot a market cursor was paging is replaced, the API answers 409 (`OxArchiveError.code == 409`); restart without a cursor.
 - **Billing and limits.** Position rows are billed like trades, 1,000 rows per credit; `account()`, `account_history()`, and `by_l1()` are billed at the per-request minimum. Wallet routes return up to 5,000 rows per page (default 500), market routes up to 2,000 (default 100), bulk `all()` up to 2,000 (default 1,000), and summary series up to 168 hours per page.
 
+### Wallet Classification
+
+Precomputed daily behavior metrics for active wallets on Hyperliquid core and HIP-3: orders, fills, cancel and fill rates, maker ratio, order sizes, cancel speed, fees, realized PnL, TWAP, priority gas and builder usage. Filter and sort server side, and page with `limit` and `offset`.
+
+```python
+page = client.hyperliquid.wallets.classify(
+    min_orders=1000,
+    min_volume_usd=1_000_000,
+    sort="total_volume_usd",   # default total_orders
+    order="desc",
+    limit=100,                 # 1 to 1000 (default 100)
+    offset=0,                  # at most 100000
+    date="2026-09-28",         # daily snapshot; default yesterday (UTC)
+)
+print(f"{page.total} wallets match on {page.date}")
+for wallet in page.wallets:
+    m = wallet.metrics
+    print(wallet.address, m.total_volume_usd, m.maker_ratio, m.cancel_rate)
+
+# HIP-3 wallets, filtered by behavior
+hip3 = client.hyperliquid.hip3.wallets.classify(uses_twap=True, min_cancel_rate=0.5)
+
+# Async versions
+page = await client.hyperliquid.wallets.aclassify(sort="realized_pnl_usd")
+```
+
+`date` accepts a `date`, a `YYYY-MM-DD` string, or a datetime (a datetime without a time zone is UTC). Each request costs 10 credits, with row-based metering on the wallets returned where it applies. Every metric field is optional.
+
+### Symbol Universe
+
+Every public market across the venue families (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`), with the data types served for each and coverage dates overall and per data type. Use it to discover symbols before choosing a venue-specific route. The route needs no API key.
+
+```python
+symbols = client.symbols.list()
+hip3 = [s.symbol for s in symbols if s.exchange == "hip3"]
+btc = next(s for s in symbols if s.exchange == "hyperliquid" and s.symbol == "BTC")
+print(btc.data_types, btc.coverage_from, btc.coverage_by_type.get("trades"))
+
+# HIP-4 entries also carry the slug, the outcome pair and a display title
+outcomes = [s for s in symbols if s.exchange == "hip4" and not s.is_settled]
+
+# Async version
+symbols = await client.symbols.alist()
+```
+
+The whole universe is returned in one response, so fetch it once and filter locally.
+
 ### Data Quality Monitoring
 
 Monitor data coverage, incidents, latency, and SLA compliance across venue APIs. Venue scopes are `hyperliquid`, `hip3`, `hip4`, `spot` (Hyperliquid spot), `lighter` (Lighter mainnet), and `rh-lighter` (Lighter on Robinhood Chain).
@@ -1300,7 +1443,7 @@ coverage = await client.data_quality.acoverage()
 | `status()` | Overall system health and per-exchange status |
 | `coverage()` | Data coverage summary for venue APIs |
 | `exchange_coverage(exchange)` | Coverage details for a venue scope (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`) |
-| `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage |
+| `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage. The symbol is sent as given, URL-encoded (`km:US500`, `HYPE-USDC`, `#0`) |
 | `list_incidents(...)` | List incidents with filtering and pagination |
 | `get_incident(incident_id)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |
@@ -1315,6 +1458,303 @@ client = Client(
     timeout=60.0  # 60 seconds for data quality endpoints
 )
 ```
+
+### Webhooks
+
+Push delivery of market, account and platform events. Instead of polling a route on a timer, register an HTTPS URL and 0xArchive posts to it when something happens.
+
+Three objects, in the order you create them:
+
+1. An **endpoint** is an HTTPS URL 0xArchive posts to. Creating one returns its signing secret, once.
+2. A **subscription** is a rule: one event type, on one endpoint, with an optional configuration of filters, parameters and conditions.
+3. A **watched address** is a wallet. Event types whose `scope` is `addresses` report only on wallets on this list.
+
+```python
+# 1. Somewhere to deliver
+endpoint = client.webhooks.create_endpoint(
+    "https://example.com/hooks/0xarchive",
+    description="Desk alerts",
+)
+store_secret(endpoint.secret)  # shown once, never returned again
+
+# 2. Size the rule before turning it on
+estimate = client.webhooks.estimate(
+    "market.liquidation",
+    {"venue": "hyperliquid", "min_notional_usd": 250_000},
+    lookback_days=7,
+)
+print(f"median {estimate.per_day_p50:.0f} deliveries a day, busiest day {estimate.per_day_max}")
+
+# 3. Turn it on
+sub = client.webhooks.create_subscription(
+    endpoint.id,
+    "market.liquidation",
+    {"venue": "hyperliquid", "min_notional_usd": 250_000},
+)
+
+# 4. Send a real signed test delivery to the receiver
+client.webhooks.test_endpoint(endpoint.id)
+```
+
+#### Plan limits
+
+Webhook delivery needs a paid plan. `client.webhooks.limits()` reports what the plan allows and what is in use: endpoints, subscriptions, watched wallets, today's delivery budget and when it resets, and how many subscriptions are paused.
+
+| Plan | Endpoints | Subscriptions | Watched wallets | Deliveries per day |
+| --- | --- | --- | --- | --- |
+| Free | 0 | 0 | 0 | 0 |
+| Build | 1 | 8 | 2 | 5,000 |
+| Pro | 4 | 40 | 15 | 50,000 |
+| Scale | 12 | 200 | 50 | 500,000 |
+| Enterprise | 100 | 2,000 | 250 | No daily ceiling |
+
+`estimate()` and `dry_run()` are available on every plan, Free included, so a rule can be designed and sized before there is anywhere to deliver it. They are metered like the market data they return, and an account can run six of them a minute, shared between the two. An event type whose `scope` is `addresses` previews against your watched wallets, so it needs at least one on the list.
+
+```python
+limits = client.webhooks.limits()
+print(limits.plan, limits.included)
+print(limits.subscriptions.used, "of", limits.subscriptions.limit)
+print(limits.deliveries_per_day.remaining, "deliveries left until", limits.deliveries_per_day.resets_at)
+print(limits.paused_subscriptions.count, "paused")
+```
+
+#### Paused subscriptions
+
+When an account reaches its daily delivery budget, its subscriptions pause and say so: `status` becomes `"auto_paused"`, `pause_reason` is `"deliveries_per_day_cap"` (or `"plan_no_webhooks"` when the plan has no delivery), and `pause_message` explains what clears it. Nothing is queued while a rule is paused, and a paused rule does not restart when the budget resets. Resume it, then recover the window it missed from the REST routes:
+
+```python
+for sub in client.webhooks.list_subscriptions():
+    if sub.status == "auto_paused":
+        print(sub.id, sub.pause_message, sub.suppressed_count)
+
+# One rule, or every paused rule on the account
+result = client.webhooks.resume_subscription(sub.id)
+result = client.webhooks.resume_all_subscriptions()
+if result.gap:
+    window = result.gap.replay_window
+    print(f"re-read {window.start} to {window.end}: {result.gap.note}")
+```
+
+`gap.suppressed_count` is a lower bound on what matched while paused. It is `None`, with `counted` False, when the rules were address scoped, because their occurrences were never looked at. Resuming while the budget is still spent is refused (`OxArchiveError` with code 409) rather than granted and paused again. Your own `enabled` switch is never changed by a resume.
+
+#### Event types
+
+The catalog is the only place event types are declared. Read the filters, parameters, metrics and operators from it rather than hardcoding them.
+
+```python
+for t in client.webhooks.event_types():
+    if t.live:
+        print(t.type, t.scope, t.latency_class, t.description)
+
+liq = next(t for t in client.webhooks.event_types() if t.type == "market.liquidation")
+print(liq.filters)                   # accepted config keys
+print(liq.params)                    # tunable parameters, with type, bounds and default
+print(liq.metrics)                   # what conditions can be written against
+print(liq.operators["number"])       # operators for number metrics
+print(liq.cost_floor)                # the smallest occurrence the type reports
+```
+
+| Scope | Reports on | Needs |
+| --- | --- | --- |
+| `public` | Market-wide activity | Nothing extra |
+| `addresses` | Your watched wallets | At least one watched wallet |
+| `user` | Your own account and platform activity | Nothing extra |
+
+A type whose `live` is `False` is published but does not yet accept subscriptions.
+
+#### Configuration: filters, parameters and conditions
+
+A subscription's configuration is checked against the event type's declaration before anything is stored, so an unknown key, an undeclared parameter, an out of range value or a condition on a metric the event does not carry is refused with the reason, never dropped. Declared parameters left out are stored at their defaults, so the stored configuration comes back more complete than what was sent. Pass the configuration as a dict or as a `WebhookSubscriptionConfig`; the API calls it `filters` on subscriptions and `config` on the previews, and the SDK takes it as `config` everywhere.
+
+```python
+from oxarchive import WebhookSubscriptionConfig, WebhookSubscriptionCondition
+
+# Address scoped rules can only name watched wallets: add the wallet first
+client.webhooks.add_address("0x6b9e773128f453f5c2c60935ee2de2cbc5390a24", label="Desk 1")
+
+sub = client.webhooks.create_subscription(
+    endpoint.id,
+    "account.fill",
+    WebhookSubscriptionConfig(
+        addresses=["0x6b9e773128f453f5c2c60935ee2de2cbc5390a24"],
+        conditions=[
+            WebhookSubscriptionCondition(metric="notional_usd", op=">=", value=25_000),
+            WebhookSubscriptionCondition(metric="taker", op="equal", value=True),
+        ],
+    ),
+)
+
+# Edit in place. A config replaces the stored one, so send the whole object.
+client.webhooks.update_subscription(sub.id, config={"addresses": [...], "conditions": [...]})
+
+# Or switch the rule off without losing it
+client.webhooks.update_subscription(sub.id, enabled=False)
+```
+
+Conditions accept symbol spellings (`>=`, `<`, `!=`) as well as canonical names (`greater_than_or_equal`, `less_than`, `not_equal`), and are stored canonically. `between` and `not_between` take a `[low, high]` pair, `in` and `not_in` a list, and `is_empty` and `is_not_empty` no value. A subscription holds at most 16 conditions, all of which must hold for a delivery.
+
+#### Previewing a rule
+
+`dry_run()` answers "which recent occurrences would this have delivered?". `estimate()` answers "how often would it have fired?". Both validate the configuration exactly as `create_subscription()` does, so a configuration that previews cleanly subscribes cleanly. Neither stores anything or sends a delivery. Not every event type can be previewed; a type that cannot is refused with the list of those that can.
+
+```python
+# Which ones, over a recent window (60 s to 24 h, default 1 h)
+preview = client.webhooks.dry_run(
+    "market.liquidation",
+    {"venue": "hyperliquid", "min_notional_usd": 500_000},
+    lookback_s=86_400,
+    limit=100,  # 1 to 200
+)
+print(f"{preview.matched} matched between {preview.window.from_} and {preview.window.to}")
+for occurrence in preview.occurrences[:5]:
+    print(occurrence.observed_at_estimate, occurrence.data)
+
+# How often, over 1 to 30 days (default 7)
+est = client.webhooks.estimate("market.liquidation_burst", lookback_days=14)
+print(f"{est.total} over {est.days} days, median {est.per_day_p50:.0f} a day ({est.basis.mode})")
+
+# And what a different threshold would have produced
+for rung in est.ladder:
+    print(f"  at {rung.value:,.0f}: {rung.per_day:.1f} a day")
+```
+
+`window.from_` is named with a trailing underscore because `from` is a Python keyword. `window` can start later than requested when a scan reached its row cap; `truncated` says so.
+
+#### Verifying deliveries
+
+Every delivery is signed with HMAC-SHA256. Verify it, or anyone who learns the URL can post to it.
+
+The one rule that matters: **verify the raw request body**, before any JSON parser touches it. The signature covers the exact bytes that were sent, and their key order and spacing need not match what any JSON library produces, so a re-serialised dict will not verify.
+
+```python
+import os
+from oxarchive import WebhookVerifier, WebhookSignatureError
+
+verifier = WebhookVerifier(os.environ["OXARCHIVE_WEBHOOK_SECRET"])
+
+# Flask
+@app.post("/webhooks/0xarchive")
+def receive():
+    try:
+        event = verifier.verify(request.get_data(), request.headers)
+    except WebhookSignatureError as e:
+        # Answer 4xx. A 5xx asks for a retry of the same unverifiable delivery.
+        app.logger.warning("rejected webhook: %s", e.reason)
+        return "", 400
+
+    if already_seen(event.id):   # delivery is at-least-once
+        return "", 200
+    enqueue(event.payload)       # do the work out of band
+    return "", 200
+```
+
+| Framework | Raw body |
+| --- | --- |
+| Flask | `request.get_data()` |
+| FastAPI / Starlette | `await request.body()` |
+| Django | `request.body` |
+
+Not `request.get_json()`, not a parsed Pydantic model, not `request.POST`. A proxy or gateway in front of the receiver that re-encodes JSON also breaks verification: verify before that layer, or turn it off.
+
+Each delivery carries these headers:
+
+| Header | Meaning |
+| --- | --- |
+| `0xa-signature` | `t=<unix seconds>,v1=<hex>`, and during a secret rotation a second `v1=` |
+| `0xa-event-id` | Event identifier. **Deduplicate on this.** Stable across retries and repeat deliveries |
+| `0xa-event-type` | The event type, for example `account.fill` |
+| `content-type` | `application/json` |
+
+The signed string is the header's timestamp, a full stop, and the raw body. The event id, the event type and the other headers are not signed, so the replay window plus deduplication on `0xa-event-id` is the defence against replays. Serve the receiver over HTTPS.
+
+`WebhookVerifier` accepts every `v1=` in the header, compares signatures in constant time, and enforces a replay window of 5 minutes by default. Every attempt, including retries and repeat deliveries, is signed with a fresh timestamp, so a legitimate delivery is never older than network and clock skew:
+
+```python
+verifier = WebhookVerifier(secret, tolerance_seconds=120)  # tighten it if you like
+```
+
+A failed check raises `WebhookSignatureError` with a `reason`: `missing_header`, `malformed_header`, `timestamp_out_of_tolerance`, `no_secrets` or `signature_mismatch`. `is_valid()` returns a bool instead. For a one-off check without holding state:
+
+```python
+from oxarchive import verify_webhook
+
+event = verify_webhook(raw_body_bytes, headers, secret)
+```
+
+#### Rotating a secret
+
+`rotate_secret()` issues a new secret and keeps the previous one verifying for 24 hours. During the overlap every delivery carries **two** `v1=` signatures, one under each secret, so a receiver holding either keeps verifying.
+
+```python
+rotated = client.webhooks.rotate_secret(endpoint.id)
+
+verifier.add_secret(rotated.secret)   # now accepts both
+deploy()                              # ship the new secret to every replica
+verifier.remove_secret(old_secret)    # before the 24 hours are up
+```
+
+Only one previous secret is kept: rotating twice inside the window retires the original at once. A verifier written by hand must read **every** `v1=` in the header, not just the first, or it fails for up to 24 hours after each rotation.
+
+#### Retries and failures
+
+| Behaviour | Detail |
+| --- | --- |
+| Success | HTTP 200 to 299. Redirects are not followed, so a 301 or 302 is a failure |
+| Timeout | 10 seconds per attempt. Acknowledge at once and process asynchronously |
+| Retry schedule | 5 s, 30 s, 2 min, 10 min, 1 h, then hourly, for up to 24 hours |
+| `Retry-After` | Honoured on a failed attempt, between 1 second and 5 minutes. A 429 does not count against the endpoint's health |
+| Auto-disable | After 10 consecutive failures spanning at least 6 hours (`status == "auto_disabled"`) |
+| Recovery | Fix the receiver, then `client.webhooks.enable_endpoint(endpoint_id)` |
+
+```python
+# What happened
+for d in client.webhooks.list_deliveries(endpoint.id, limit=100):
+    print(d.event_type, d.state, d.attempts, d.last_status_code, d.last_error)
+
+# Send one again after fixing the receiver. The event id is unchanged, so a
+# receiver that already processed it can deduplicate it.
+client.webhooks.redeliver(delivery_id)
+```
+
+A test delivery and a repeat delivery are real signed deliveries: they count against today's budget. A repeat to a switched-off endpoint is refused (code 409), since nothing would be sent; re-enable the endpoint first.
+
+#### Watched addresses
+
+```python
+client.webhooks.add_address("0x6b9e773128f453f5c2c60935ee2de2cbc5390a24", label="Desk 1")
+watched = client.webhooks.list_addresses()
+client.webhooks.delete_address(watched[0].id)
+```
+
+Adding a wallet that is already watched changes nothing and does not count against the cap again. Addresses are stored lowercase. Hyperliquid bridge system addresses are refused: such an address is a counterparty to every bridge movement of its token rather than an account. Removing a wallet leaves subscriptions that named it unchanged, so edit those rules too.
+
+#### Every webhook method
+
+| Method | Route |
+| --- | --- |
+| `event_types()` | `GET /v1/webhooks/event-types` |
+| `limits()` | `GET /v1/webhooks/limits` |
+| `list_endpoints()` | `GET /v1/webhooks/endpoints` |
+| `create_endpoint(url, description="")` | `POST /v1/webhooks/endpoints` |
+| `delete_endpoint(endpoint_id)` | `DELETE /v1/webhooks/endpoints/{id}` |
+| `enable_endpoint(endpoint_id)` | `POST /v1/webhooks/endpoints/{id}/enable` |
+| `rotate_secret(endpoint_id)` | `POST /v1/webhooks/endpoints/{id}/rotate` |
+| `test_endpoint(endpoint_id)` | `POST /v1/webhooks/endpoints/{id}/test` |
+| `list_deliveries(endpoint_id, limit=None)` | `GET /v1/webhooks/endpoints/{id}/deliveries` |
+| `redeliver(delivery_id)` | `POST /v1/webhooks/deliveries/{id}/redeliver` |
+| `list_subscriptions()` | `GET /v1/webhooks/subscriptions` |
+| `create_subscription(endpoint_id, event_type, config=None)` | `POST /v1/webhooks/subscriptions` |
+| `update_subscription(subscription_id, config=None, enabled=None)` | `PATCH /v1/webhooks/subscriptions/{id}` |
+| `delete_subscription(subscription_id)` | `DELETE /v1/webhooks/subscriptions/{id}` |
+| `resume_subscription(subscription_id)` | `POST /v1/webhooks/subscriptions/{id}/resume` |
+| `resume_all_subscriptions()` | `POST /v1/webhooks/subscriptions/resume` |
+| `dry_run(event_type, config=None, lookback_s=None, limit=None)` | `POST /v1/webhooks/subscriptions/dry-run` |
+| `estimate(event_type, config=None, lookback_days=None)` | `POST /v1/webhooks/subscriptions/estimate` |
+| `list_addresses()` | `GET /v1/webhooks/addresses` |
+| `add_address(address, label="")` | `POST /v1/webhooks/addresses` |
+| `delete_address(address_id)` | `DELETE /v1/webhooks/addresses/{id}` |
+
+Every method has an async version prefixed with `a`: `await client.webhooks.aestimate(...)`, `await client.webhooks.acreate_endpoint(...)`, and so on. Management calls cost no credits; the two previews are metered like market data.
 
 ### Web3 Authentication
 
@@ -1499,6 +1939,35 @@ asyncio.run(main())
 ```
 
 Hyperliquid `open_interest` and `funding` also stream live, in addition to historical replay. Subscribe with `ws.subscribe("open_interest", "BTC")` or `ws.subscribe("funding", "BTC")`. Each update's `data` holds `coin` and a `ctx` object with fields such as `openInterest`, `funding`, `markPx`, and `oraclePx`. These channels have no typed callback, so their updates arrive on `on_message` as `WsData` messages.
+
+### Full-Depth L2 Book
+
+`orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3) stream every price level of the book, not just the top 20, aggregated from the order-level book. A subscription opens with an `l4_snapshot` of the whole book, followed by `l4_batch` messages of changed levels. Receive them with `on_l4_snapshot` and `on_l4_batch`; the `channel` argument tells them apart from the L4 channels. These channels are live-only; stored full-depth history is on REST `l2_orderbook.history()` and `l2_orderbook.diffs()`.
+
+```python
+book = {"B": {}, "A": {}}
+
+def on_snapshot(channel, coin, message):
+    data = message["data"]
+    book["B"] = {level["px"]: level for level in data["bids"]}
+    book["A"] = {level["px"]: level for level in data["asks"]}
+    print(coin, data["bid_count"], data["ask_count"], data["mid_price"])
+
+def on_batch(channel, coin, levels):
+    for level in levels:  # apply in the order received
+        side = book[level["side"]]
+        if level["sz"] == 0:
+            side.pop(level["px"], None)  # the level was removed
+        else:
+            side[level["px"]] = level
+
+ws.on_l4_snapshot(on_snapshot)
+ws.on_l4_batch(on_batch)
+ws.subscribe_orderbook_full("BTC")
+ws.subscribe_hip3_orderbook_full("km:US500")  # case-sensitive
+```
+
+Each level is `{"px", "sz", "n"}` with numeric values; a changed level also carries `side` (`"B"` or `"A"`) and `bn`, the block it was applied in. The snapshot's `data` also holds `bid_count`, `ask_count`, `total_bid_size`, `total_ask_size`, `mid_price`, `spread`, `spread_bps` and `is_crossed`, and `last_block_number` on the message is the block the snapshot reflects.
 
 ### Live Lighter.xyz Data
 
@@ -1740,6 +2209,7 @@ ws = OxArchiveWs(WsOptions(
 | `all_tickers` | All market tickers | No | Yes | No |
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
+| `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | No |
 
 Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. Their sequence is `l4_snapshot` followed by ordered `l4_batch` events. HIP-3, HIP-4, and Hyperliquid Spot L4 remain live-only.
 
@@ -1757,6 +2227,9 @@ Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. T
 | `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
+| `hip3_orderbook_full` | HIP-3 full-depth L2 order book: every price level, then changed levels | Yes | Yes | No |
+
+> **Note:** `orderbook_full` and `hip3_orderbook_full` are live-only; `replay()` and `multi_replay()` reject them with `ValueError` before anything is sent. Stored full-depth history is served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -2051,6 +2524,8 @@ from oxarchive.types import (
     LighterLiquidation, LighterLiquidationVolume, ResponseMeta,
     Position, PositionChange, MarketPosition, MarketPositionsSummary, AccountSummary,
     WalletPositions, LighterL1Accounts,
+    CvdBucket, Hip3OracleExternalPrice, Hip4Question, WalletClassification, SymbolEntry,
+    WebhookSubscription, WebhookEstimate, WebhookLimits,
 )
 from oxarchive.resources.trades import CursorResponse
 
@@ -2075,6 +2550,11 @@ recent: list[Trade] = client.lighter.trades.recent("BTC")
 now: CursorResponse[WalletPositions] = client.hyperliquid.positions.get("0xabc...")
 meta: ResponseMeta = now.meta
 legs: CursorResponse[list[PositionChange]] = client.rh_lighter.positions.changes(4521, start=..., end=...)
+
+# Cumulative volume delta, wallet classification and webhooks
+cvd: CursorResponse[list[CvdBucket]] = client.hyperliquid.cvd.history("BTC", start=...)
+wallets: WalletClassification = client.hyperliquid.wallets.classify(limit=10)
+rules: list[WebhookSubscription] = client.webhooks.list_subscriptions()
 
 # Lighter granularity type hint
 granularity: LighterGranularity = "10s"

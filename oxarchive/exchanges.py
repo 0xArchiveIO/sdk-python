@@ -11,13 +11,18 @@ from .http import HttpClient
 from .resources import (
     BreadthResource,
     CandlesResource,
+    CvdResource,
     FundingResource,
     Hip3CandlesResource,
     Hip3InstrumentsResource,
+    Hip3LiquidationsResource,
+    Hip3OracleResource,
     Hip4CandlesResource,
     Hip4InstrumentsResource,
     Hip4OpenInterestResource,
+    Hip4OrdersResource,
     Hip4OutcomesResource,
+    Hip4QuestionsResource,
     HyperliquidPositionsResource,
     InstrumentsResource,
     L2OrderBookResource,
@@ -32,9 +37,11 @@ from .resources import (
     OrderBookResource,
     OrdersResource,
     SpotCandlesResource,
+    SpotOrdersResource,
     SpotPairsResource,
     SpotTwapResource,
     TradesResource,
+    WalletsResource,
 )
 from .types import (
     CoinFreshness,
@@ -42,6 +49,7 @@ from .types import (
     CursorResponse,
     Hip4Outcome,
     Hip4OutcomeAggregate,
+    Hip4Question,
     LiquidationVolume,
     PriceSnapshot,
     SpotTableFreshness,
@@ -118,6 +126,16 @@ class HyperliquidClient:
         """Account positions by wallet address: current, as-of, hourly history,
         change log, account summaries, and market-wide listings. Change log from
         2025-05-25, hourly history from 2026-06-07, live every 5 minutes."""
+
+        self.breadth = BreadthResource(http, base_path, label="Hyperliquid core")
+        """Percent of eligible core perpetuals above their UTC-session VWAP
+        (history from 2026-08-24)."""
+
+        self.cvd = CvdResource(http, base_path)
+        """Cumulative volume delta: taker buy and sell notional per bucket."""
+
+        self.wallets = WalletsResource(http, base_path)
+        """Wallet classification: daily behavior metrics for active wallets."""
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (trades from 2025-10-13)"""
@@ -359,8 +377,10 @@ class Hip3Client:
         self.candles = Hip3CandlesResource(http, base_path, coin_transform=coin_transform)
         """OHLCV candle data (max 10,000 rows per page)"""
 
-        self.liquidations = LiquidationsResource(http, base_path, coin_transform=coin_transform)
-        """Liquidation events"""
+        self.liquidations = Hip3LiquidationsResource(
+            http, base_path, coin_transform=coin_transform
+        )
+        """Liquidation events, volume and levels (no per-user route on HIP-3)"""
 
         self.orders = OrdersResource(http, base_path, coin_transform=coin_transform)
         """L4 order history, flow, and TP/SL"""
@@ -375,6 +395,15 @@ class Hip3Client:
         """HIP-3 account positions by wallet address (optional ``dex`` filter).
         Change log from 2025-10-13, hourly history from 2026-06-07, live every
         5 minutes."""
+
+        self.cvd = CvdResource(http, base_path, coin_transform=coin_transform)
+        """Cumulative volume delta: taker buy and sell notional per bucket."""
+
+        self.oracle = Hip3OracleResource(http, base_path)
+        """Deployer-pushed external price and discovery bounds."""
+
+        self.wallets = WalletsResource(http, base_path)
+        """Wallet classification: daily behavior metrics for active HIP-3 wallets."""
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
@@ -553,6 +582,9 @@ class Hip4Client:
         self.outcomes = Hip4OutcomesResource(http, base_path)
         """HIP-4 outcome-level metadata (one row per outcome_id)."""
 
+        self.questions = Hip4QuestionsResource(http, base_path)
+        """HIP-4 questions: multi-choice groupings of outcome markets."""
+
         self.orderbook = OrderBookResource(http, base_path, coin_transform=_hip4_encode)
         """L2 order book snapshots."""
 
@@ -567,14 +599,11 @@ class Hip4Client:
         )
         """Per-side open interest. For paired/aggregated OI use ``outcomes.get()``."""
 
-        self.orders = OrdersResource(http, base_path, coin_transform=_hip4_encode)
+        self.orders = Hip4OrdersResource(http, base_path, coin_transform=_hip4_encode)
         """L4 order history, flow, and TP/SL."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path, coin_transform=_hip4_encode)
         """L4 order-level orderbook data."""
-
-        self.l2_orderbook = L2OrderBookResource(http, base_path, coin_transform=_hip4_encode)
-        """L2 full-depth orderbook (derived from L4)."""
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
@@ -652,6 +681,32 @@ class Hip4Client:
     async def aget_outcome_by_slug(self, slug: str) -> Hip4OutcomeAggregate:
         """Async version of get_outcome_by_slug()."""
         return await self.outcomes.aget_by_slug(slug)
+
+    def list_questions(
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> CursorResponse[list[Hip4Question]]:
+        """List questions, ascending by question ID. Pass ``next_cursor`` back unchanged."""
+        return self.questions.list(cursor=cursor, limit=limit)
+
+    async def alist_questions(
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> CursorResponse[list[Hip4Question]]:
+        """Async version of list_questions()."""
+        return await self.questions.alist(cursor=cursor, limit=limit)
+
+    def get_question(self, question_id: int) -> Hip4Question:
+        """Get a single question by its numeric ID."""
+        return self.questions.get(question_id)
+
+    async def aget_question(self, question_id: int) -> Hip4Question:
+        """Async version of get_question()."""
+        return await self.questions.aget(question_id)
 
     # -----------------------------------------------------------------
     # Market-data flat helpers (mirror HIP-3 surface)
@@ -1103,12 +1158,9 @@ class SpotClient:
         self.candles = SpotCandlesResource(http, base_path)
         """OHLCV candle history (from 2025-03-22T10:50:22Z; max 1,000 rows)."""
 
-        self.orders = OrdersResource(http, base_path)
-        """L4 order lifecycle history (live from 2026-05-05).
-
-        Note: spot exposes only ``history()``. Flow and TP/SL endpoints exist
-        on the resource but the spot backend does not implement them.
-        """
+        self.orders = SpotOrdersResource(http, base_path)
+        """L4 order lifecycle history (live from 2026-05-05). Spot serves
+        ``history()`` only: no flow, TP/SL or trigger levels."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path)
         """L4 order-level orderbook: full reconstruction, raw diffs,
