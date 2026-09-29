@@ -222,6 +222,8 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `OrdersResource`, and Hyperliquid core keeps `LiquidationsResource`.
 
 ### Fixed
+- `hip4.outcomes.get_by_slug()` URL-encodes the slug. Slugs with spaces,
+  colons, `#` or `/` reached the wrong route before.
 - `trades.list()` and `alist()` send `cursor` back exactly as the API
   returned it. A trades cursor is an opaque string such as
   `"1790640000578_218303497631402"` (Lighter adds a third part), and it was

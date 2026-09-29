@@ -9,6 +9,7 @@ tests/*
 !tests/_mock_api.py
 !tests/test_timestamps.py
 !tests/test_spec_fixes.py
+!tests/test_slug_encoding.py
 !tests/test_websocket_full_depth.py
 !tests/test_webhooks.py
 !tests/test_webhook_signature.py
