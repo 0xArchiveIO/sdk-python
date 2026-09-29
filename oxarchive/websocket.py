@@ -182,6 +182,11 @@ L4_LIVE_ONLY_CHANNELS: frozenset[str] = frozenset(
 )
 """HIP-3, HIP-4, and Hyperliquid Spot L4 channels without replay support."""
 
+FULL_DEPTH_L2_CHANNELS: frozenset[str] = frozenset({"orderbook_full", "hip3_orderbook_full"})
+"""Full-depth L2 book channels (Hyperliquid core and HIP-3), aggregated from
+the order-level book. A subscription opens with an ``l4_snapshot`` of every
+price level, followed by ``l4_batch`` messages of changed levels."""
+
 L4_LIVE_ONLY_ERROR = (
     "HIP-3, HIP-4, and Hyperliquid Spot L4 channels support live subscriptions only. "
     "Use subscribe for current streams."
@@ -786,6 +791,36 @@ class OxArchiveWs:
         """Unsubscribe from live HIP-3 liquidations for a coin."""
         self.unsubscribe("hip3_liquidations", coin)
 
+    # -- Full-depth L2 (Hyperliquid core and HIP-3) --------------------------
+
+    def subscribe_orderbook_full(self, coin: str) -> None:
+        """Subscribe to the live full-depth Hyperliquid L2 book for a coin.
+
+        Every price level, not just the top 20. The server first sends an
+        ``l4_snapshot`` whose ``data`` holds ``bids`` and ``asks`` (each level
+        ``{"px", "sz", "n"}``) with level counts, totals, ``mid_price``,
+        ``spread`` and ``spread_bps``, then ``l4_batch`` messages whose items
+        are changed levels ``{"side", "px", "sz", "n", "bn"}``; a level whose
+        ``sz`` is 0 has been removed. Receive them with :meth:`on_l4_snapshot`
+        and :meth:`on_l4_batch`, applying batches in the order received.
+        """
+        self.subscribe("orderbook_full", coin)
+
+    def unsubscribe_orderbook_full(self, coin: str) -> None:
+        """Unsubscribe from the live full-depth Hyperliquid L2 book."""
+        self.unsubscribe("orderbook_full", coin)
+
+    def subscribe_hip3_orderbook_full(self, coin: str) -> None:
+        """Subscribe to the live full-depth HIP-3 L2 book (case-sensitive coin).
+
+        Same messages as :meth:`subscribe_orderbook_full`.
+        """
+        self.subscribe("hip3_orderbook_full", coin)
+
+    def unsubscribe_hip3_orderbook_full(self, coin: str) -> None:
+        """Unsubscribe from the live full-depth HIP-3 L2 book."""
+        self.unsubscribe("hip3_orderbook_full", coin)
+
     # -- HIP-4 outcome markets -----------------------------------------------
 
     def subscribe_hip4_orderbook(self, coin: str) -> None:
@@ -1281,8 +1316,10 @@ class OxArchiveWs:
     def on_l4_snapshot(self, handler: Callable[[str, str, dict], None]) -> None:
         """Set handler for the initial L4 orderbook snapshot.
 
-        Both live L4 subscriptions and Hyperliquid core L4 replay emit one
-        ``l4_snapshot`` before any ``l4_batch`` messages. The generic
+        Live L4 subscriptions, live full-depth L2 subscriptions
+        (``orderbook_full``, ``hip3_orderbook_full``) and Hyperliquid core L4
+        replay emit one ``l4_snapshot`` before any ``l4_batch`` messages; the
+        ``channel`` argument tells them apart. The generic
         :meth:`on_message` handler receives a typed :class:`WsL4Snapshot`; this
         dedicated callback keeps the established ``(channel, coin, message)``
         raw-dict shape. ``message["data"]`` holds the book and
@@ -1297,7 +1334,9 @@ class OxArchiveWs:
         :class:`WsL4Batch`; this dedicated callback keeps the established
         ``(channel, coin, records)`` raw-record shape. Records must be applied
         in the order received. Live batches are emitted in short windows;
-        replay batches are delivered in server order.
+        replay batches are delivered in server order. On the full-depth L2
+        channels each record is a changed price level, and ``sz`` of 0
+        removes the level.
         """
         self._on_l4_batch = handler
 

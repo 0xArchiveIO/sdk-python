@@ -9,6 +9,7 @@ tests/*
 !tests/_mock_api.py
 !tests/test_timestamps.py
 !tests/test_spec_fixes.py
+!tests/test_websocket_full_depth.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

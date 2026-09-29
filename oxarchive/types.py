@@ -1096,6 +1096,7 @@ WsChannel = Literal[
     "hip4_l4_diffs", "hip4_l4_orders",
     "l4_diffs", "l4_orders",
     "hip3_l4_diffs", "hip3_l4_orders",
+    "orderbook_full", "hip3_orderbook_full",
     "spot_orderbook", "spot_trades", "spot_l4_diffs", "spot_l4_orders", "spot_twap",
 ]
 """Available WebSocket channels.
@@ -1121,6 +1122,12 @@ Notes:
 - l4_diffs, l4_orders: Hyperliquid core L4 order-level data. Historical replay
   emits one ``l4_snapshot`` followed by ordered ``l4_batch`` messages.
 - hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (live-only).
+- orderbook_full, hip3_orderbook_full: full-depth L2 books (every price level)
+  for Hyperliquid core and HIP-3, aggregated from the order-level book. Live
+  subscriptions open with an ``l4_snapshot`` of the whole book, followed by
+  ``l4_batch`` messages of changed levels. The server currently answers a
+  replay request on these channels with an error; stored full-depth history
+  is served by REST ``l2_orderbook.history()`` and ``l2_orderbook.diffs()``.
 - hip4_trades: HIP-4 outcome-market fills (realtime + replay).
 - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused.
 - hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (live-only).

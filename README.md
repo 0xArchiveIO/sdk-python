@@ -1511,6 +1511,35 @@ asyncio.run(main())
 
 Hyperliquid `open_interest` and `funding` also stream live, in addition to historical replay. Subscribe with `ws.subscribe("open_interest", "BTC")` or `ws.subscribe("funding", "BTC")`. Each update's `data` holds `coin` and a `ctx` object with fields such as `openInterest`, `funding`, `markPx`, and `oraclePx`. These channels have no typed callback, so their updates arrive on `on_message` as `WsData` messages.
 
+### Full-Depth L2 Book
+
+`orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3) stream every price level of the book, not just the top 20, aggregated from the order-level book. A subscription opens with an `l4_snapshot` of the whole book, followed by `l4_batch` messages of changed levels. Receive them with `on_l4_snapshot` and `on_l4_batch`; the `channel` argument tells them apart from the L4 channels.
+
+```python
+book = {"B": {}, "A": {}}
+
+def on_snapshot(channel, coin, message):
+    data = message["data"]
+    book["B"] = {level["px"]: level for level in data["bids"]}
+    book["A"] = {level["px"]: level for level in data["asks"]}
+    print(coin, data["bid_count"], data["ask_count"], data["mid_price"])
+
+def on_batch(channel, coin, levels):
+    for level in levels:  # apply in the order received
+        side = book[level["side"]]
+        if level["sz"] == 0:
+            side.pop(level["px"], None)  # the level was removed
+        else:
+            side[level["px"]] = level
+
+ws.on_l4_snapshot(on_snapshot)
+ws.on_l4_batch(on_batch)
+ws.subscribe_orderbook_full("BTC")
+ws.subscribe_hip3_orderbook_full("km:US500")  # case-sensitive
+```
+
+Each level is `{"px", "sz", "n"}` with numeric values; a changed level also carries `side` (`"B"` or `"A"`) and `bn`, the block it was applied in. The snapshot's `data` also holds `bid_count`, `ask_count`, `total_bid_size`, `total_ask_size`, `mid_price`, `spread`, `spread_bps` and `is_crossed`, and `last_block_number` on the message is the block the snapshot reflects.
+
 ### Live Lighter.xyz Data
 
 Live Lighter messages use the same `data` envelope as Hyperliquid live data. Symbols are the ones returned by `client.lighter.instruments.list()`; they are case-insensitive on subscribe and echoed uppercase. Live Lighter data is served at `wss://api.0xarchive.io/ws`, the client default; `wss://stream.0xarchive.io/ws` does not serve Lighter channels and answers a Lighter subscribe with an error pointing to `wss://api.0xarchive.io/ws`. It is available on every plan and metered per message like Hyperliquid live data, with the same per-plan subscription and connection limits and the limit of 10 subscribe operations per second.
@@ -1751,6 +1780,7 @@ ws = OxArchiveWs(WsOptions(
 | `all_tickers` | All market tickers | No | Yes | No |
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
+| `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | No (see below) |
 
 Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. Their sequence is `l4_snapshot` followed by ordered `l4_batch` events. HIP-3, HIP-4, and Hyperliquid Spot L4 remain live-only.
 
@@ -1768,6 +1798,9 @@ Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. T
 | `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
+| `hip3_orderbook_full` | HIP-3 full-depth L2 order book: every price level, then changed levels | Yes | Yes | No (see below) |
+
+> **Note:** The server currently answers a replay request on `orderbook_full` or `hip3_orderbook_full` with an error. Stored full-depth history is served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 

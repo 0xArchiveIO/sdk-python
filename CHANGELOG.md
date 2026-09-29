@@ -103,9 +103,20 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `cursor` with the same `start`, `end` and `interval` until it is `None`.
   Before this, a `cursor` keyword was accepted and silently dropped, so every
   call returned the first page.
+- Full-depth L2 WebSocket channels `orderbook_full` (Hyperliquid core) and
+  `hip3_orderbook_full` (HIP-3) for live subscription, with helpers
+  `subscribe_orderbook_full()`, `subscribe_hip3_orderbook_full()` and their
+  `unsubscribe_*` counterparts, and `FULL_DEPTH_L2_CHANNELS` in
+  `oxarchive.websocket`. A subscription opens with an `l4_snapshot` of every
+  price level, then `l4_batch` messages of changed levels, delivered to
+  `on_l4_snapshot()` and `on_l4_batch()`. The server currently answers a
+  replay request on these channels with an error; stored full-depth history
+  is on REST `l2_orderbook.history()` and `diffs()`.
 
 ### Changed
-- `WsChannel` includes the five `rh_lighter_*` channels.
+- `WsChannel` includes the five `rh_lighter_*` channels, `orderbook_full` and
+  `hip3_orderbook_full`. Before, the acknowledgement, snapshot and batch
+  messages of the two full-depth channels failed to parse.
 - `rh_lighter_candles` raises `ValueError` with `RH_LIGHTER_SUBSCRIPTION_ERROR`
   on a live subscribe, like the other replay-only Lighter channels.
 - `interval_ms` is accepted on `rh_lighter_orderbook` as well as
