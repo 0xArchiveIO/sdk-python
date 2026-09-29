@@ -3,7 +3,7 @@
 A trades cursor is an opaque string and goes back to the API unchanged; HIP-4
 freshness has no funding entry; methods for routes the API does not serve are
 gone; parameters it never applied are refused; symbol coverage encodes the
-symbol; spot freshness parses its datasets; L3 takes account and granularity.
+symbol; spot freshness parses its datasets; L3 takes account.
 """
 
 from __future__ import annotations
@@ -220,7 +220,7 @@ def test_depth_still_applies_to_get() -> None:
 
 
 # ---------------------------------------------------------------------------
-# L3 account and granularity
+# L3 account
 # ---------------------------------------------------------------------------
 
 
@@ -236,25 +236,18 @@ def test_l3_get_sends_account() -> None:
     ]
 
 
-def test_l3_history_sends_granularity_and_account() -> None:
+def test_l3_history_sends_account() -> None:
     client, api = mock_client(lambda p, q: envelope([], next_cursor="1790640373586"))
 
     page = client.lighter.l3_orderbook.history(
-        "BTC", start=T_START, end=T_END, limit=2, granularity="1s", account=702384
+        "BTC", start=T_START, end=T_END, limit=2, account=702384
     )
-    asyncio.run(
-        client.lighter.l3_orderbook.ahistory(
-            "BTC", start=T_START, end=T_END, granularity="checkpoint"
-        )
-    )
+    asyncio.run(client.lighter.l3_orderbook.ahistory("BTC", start=T_START, end=T_END))
 
     base = {"start": str(T_START), "end": str(T_END)}
     assert api.calls == [
-        (
-            "/v1/lighter/l3orderbook/BTC/history",
-            {**base, "limit": "2", "granularity": "1s", "account": "702384"},
-        ),
-        ("/v1/lighter/l3orderbook/BTC/history", {**base, "granularity": "checkpoint"}),
+        ("/v1/lighter/l3orderbook/BTC/history", {**base, "limit": "2", "account": "702384"}),
+        ("/v1/lighter/l3orderbook/BTC/history", base),
     ]
     assert page.next_cursor == "1790640373586"
 

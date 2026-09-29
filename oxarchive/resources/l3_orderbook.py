@@ -8,7 +8,6 @@ from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, Timestamp
-from .orderbook import LighterGranularity
 
 _UNSUPPORTED_HISTORY = {
     "depth": (
@@ -110,7 +109,6 @@ class L3OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-        granularity: Optional[LighterGranularity] = None,
         account: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
@@ -123,8 +121,6 @@ class L3OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
-            granularity: History resolution: 'checkpoint' (default), '30s',
-                '10s', '1s' or 'tick'
             account: Only the orders of this Lighter account index
 
         Returns:
@@ -139,7 +135,6 @@ class L3OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
-                "granularity": granularity,
                 "account": account,
             },
         )
@@ -156,7 +151,6 @@ class L3OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-        granularity: Optional[LighterGranularity] = None,
         account: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
@@ -170,7 +164,6 @@ class L3OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
-                "granularity": granularity,
                 "account": account,
             },
         )

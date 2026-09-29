@@ -1118,7 +1118,7 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 | Method | Description |
 |--------|-------------|
 | `get(symbol, *, timestamp, depth, account)` | Get an L3 snapshot, up to 250 orders per side |
-| `history(symbol, *, start, end, cursor, limit, granularity, account)` | Get L3 history from March 5, 2026, up to 250 orders per side |
+| `history(symbol, *, start, end, cursor, limit, account)` | Get L3 history from March 5, 2026, up to 250 orders per side |
 
 ### L2 Orderbook (Full-Depth)
 

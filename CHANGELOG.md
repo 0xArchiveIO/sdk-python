@@ -175,8 +175,7 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   and `multi_replay()` reject them with `ValueError`
   (`FULL_DEPTH_LIVE_ONLY_ERROR`) before anything is sent. Stored full-depth
   history is on REST `l2_orderbook.history()` and `diffs()`.
-- `client.lighter.l3_orderbook.get()` takes `account`, and `history()` takes
-  `granularity` (`checkpoint`, `30s`, `10s`, `1s` or `tick`) and `account`.
+- `client.lighter.l3_orderbook.get()` and `history()` take `account`.
 
 ### Changed
 - `WsChannel` includes the five `rh_lighter_*` channels, `orderbook_full` and
