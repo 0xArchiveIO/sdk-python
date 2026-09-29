@@ -32,7 +32,7 @@ client = Client(api_key="0xa_your_api_key")
 hl_orderbook = client.hyperliquid.orderbook.get("BTC")
 print(f"Hyperliquid BTC mid price: {hl_orderbook.mid_price}")
 
-# Lighter.xyz uses its own venue client
+# Lighter uses its own venue client
 lighter_orderbook = client.lighter.orderbook.get("BTC")
 print(f"Lighter BTC mid price: {lighter_orderbook.mid_price}")
 
@@ -83,10 +83,12 @@ history = client.hyperliquid.orderbook.history(
 | Hyperliquid | April 2023+ | Core perpetuals; coverage varies by schema and route. |
 | Hyperliquid HIP-3 | Trades and oracle prices from 2025-10-13; candles and liquidations from 2025-12-22; order book, funding, and OI from 2026-02-16; L4 and order history from 2026-03-10 | Builder perps; funding and OI update at roughly 10 seconds. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side OI are served from 2026-05-02; OI updates at ~10s. No funding or liquidations. |
-| Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
-| Lighter.xyz | Observed global per-fill trade floor January 17, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
+| Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; L4 and order history from 2026-03-10 (L4 replay from 2026-03-11 01:03 UTC); order book from 2026-05-05; TWAP from 2026-05 | Dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`); `client.spot.pairs.list()` lists the pairs. Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
+| Lighter | Observed global per-fill trade floor January 17, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
 | Lighter on Robinhood Chain | Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch); order book, OI, and funding from 2026-08-22 18:43 UTC | The second Lighter deployment. 84 USDG-quoted markets: 57 perps (`BTC`) and 27 spot (`AAPL-USDG`). Candles from 2026-06-26 once enabled. No L3. |
 | Account positions | Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13, hourly history from 2026-06-07; Lighter mainnet from 2025-01-17, Robinhood Chain from 2026-06-26 | Live snapshots every 5 minutes (Hyperliquid, HIP-3) or 2 minutes (Lighter). See [Account Positions](#account-positions). |
+
+`client.capabilities()` returns the first served instant of every datatype on every venue, and `client.symbols.list()` the coverage of each symbol. See [Capabilities](#capabilities).
 
 ## Async Support
 
@@ -103,7 +105,7 @@ async def main():
     orderbook = await client.hyperliquid.orderbook.aget("BTC")
     print(f"BTC mid price: {orderbook.mid_price}")
 
-    # Async get (Lighter.xyz)
+    # Async get (Lighter)
     lighter_ob = await client.lighter.orderbook.aget("BTC")
 
     # Don't forget to close the client
@@ -137,9 +139,61 @@ environment variable.
 client = Client()
 ```
 
+### API Version
+
+Every request sends `0xArchive-Version: 2026-10-01` (`oxarchive.API_VERSION`), and WebSocket connections select the same version. The version fixes the response shapes the SDK parses: every route answers with the `{success, data, meta}` envelope, record times are RFC 3339 strings with an integer companion in fields ending `_ms`, errors carry a stable `error_code`, and Lighter replay messages have the live shapes. The API echoes the version in the `0xArchive-Version` response header.
+
+## Pagination
+
+Paged methods return a `CursorResponse` with `data`, `has_more`, `next_cursor` and `meta`. While `has_more` is `True`, pass `next_cursor` back unchanged as `cursor`, with the other arguments unchanged. Stop when `has_more` is `False`: a page can be short, or even empty, and still not be the last, so stop on `has_more` rather than on the page size.
+
+```python
+page = client.hyperliquid.trades.history("BTC", start="2026-09-01", end="2026-09-02", limit=1000)
+trades = list(page.data)
+while page.has_more:
+    page = client.hyperliquid.trades.history(
+        "BTC", start="2026-09-01", end="2026-09-02", limit=1000, cursor=page.next_cursor
+    )
+    trades.extend(page.data)
+```
+
+The iterators (`cvd.iterate()`, `positions.iterate_history()` and the other `iterate_*` helpers) follow the cursor for you and stop when `has_more` is `False`.
+
+## Response Metadata
+
+`CursorResponse.meta` is the response's `meta`: `request_id`, `count`, `has_more`, and on per-symbol routes `symbol` (the canonical public symbol) and `venue` (`"hyperliquid"`, `"hip3"`, `"hip4"`, `"spot"`, `"lighter"` or `"rh-lighter"`). A record that a method returns on its own, such as an order book, a funding rate, an instrument or a market summary, carries the same meta as `response_meta`.
+
+```python
+book = client.hyperliquid.hip3.orderbook.get("xyz:TSLA")
+print(book.response_meta.venue, book.response_meta.symbol)  # hip3 xyz:TSLA
+
+page = client.spot.trades.history("HYPE-USDC", start="2026-09-01", end="2026-09-02")
+print(page.meta.venue, page.meta.symbol, page.meta.request_id)
+```
+
+Methods that return a raw `dict` (the full-depth L2, L3 and L4 snapshots) or a plain list do not carry it.
+
+## Capabilities
+
+`client.capabilities()` lists what each venue serves, one `Capability` per venue and datatype: the REST routes and WebSocket channels, whether the datatype streams live (`live`) and replays (`replay`), the first served instant (`available_from`), its cadence, the largest page (`page_limit`) and the accepted intervals. The route needs no API key and costs no credits.
+
+```python
+rows = client.capabilities()
+for row in rows:
+    if row.venue == "spot":
+        print(row.datatype, row.live, row.replay, row.available_from, row.page_limit)
+
+replayable = {channel for row in rows if row.replay for channel in row.ws_channels}
+
+# Async version
+rows = await client.acapabilities()
+```
+
+Per-symbol coverage is on `client.symbols.list()`. The WebSocket client checks subscriptions and replays against the same table (see [Available Channels](#available-channels)).
+
 ## REST API Reference
 
-All examples use `client.hyperliquid.*` but the same methods are available on `client.lighter.*` for Lighter.xyz data.
+All examples use `client.hyperliquid.*` but the same methods are available on `client.lighter.*` for Lighter data.
 
 ### Order Book
 
@@ -147,7 +201,7 @@ All examples use `client.hyperliquid.*` but the same methods are available on `c
 # Get current order book (Hyperliquid)
 orderbook = client.hyperliquid.orderbook.get("BTC")
 
-# Get current order book (Lighter.xyz)
+# Get current order book (Lighter)
 orderbook = client.lighter.orderbook.get("BTC")
 
 # Get order book at specific timestamp
@@ -177,13 +231,13 @@ hip3_ob = await client.hyperliquid.hip3.orderbook.aget("km:US500")
 
 #### Orderbook Depth
 
-The `depth` parameter is route-specific. Hyperliquid-family native L2 is capped at 20 levels per side. Lighter native L2 includes all served levels, and Lighter L3 is capped at 250 orders per side.
+The `depth` parameter is route-specific. Hyperliquid-family native L2 is capped at 20 levels per side. Lighter native L2 includes all served levels, and Lighter L3 is capped at 250 orders per side. `depth` applies to `get()` and to `history()` on every venue (Hyperliquid core, HIP-3, HIP-4, spot and Lighter), and to the full-depth `l2_orderbook.get()` and `l2_orderbook.history()`.
 
 **Note:** Hyperliquid native L2 source data contains 20 levels per side. Dedicated L2 routes derived from L4 return all served levels where supported. Lighter native L2 also includes all served levels; Lighter L3 returns up to 250 individual resting orders per side.
 
 #### Lighter Orderbook Granularity
 
-Lighter.xyz orderbook history supports a `granularity` parameter for different data resolutions.
+Lighter order book history (mainnet and Robinhood Chain) supports a `granularity` parameter for different data resolutions.
 
 | Granularity | Interval | Credit Multiplier |
 |-------------|----------|-------------------|
@@ -306,16 +360,16 @@ async for snapshot in client.lighter.orderbook.aiterate_tick_history("BTC", star
 
 ### Trades
 
-The trades API uses cursor-based pagination for efficient retrieval of large datasets.
+`trades.history()` pages the trade tape of a window with a cursor. `trades.list()` is the same method under its earlier name and keeps working.
 
 ```python
 # Get trade history with cursor-based pagination
-result = client.hyperliquid.trades.list("ETH", start="2024-01-01", end="2024-01-02", limit=1000)
-trades = result.data
+result = client.hyperliquid.trades.history("ETH", start="2024-01-01", end="2024-01-02", limit=1000)
+trades = list(result.data)
 
 # Paginate through all results
-while result.next_cursor:
-    result = client.hyperliquid.trades.list(
+while result.has_more:
+    result = client.hyperliquid.trades.history(
         "ETH",
         start="2024-01-01",
         end="2024-01-02",
@@ -324,25 +378,27 @@ while result.next_cursor:
     )
     trades.extend(result.data)
 
-# The API does not filter trades by side; filter the returned rows
-buys = [t for t in result.data if t.side == "B"]
+# One side of the tape: side="buy" (side == "B") or side="sell" (side == "A").
+# The API filters before paging, so a full page holds `limit` matching trades.
+buys = client.hyperliquid.trades.history("ETH", start="2024-01-01", end="2024-01-02", side="buy")
 
-# Get recent trades (Lighter and HIP-3 - have real-time data)
+# Get recent trades (HIP-3, HIP-4, spot and Lighter), optionally one side
 recent = client.lighter.trades.recent("BTC", limit=100)
+recent_sells = client.spot.trades.recent("HYPE-USDC", limit=100, side="sell")
 
 # HIP-3 recent trades (case-sensitive coins)
 hip3_recent = client.hyperliquid.hip3.trades.recent("km:US500", limit=100)
 
 # HIP-3 trade history
-hip3_trades = client.hyperliquid.hip3.trades.list("km:US500", start="2026-09-01", end="2026-09-02")
+hip3_trades = client.hyperliquid.hip3.trades.history("km:US500", start="2026-09-01", end="2026-09-02")
 
 # Async versions
-result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
+result = await client.hyperliquid.trades.ahistory("ETH", start=..., end=...)
 recent = await client.lighter.trades.arecent("BTC", limit=100)
 hip3_recent = await client.hyperliquid.hip3.trades.arecent("km:US500", limit=100)
 ```
 
-**Note:** The `recent()` method is available for Lighter.xyz and HIP-3 (both have real-time data ingestion). Hyperliquid does not have a recent trades endpoint - use `list()` with a time range instead.
+**Note:** `recent()` is available on HIP-3, HIP-4, spot and both Lighter deployments. The API does not serve it for Hyperliquid core, so `client.hyperliquid.trades.recent()` raises `OxArchiveError` with `error_code == "unsupported_for_venue"` before sending; use `history()` with a time range there.
 
 ### Instruments
 
@@ -359,7 +415,7 @@ instruments = await client.hyperliquid.instruments.alist()
 btc = await client.hyperliquid.instruments.aget("BTC")
 ```
 
-#### Lighter.xyz Instruments
+#### Lighter Instruments
 
 Lighter instruments have a different schema with additional fields for fees, market IDs, and minimum order amounts:
 
@@ -423,7 +479,7 @@ history = client.hyperliquid.hip3.breadth.history(
     interval="5m",  # 1m, 5m, 15m, 30m, 1h, 4h, 1d
     limit=1000,
 )
-while history.next_cursor:
+while history.has_more:
     history = client.hyperliquid.hip3.breadth.history(
         start="2026-08-28T00:00:00Z",
         end="2026-08-29T00:00:00Z",
@@ -458,7 +514,7 @@ price = await client.hyperliquid.hip3.oracle.aexternal_price("km:US500")
 bounds = await client.hyperliquid.hip3.oracle.adiscovery_bounds("km:US500")
 ```
 
-`external_price` and `mark_price` are `None` when the market has none. The discovery bounds are `reference_price` times one minus and one plus `bound_fraction`, where the reference is the external price when available and the mark price otherwise (`reference_source`) and the fraction follows from the market's max leverage. The full ratcheted range can be wider when a deployer's reset configuration applies. `timestamp` is Unix milliseconds.
+`external_price` and `mark_price` are `None` when the market has none. The discovery bounds are `reference_price` times one minus and one plus `bound_fraction`, where the reference is the external price when available and the mark price otherwise (`reference_source`) and the fraction follows from the market's max leverage. The full ratcheted range can be wider when a deployer's reset configuration applies. `timestamp` is a UTC `datetime`, and `timestamp_ms` the same instant in Unix milliseconds.
 
 #### HIP-4 Outcome Markets
 
@@ -511,7 +567,7 @@ summary = client.hyperliquid.hip4.get_summary("0")           # mark_price is in 
 
 Hyperliquid spot pairs live at `/v1/hyperliquid/spot` and are accessible via `client.spot`. Symbols use dashed canonical form (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format (`PURR/USDC` or `@107`) internally. Spot has **no funding, no open interest, or liquidations**. Candle history is served at `/v1/hyperliquid/spot/candles/{symbol}` from exactly `2025-03-22T10:50:22Z`, supports `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, and `1w`, and accepts a maximum of 1,000 rows per page with numeric timestamp-string cursors; pass each `next_cursor` back unchanged.
 
-Trade history goes back to 2025-03-22. Orderbook, L4, TWAP, and order lifecycle are live-only from 2026-05-05.
+Trade history goes back to 2025-03-22. L4 and the order lifecycle are served from 2026-03-10, the order book from 2026-05-05 and TWAP statuses from May 2026; `client.symbols.list()` has each pair's exact starts.
 
 ```python
 # Pair discovery
@@ -549,8 +605,8 @@ checkpoints = client.spot.l4_orderbook.history("HYPE-USDC", start=..., end=...)
 # L4 order lifecycle
 orders = client.spot.orders.history("HYPE-USDC", start=..., end=...)
 
-# TWAP statuses, by symbol or by user wallet
-twap_pair = client.spot.twap.by_symbol("HYPE-USDC", start=..., end=...)
+# TWAP statuses, by symbol (history() is the same method as by_symbol()) or by user wallet
+twap_pair = client.spot.twap.history("HYPE-USDC", start=..., end=...)
 twap_user = client.spot.twap.by_user("0xabc...", start=..., end=...)
 
 # Per-dataset freshness lag: orderbook, trades, l4_diffs, l4_checkpoints,
@@ -712,7 +768,7 @@ liquidations = client.hyperliquid.liquidations.history(
 
 # Paginate through all results
 all_liquidations = list(liquidations.data)
-while liquidations.next_cursor:
+while liquidations.has_more:
     liquidations = client.hyperliquid.liquidations.history(
         "BTC",
         start="2025-06-01",
@@ -755,6 +811,7 @@ lighter_liquidations = client.lighter.liquidations.history(
     limit=1000
 )
 for liq in lighter_liquidations.data:
+    # timestamp is a UTC datetime; timestamp_ms is the same instant in Unix milliseconds
     print(liq.timestamp, liq.price, liq.size, liq.usd_amount, liq.ask_account, liq.bid_account)
 
 # Robinhood Chain liquidations start at the venue launch, 2026-06-26 20:10:26 UTC.
@@ -817,7 +874,7 @@ print(f"Trades last updated: {freshness.trades.last_updated}, lag: {freshness.tr
 print(f"Funding last updated: {freshness.funding.last_updated}")
 print(f"OI last updated: {freshness.open_interest.last_updated}")
 
-# Lighter.xyz
+# Lighter
 lighter_freshness = client.lighter.get_freshness("BTC")
 
 # Lighter on Robinhood Chain
@@ -848,7 +905,7 @@ print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
 print(f"  Long: ${summary.long_liquidation_volume_24h}")
 print(f"  Short: ${summary.short_liquidation_volume_24h}")
 
-# Lighter.xyz (price, funding, OI; no volume/liquidation data)
+# Lighter (price, funding, OI; no volume/liquidation data)
 lighter_summary = client.lighter.get_summary("BTC")
 
 # Lighter on Robinhood Chain (same shape as mainnet Lighter)
@@ -880,7 +937,7 @@ prices = client.hyperliquid.get_price_history(
 for snapshot in prices.data:
     print(f"{snapshot.timestamp}: mark={snapshot.mark_price}, oracle={snapshot.oracle_price}, mid={snapshot.mid_price}")
 
-# Lighter.xyz
+# Lighter
 lighter_prices = client.lighter.get_price_history("BTC", start="2026-01-01", end="2026-01-02", interval="1h")
 
 # Lighter on Robinhood Chain
@@ -891,7 +948,7 @@ hip3_prices = client.hyperliquid.hip3.get_price_history("km:US500", start="2026-
 
 # Paginate for larger ranges
 result = client.hyperliquid.get_price_history("BTC", start=..., end=..., interval="4h", limit=1000)
-while result.next_cursor:
+while result.has_more:
     result = client.hyperliquid.get_price_history(
         "BTC", start=..., end=..., interval="4h",
         cursor=result.next_cursor, limit=1000
@@ -923,13 +980,13 @@ for candle in candles.data:
 
 # Cursor-based pagination for large datasets
 result = client.hyperliquid.candles.history("BTC", start=..., end=..., interval="1m", limit=1000)
-while result.next_cursor:
+while result.has_more:
     result = client.hyperliquid.candles.history(
         "BTC", start=..., end=..., interval="1m",
         cursor=result.next_cursor, limit=1000
     )
 
-# Lighter.xyz candles
+# Lighter candles
 lighter_candles = client.lighter.candles.history(
     "BTC",
     start="2024-01-01",
@@ -996,9 +1053,10 @@ page = client.hyperliquid.cvd.history(
 for bucket in page.data:
     print(bucket.timestamp, bucket.buy_volume, bucket.sell_volume, bucket.delta)
 
-# Follow next_cursor with the same start, end and interval. Stop on the
-# cursor, not on a short page: below 1h a page can be short and still carry one.
-while page.next_cursor:
+# Follow next_cursor with the same start, end and interval while has_more is
+# True. Stop on has_more, not on a short page: below 1h a page can be short
+# and still not be the last.
+while page.has_more:
     page = client.hyperliquid.cvd.history(
         "BTC",
         start="2026-09-01T00:00:00Z",
@@ -1023,11 +1081,13 @@ async for bucket in client.hyperliquid.hip3.cvd.aiterate("km:US500", start="2026
     ...
 ```
 
-Buckets are labelled by their open time in UTC (`timestamp`, Unix milliseconds) and omitted when they hold no trades. `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so `1w` buckets open on Thursdays, and at those widths the first and last bucket of a window can be partial. `cumulative_delta` restarts on every page: to join pages, rebuild the running total from `delta`. A response that is one page of several says so in `meta.notice`.
+Buckets are labelled by their open time (`timestamp`, a UTC `datetime`; `timestamp_ms` in Unix milliseconds) and omitted when they hold no trades. `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so `1w` buckets open on Thursdays, and at those widths the first and last bucket of a window can be partial. `cumulative_delta` restarts on every page: to join pages, rebuild the running total from `delta`. A response that is one page of several says so in `meta.notice`.
 
 ### L4 Orderbook (Order-Level)
 
-Get L4 order-level orderbook data with user attribution. Available for Hyperliquid and HIP-3.
+Get L4 order-level orderbook data with user attribution. Available for Hyperliquid core, HIP-3, HIP-4 (`client.hyperliquid.hip4.l4_orderbook`) and spot (`client.spot.l4_orderbook`).
+
+In a snapshot from `get()`, each resting order's `timestamp` is the time it joined the queue, as an RFC 3339 string, with `timestamp_ms` the same instant in Unix milliseconds. When the queue time is unknown, `timestamp` is `None` and `timestamp_ms` is `0`.
 
 ```python
 # Get current L4 orderbook snapshot (Hyperliquid)
@@ -1073,7 +1133,9 @@ hip3_snapshot = await client.hyperliquid.hip3.l4_orderbook.aget("km:US500")
 | `diffs(symbol, *, start, end, cursor, limit)` | Get L4 orderbook diffs (order-level changes) |
 | `history(symbol, *, start, end, cursor, limit)` | Get L4 orderbook history (full checkpoints; `depth` applies to `get()` only) |
 
-### L3 Orderbook (Lighter.xyz Only)
+History replays over the WebSocket too, on every product; see [L4 and Full-Depth Replay](#l4-and-full-depth-replay).
+
+### L3 Orderbook (Lighter Only)
 
 Get Lighter L3 individual order-level snapshots from March 5, 2026, capped at 250 orders per side.
 
@@ -1093,13 +1155,12 @@ history = client.lighter.l3_orderbook.history(
     "BTC",
     start="2026-03-05",
     end="2026-03-06",
-    granularity="checkpoint",  # checkpoint (default), 30s, 10s, 1s, tick
     account=281474976710654,   # optional: one account's orders
     limit=100
 )
 
 # Paginate through results
-while history.next_cursor:
+while history.has_more:
     history = client.lighter.l3_orderbook.history(
         "BTC",
         start="2026-03-05",
@@ -1118,7 +1179,7 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 | Method | Description |
 |--------|-------------|
 | `get(symbol, *, timestamp, depth, account)` | Get an L3 snapshot, up to 250 orders per side |
-| `history(symbol, *, start, end, cursor, limit, account)` | Get L3 history from March 5, 2026, up to 250 orders per side |
+| `history(symbol, *, start, end, cursor, limit, account)` | Get L3 history from March 5, 2026, up to 250 orders per side (no `depth` or `granularity`) |
 
 ### L2 Orderbook (Full-Depth)
 
@@ -1129,8 +1190,9 @@ Get L2 full-depth orderbook derived from L4 data. Available for Hyperliquid and 
 l2 = client.hyperliquid.l2_orderbook.get("BTC")
 l2_historical = client.hyperliquid.l2_orderbook.get("BTC", timestamp=1711900800000)
 
-# L2 orderbook history
+# L2 orderbook history, optionally limited to the top levels of each snapshot
 l2_history = client.hyperliquid.l2_orderbook.history("BTC", start=start, end=end)
+l2_top = client.hyperliquid.l2_orderbook.history("BTC", start=start, end=end, depth=50)
 
 # L2 tick-level diffs
 l2_diffs = client.hyperliquid.l2_orderbook.diffs("BTC", start=start, end=end)
@@ -1149,12 +1211,12 @@ l2_diffs = await client.hyperliquid.l2_orderbook.adiffs("BTC", start=..., end=..
 | Method | Description |
 |--------|-------------|
 | `get(symbol, *, timestamp, depth)` | Get L2 full-depth orderbook snapshot |
-| `history(symbol, *, start, end, cursor, limit)` | Get L2 orderbook history (every level; `depth` applies to `get()` only) |
+| `history(symbol, *, start, end, cursor, limit, depth)` | Get L2 orderbook history (every level, or the top `depth` levels per side) |
 | `diffs(symbol, *, start, end, cursor, limit)` | Get L2 tick-level diffs |
 
 ### Orders (L4 Order History)
 
-Get L4 order history, order flow aggregation, and TP/SL data. Available for Hyperliquid and HIP-3.
+Get L4 order history, order flow aggregation, and TP/SL data. Available for Hyperliquid core, HIP-3 and HIP-4; spot serves order history only.
 
 ```python
 # Get order history
@@ -1175,6 +1237,11 @@ result = client.hyperliquid.orders.history(
     order_type="limit"
 )
 
+# Only orders whose trigger fired (triggered=False excludes them)
+fired = client.hyperliquid.orders.history(
+    "BTC", start="2026-09-01", end="2026-09-02", triggered=True
+)
+
 # Get order flow aggregation: one page of time buckets
 flow = client.hyperliquid.orders.flow(
     "BTC",
@@ -1184,8 +1251,8 @@ flow = client.hyperliquid.orders.flow(
 )
 buckets = list(flow.data)
 # A page holds up to `limit` buckets (default 1000, max 10000); follow the
-# cursor with the same start, end and interval until it is None
-while flow.next_cursor:
+# cursor with the same start, end and interval while has_more is True
+while flow.has_more:
     flow = client.hyperliquid.orders.flow(
         "BTC",
         start="2026-07-13T00:00:00Z",
@@ -1220,11 +1287,11 @@ hip3_orders = await client.hyperliquid.hip3.orders.ahistory("km:US500", start=..
 
 | Method | Description |
 |--------|-------------|
-| `history(symbol, *, start, end, user, status, order_type, cursor, limit)` | Get order history |
+| `history(symbol, *, start, end, user, status, order_type, triggered, cursor, limit)` | Get order history |
 | `flow(symbol, *, start, end, interval, cursor, limit)` | Get order flow aggregation, one page of buckets |
 | `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history |
 
-Hyperliquid core and HIP-3 also have `trigger_levels()` and `trigger_levels_history()`. HIP-4 serves `history()`, `flow()` and `tpsl()`. Spot serves `history(symbol, *, start, end, cursor, limit)` only, without user, status or order-type filters.
+Hyperliquid core and HIP-3 also have `trigger_levels()` and `trigger_levels_history()`. HIP-4 serves `history()`, `flow()` and `tpsl()`. Spot serves `history(symbol, *, start, end, cursor, limit)` only, without user, status, order-type or triggered filters.
 
 ### Account Positions
 
@@ -1442,6 +1509,7 @@ coverage = await client.data_quality.acoverage()
 |--------|-------------|
 | `status()` | Overall system health and per-exchange status |
 | `coverage()` | Data coverage summary for venue APIs |
+| `status_coverage()` | The same summary from the public `/v1/status/coverage` route |
 | `exchange_coverage(exchange)` | Coverage details for a venue scope (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`) |
 | `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage. The symbol is sent as given, URL-encoded (`km:US500`, `HYPE-USDC`, `#0`) |
 | `list_incidents(...)` | List incidents with filtering and pagination |
@@ -1888,9 +1956,11 @@ The WebSocket client supports live subscriptions for supported Hyperliquid and L
 
 > WebSocket bulk streaming has been discontinued. For large dataset downloads, use the S3 Parquet bulk export in the [Data Catalog](https://www.0xarchive.io/data). The `stream()`, `multi_stream()`, and `stream_stop()` methods remain for compatibility but are deprecated: each call emits a `DeprecationWarning`, and the server answers with an error message (a `WsError` on `on_message`) instead of data. The `on_batch`, `on_stream_start`, `on_stream_progress`, and `on_stream_complete` handler setters are deprecated too: setting one emits a `DeprecationWarning`, and the handler is never called.
 
-> Lighter supports live subscriptions on `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` at `wss://api.0xarchive.io/ws` (the client default). `lighter_candles` and `lighter_l3_orderbook` remain replay-only. All six Lighter channels support historical replay.
+> Lighter supports live subscriptions on `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` at `wss://api.0xarchive.io/ws` (the client default). `lighter_candles` and `lighter_l3_orderbook` remain replay-only. All six Lighter channels support historical replay, and replay messages have the same shapes as the live ones.
 
 > Lighter on Robinhood Chain supports live subscriptions on `rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`, and `rh_lighter_funding` at `wss://api.0xarchive.io/ws` only, with the same message shapes as the mainnet Lighter channels. `rh_lighter_candles` is replay-only. All five channels support historical replay.
+
+Every connection selects API version `2026-10-01` (the `version` connection parameter). Server errors arrive on `on_message` as `WsError` messages with a stable `error_code` (see [Error Handling](#error-handling)): for example `unsupported_for_venue` when a channel does not offer the requested mode, `slow_consumer` when the connection fell behind and messages were dropped, and `endpoint_unsupported` when the endpoint does not serve the channel.
 
 ```python
 import asyncio
@@ -1942,7 +2012,7 @@ Hyperliquid `open_interest` and `funding` also stream live, in addition to histo
 
 ### Full-Depth L2 Book
 
-`orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3) stream every price level of the book, not just the top 20, aggregated from the order-level book. A subscription opens with an `l4_snapshot` of the whole book, followed by `l4_batch` messages of changed levels. Receive them with `on_l4_snapshot` and `on_l4_batch`; the `channel` argument tells them apart from the L4 channels. These channels are live-only; stored full-depth history is on REST `l2_orderbook.history()` and `l2_orderbook.diffs()`.
+`orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3) stream every price level of the book, not just the top 20, aggregated from the order-level book. A subscription opens with an `l4_snapshot` of the whole book, followed by `l4_batch` messages of changed levels. Receive them with `on_l4_snapshot` and `on_l4_batch`; the `channel` argument tells them apart from the L4 channels. Stored history replays over the same messages (see [L4 and Full-Depth Replay](#l4-and-full-depth-replay)) and is also served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
 
 ```python
 book = {"B": {}, "A": {}}
@@ -1969,7 +2039,7 @@ ws.subscribe_hip3_orderbook_full("km:US500")  # case-sensitive
 
 Each level is `{"px", "sz", "n"}` with numeric values; a changed level also carries `side` (`"B"` or `"A"`) and `bn`, the block it was applied in. The snapshot's `data` also holds `bid_count`, `ask_count`, `total_bid_size`, `total_ask_size`, `mid_price`, `spread`, `spread_bps` and `is_crossed`, and `last_block_number` on the message is the block the snapshot reflects.
 
-### Live Lighter.xyz Data
+### Live Lighter Data
 
 Live Lighter messages use the same `data` envelope as Hyperliquid live data. Symbols are the ones returned by `client.lighter.instruments.list()`; they are case-insensitive on subscribe and echoed uppercase. Live Lighter data is served at `wss://api.0xarchive.io/ws`, the client default; `wss://stream.0xarchive.io/ws` does not serve Lighter channels and answers a Lighter subscribe with an error pointing to `wss://api.0xarchive.io/ws`. It is available on every plan and metered per message like Hyperliquid live data, with the same per-plan subscription and connection limits and the limit of 10 subscribe operations per second.
 
@@ -1988,8 +2058,8 @@ def on_context(channel, coin, ctx):
     print(f"Lighter {coin} OI {ctx.open_interest} funding {ctx.funding_rate} mark {ctx.mark_price}")
 
 def on_message(msg):
-    if isinstance(msg, WsError):  # includes lag notices
-        print(f"Server: {msg.message}")
+    if isinstance(msg, WsError):  # lag notices carry error_code "slow_consumer"
+        print(f"Server: {msg.error_code}: {msg.message}")
 
 async def main():
     ws = OxArchiveWs(WsOptions(api_key="0xa_your_api_key"))
@@ -2034,7 +2104,7 @@ The generic form works too: `ws.subscribe("lighter_orderbook", "BTC", interval_m
 | `prev_day_price` | `prevDayPx` | Derived from the last trade price and Lighter's 24h percent change |
 | `impact_prices` | `impactPxs` | Always `None` (Lighter has no impact prices) |
 
-**Falling behind**: if your connection falls behind `lighter_trades`, `lighter_open_interest`, or `lighter_funding`, the server sends an error notice (for example `Dropped ~N live lighter_trades messages for BTC: ...`) and continues. If the lag persists, it stops that subscription with `Stopped the lighter_trades stream for BTC: your connection is too slow to keep up. Re-subscribe to resume.`; call the subscribe method again to resume. `lighter_orderbook` always sends the newest book; a book skipped between intervals loses nothing because each book is a full state.
+**Falling behind**: if your connection falls behind `lighter_trades`, `lighter_open_interest`, or `lighter_funding`, the server sends an error notice with `error_code == "slow_consumer"` (for example `Dropped ~N live lighter_trades messages for BTC: ...`) and continues. If the lag persists, it stops that subscription with `Stopped the lighter_trades stream for BTC: your connection is too slow to keep up. Re-subscribe to resume.`; call the subscribe method again to resume. `lighter_orderbook` always sends the newest book; a book skipped between intervals loses nothing because each book is a full state.
 
 ### Live Lighter on Robinhood Chain Data
 
@@ -2097,8 +2167,8 @@ async def main():
         speed=10                                     # Optional, defaults to 1x
     )
 
-    # Lighter.xyz replay with granularity. Replay rows keep their historical
-    # shapes, which differ from the live Lighter messages.
+    # Lighter replay with granularity. Replay messages have the same shapes
+    # as the live Lighter messages.
     await ws.replay(
         "lighter_orderbook", "BTC",
         start=int(time.time() * 1000) - 86400000,
@@ -2121,9 +2191,27 @@ async def main():
 asyncio.run(main())
 ```
 
-#### Hyperliquid Core L4 Replay
+`on_replay_data` receives every replayed record together with its channel: `(channel, coin, timestamp, record)`. Lighter and Robinhood Chain records are decoded with the same parsers as live messages: an `OrderBook` on `lighter_orderbook`, a `list[Trade]` (one leg per message) on `lighter_trades` and a `LighterMarketContextUpdate` on `lighter_open_interest` and `lighter_funding`, and likewise for the `rh_lighter_*` channels. Other channels' records are passed through as sent. `decode_lighter_payload(channel, coin, data)` applies the same decoding to a `replay_snapshot`.
 
-Historical replay for Hyperliquid core `l4_diffs` and `l4_orders` begins with one typed `WsL4Snapshot` message and continues with ordered `WsL4Batch` messages. Apply each batch in the order received; use the snapshot's `last_block_number` with each event's block/sequence fields as the checkpoint boundary. The dedicated `on_l4_snapshot` and `on_l4_batch` callbacks keep their raw payload shapes; `on_message` receives the typed envelopes.
+```python
+def on_record(channel, coin, timestamp, record):
+    if channel == "lighter_trades":
+        for leg in record:  # list[Trade]
+            print(timestamp, leg.side, leg.price, leg.size, leg.account_index)
+    elif channel == "lighter_orderbook":
+        print(timestamp, record.mid_price)  # OrderBook
+
+ws.on_replay_data(on_record)
+await ws.replay("lighter_trades", "BTC", start=start_ms, end=end_ms, speed=10)
+```
+
+Replay only runs on channels that replay (see [Available Channels](#available-channels)): `replay()` and `multi_replay()` raise `ValueError` before sending for a live-only channel such as `ticker`, `spot_orderbook` or `spot_trades`.
+
+#### L4 and Full-Depth Replay
+
+Every L4 channel replays: `l4_diffs` and `l4_orders` (Hyperliquid core), `hip3_l4_diffs` and `hip3_l4_orders`, `hip4_l4_diffs` and `hip4_l4_orders`, and `spot_l4_diffs` and `spot_l4_orders`. So do the full-depth L2 channels `orderbook_full` and `hip3_orderbook_full`. Replay is available from each product's first L4 checkpoint (`available_from` in `client.capabilities()`; a coin listed later starts at its own first checkpoint).
+
+These replays are bulk. A replay begins with one typed `WsL4Snapshot` from the nearest checkpoint at or before `start` and continues with ordered `WsL4Batch` messages until `end`, as fast as the connection takes them: `speed` is ignored, `replay_seek()` is refused (restart the replay at the new start instead), and each replays on its own, never inside `multi_replay()`. Apply each batch in the order received; use the snapshot's `last_block_number` with each event's block/sequence fields as the checkpoint boundary. Full-depth batches carry changed price levels `{"side", "px", "sz", "n", "bn"}`, exactly like the live channel. The dedicated `on_l4_snapshot` and `on_l4_batch` callbacks keep their raw payload shapes; `on_message` receives the typed envelopes.
 
 ```python
 from oxarchive import WsL4Batch, WsL4Snapshot
@@ -2138,10 +2226,11 @@ def on_message(message):
 
 
 ws.on_message(on_message)
-await ws.replay("l4_diffs", "BTC", start=..., end=..., speed=10)
+await ws.replay("l4_diffs", "BTC", start=..., end=...)
+await ws.replay("hip3_l4_orders", "xyz:TSLA", start=..., end=...)
+await ws.replay("spot_l4_diffs", "PURR-USDC", start=..., end=...)
+await ws.replay("orderbook_full", "ETH", start=..., end=...)
 ```
-
-HIP-3, HIP-4, and Hyperliquid Spot L4 channels remain live-only. They accept live subscriptions and do not accept historical replay.
 
 ### Gap Detection
 
@@ -2195,6 +2284,15 @@ ws = OxArchiveWs(WsOptions(
 
 ### Available Channels
 
+The tables below mirror `client.capabilities()`. The same table ships in the SDK as `oxarchive.websocket.WS_CHANNELS`: `subscribe()` raises `ValueError` before sending for a channel without live data, `replay()` for a channel without replay, and `multi_replay()` also for the bulk L4 and full-depth channels, which replay on their own.
+
+```python
+from oxarchive.websocket import WS_CHANNELS
+
+spec = WS_CHANNELS["spot_l4_diffs"]
+print(spec.venue, spec.live, spec.replay, spec.bulk_replay)  # spot True True True
+```
+
 #### Hyperliquid Channels
 
 | Channel | Description | Requires Coin | Live Subscription | Historical Replay |
@@ -2207,11 +2305,11 @@ ws = OxArchiveWs(WsOptions(
 | `funding` | Funding rate records | Yes | Yes | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
 | `all_tickers` | All market tickers | No | Yes | No |
-| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
-| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
-| `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | No |
+| `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes (bulk) |
+| `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes (bulk) |
+| `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | Yes (bulk) |
 
-Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. Their sequence is `l4_snapshot` followed by ordered `l4_batch` events. HIP-3, HIP-4, and Hyperliquid Spot L4 remain live-only.
+Bulk replays open with an `l4_snapshot` and continue with ordered `l4_batch` messages; see [L4 and Full-Depth Replay](#l4-and-full-depth-replay).
 
 > **Note:** ``liquidations`` and ``hip3_liquidations`` now stream live. Each item shares the trades wire shape (a fill row with ``is_liquidation: true``). The SDK exposes a typed ``on_liquidations`` callback that decodes them into :class:`Liquidation` records.
 
@@ -2221,15 +2319,15 @@ Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. T
 |---------|-------------|---------------|-------------------|-------------------|
 | `hip3_orderbook` | HIP-3 L2 order book snapshots | Yes | Yes | Yes |
 | `hip3_trades` | HIP-3 trade/fill updates | Yes | Yes | Yes |
-| `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes | Yes |
-| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | No | Yes |
-| `hip3_funding` | HIP-3 funding rate records | Yes | No | Yes |
+| `hip3_candles` | HIP-3 OHLCV candle data | Yes | No | Yes |
+| `hip3_open_interest` | HIP-3 open interest snapshots | Yes | Yes | Yes |
+| `hip3_funding` | HIP-3 funding rate records | Yes | Yes | Yes |
 | `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
-| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
-| `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
-| `hip3_orderbook_full` | HIP-3 full-depth L2 order book: every price level, then changed levels | Yes | Yes | No |
+| `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | Yes (bulk) |
+| `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | Yes (bulk) |
+| `hip3_orderbook_full` | HIP-3 full-depth L2 order book: every price level, then changed levels | Yes | Yes | Yes (bulk) |
 
-> **Note:** `orderbook_full` and `hip3_orderbook_full` are live-only; `replay()` and `multi_replay()` reject them with `ValueError` before anything is sent. Stored full-depth history is served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
+> **Note:** Stored full-depth history is also served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 
@@ -2237,13 +2335,13 @@ Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. T
 
 | Channel | Description | Requires Coin | Live Subscription | Historical Replay |
 |---------|-------------|---------------|-------------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | No | Yes |
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Yes | Yes |
 | `hip4_trades` | HIP-4 trade/fill updates | Yes | Yes | Yes |
-| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | No | Yes |
-| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Yes | No |
-| `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Yes | No |
+| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | Yes | Yes |
+| `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Yes | Yes (bulk) |
+| `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Yes | Yes (bulk) |
 
-HIP-4 has no funding or liquidation channels. HIP-4 candles and current outcome-side OI are available over REST; the live HIP-4 order-book and OI bridges are paused, while stored replay remains available. This HIP-4 channel set has no dedicated candle channel. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
+HIP-4 has no funding or liquidation channels, and no candle channel: HIP-4 candles are served over REST. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
 
 ```python
 def on_settled(msg):
@@ -2262,8 +2360,8 @@ ws.subscribe_hip4_trades("#0")
 | `spot_orderbook` | Spot L2 order book snapshots | Yes | Yes | No |
 | `spot_trades` | Spot trade/fill updates | Yes | Yes | No |
 | `spot_twap` | Spot TWAP status updates | Yes | Yes | No |
-| `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Yes | No |
-| `spot_l4_orders` | Spot L4 order lifecycle events | Yes | Yes | No |
+| `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Yes | Yes (bulk) |
+| `spot_l4_orders` | Spot L4 order lifecycle events | Yes | Yes | Yes (bulk) |
 
 > **Note:** Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format internally. The existing `on_orderbook` and `on_trades` typed callbacks fire for `spot_orderbook` and `spot_trades`.
 
@@ -2275,7 +2373,7 @@ ws.subscribe_spot_orderbook("HYPE-USDC")
 ws.subscribe_spot_trades("HYPE-USDC")
 ```
 
-#### Lighter.xyz Channels
+#### Lighter Channels
 
 | Channel | Description | Requires Coin | Live Subscription | Historical Replay |
 |---------|-------------|---------------|-------------------|-------------------|
@@ -2286,7 +2384,7 @@ ws.subscribe_spot_trades("HYPE-USDC")
 | `lighter_funding` | Lighter funding rates (live: market context, same message as `lighter_open_interest`) | Yes | Yes | Yes |
 | `lighter_l3_orderbook` | Lighter L3 order-level orderbook | Yes | No | Yes |
 
-Live Lighter subscriptions are served at `wss://api.0xarchive.io/ws`. Replay of all six channels keeps its historical row shapes, which differ from the live messages described under Live Lighter.xyz Data above. Current Lighter data is also available through the REST resources, and historical Lighter data through REST, WebSocket replay, or exports.
+Live Lighter subscriptions are served at `wss://api.0xarchive.io/ws`. Replay messages of `lighter_orderbook`, `lighter_trades`, `lighter_open_interest` and `lighter_funding` have the shapes of the live messages described under Live Lighter Data above (a replayed trade message holds one leg); `on_replay_data` decodes them. Current Lighter data is also available through the REST resources, and historical Lighter data through REST, WebSocket replay, or exports.
 
 #### Lighter on Robinhood Chain Channels
 
@@ -2298,7 +2396,7 @@ Live Lighter subscriptions are served at `wss://api.0xarchive.io/ws`. Replay of 
 | `rh_lighter_open_interest` | Open interest (live: market context, same message as `rh_lighter_funding`) | Yes | Yes | Yes (from 2026-08-22) |
 | `rh_lighter_funding` | Funding rates (live: market context, same message as `rh_lighter_open_interest`) | Yes | Yes | Yes (from 2026-08-22) |
 
-There is no L3 channel for this deployment. Live Robinhood Chain subscriptions are served at `wss://api.0xarchive.io/ws` only. Replay rows keep their historical shapes, like mainnet Lighter replay, and a multi-channel replay must stay within the `rh_lighter_*` family.
+There is no L3 channel for this deployment. Live Robinhood Chain subscriptions are served at `wss://api.0xarchive.io/ws` only. Replay messages have the live shapes, like mainnet Lighter replay, and a multi-channel replay must stay within the `rh_lighter_*` family.
 
 #### Candle Replay
 
@@ -2312,7 +2410,7 @@ await ws.replay(
     interval="15m"  # 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
 )
 
-# Lighter.xyz candles
+# Lighter candles
 await ws.replay(
     "lighter_candles", "BTC",
     start=int(time.time() * 1000) - 86400000,
@@ -2345,7 +2443,7 @@ await ws.replay(
 
 #### Open Interest / Funding Replay
 
-The Hyperliquid `open_interest` and `funding` channels support both replay and live subscriptions (see Real-time Streaming above). The `hip3_open_interest` and `hip3_funding` channels are **historical only** (replay). They do not support real-time subscriptions. `lighter_open_interest` and `lighter_funding` support both replay and live subscriptions (see Live Lighter.xyz Data above), as do `rh_lighter_open_interest` and `rh_lighter_funding`.
+The Hyperliquid `open_interest` and `funding` channels support both replay and live subscriptions (see Real-time Streaming above), as do `hip3_open_interest` and `hip3_funding`. `lighter_open_interest` and `lighter_funding` support both replay and live subscriptions (see Live Lighter Data above), as do `rh_lighter_open_interest` and `rh_lighter_funding`.
 
 ```python
 # Replay open interest at 50x speed
@@ -2375,7 +2473,7 @@ await ws.replay(
 
 ### Multi-Channel Replay
 
-Replay multiple channels in a single synchronized timeline. All data is interleaved by timestamp, preserving the original timing relationships between orderbook updates, trades, funding rates, and open interest. Before the timeline begins, `replay_snapshot` messages provide the initial state for each channel.
+Replay multiple channels in a single synchronized timeline. All data is interleaved by timestamp, preserving the original timing relationships between orderbook updates, trades, funding rates, and open interest. Before the timeline begins, `replay_snapshot` messages provide the initial state for each channel. All channels must belong to one venue, and the bulk L4 and full-depth channels replay on their own, so `multi_replay()` raises `ValueError` for them before sending.
 
 ```python
 import asyncio
@@ -2395,21 +2493,12 @@ async def main():
         elif channel == "open_interest":
             print(f"  OI: {data.get('open_interest')}")
 
-    # Handle interleaved timeline data
-    def on_data(coin, timestamp, data):
-        # The 'channel' field on the raw message tells you which channel
-        # this record belongs to. Use on_message() for full access.
-        print(f"  {timestamp}: {data}")
-
-    # Full message handler to see the channel field
-    def on_message(msg):
-        if hasattr(msg, 'type') and msg.type == "historical_data":
-            channel = msg.channel
-            print(f"[{channel}] {msg.coin} @ {msg.timestamp}")
+    # Handle interleaved timeline data, with the channel each record belongs to
+    def on_record(channel, coin, timestamp, record):
+        print(f"[{channel}] {coin} @ {timestamp}: {record}")
 
     ws.on_replay_snapshot(on_snapshot)
-    ws.on_historical_data(on_data)
-    ws.on_message(on_message)
+    ws.on_replay_data(on_record)
 
     ws.on_replay_start(lambda ch, coin, start, end, speed:
         print(f"Multi-channel replay started at {speed}x")
@@ -2447,7 +2536,7 @@ await ws.multi_replay(
     speed=10,
 )
 
-# Lighter.xyz: orderbook + trades + OI + funding
+# Lighter: orderbook + trades + OI + funding
 await ws.multi_replay(
     ["lighter_orderbook", "lighter_trades", "lighter_open_interest", "lighter_funding"],
     "BTC",
@@ -2498,17 +2587,60 @@ client.hyperliquid.orderbook.history(
 
 ## Error Handling
 
+Every error the API returns raises `OxArchiveError`. Branch on `error_code`, a stable machine-readable code, rather than on the message:
+
 ```python
 from oxarchive import Client, OxArchiveError
 
 client = Client(api_key="0xa_your_api_key")
 
 try:
-    orderbook = client.orderbook.get("INVALID")
+    trades = client.hyperliquid.trades.history("BTC", start="2026-09-01", end="2026-09-02", side="both")
 except OxArchiveError as e:
-    print(f"API Error: {e.message}")
-    print(f"Status Code: {e.code}")
-    print(f"Request ID: {e.request_id}")
+    print(e.error_code)    # "invalid_parameter"
+    print(e.status)        # 400 (also e.code)
+    print(e.param)         # "side"
+    print(e.valid_values)  # ["buy", "sell"]
+    print(e.message)       # "Invalid side 'both'. Use buy or sell."
+    print(e.request_id)    # quote it when contacting support
+    print(e.details)       # the whole error body, including route-specific fields
+```
+
+| `error_code` | Meaning |
+|--------------|---------|
+| `invalid_parameter` | A parameter failed to parse or validate; `param` and `valid_values` say which and what it accepts |
+| `invalid_symbol` | The symbol is not listed on this venue |
+| `invalid_interval` | The interval is not one the route accepts |
+| `invalid_cursor` | The cursor is malformed, stale, or was issued for other filters |
+| `invalid_time_range` | `start` is after `end`, or a time could not be parsed |
+| `range_before_coverage` | The whole range ends before the dataset's first served instant |
+| `historical_range_exceeded` | The span is longer than the plan allows per request |
+| `historical_depth_exceeded` | The request reaches further back than the plan's history window |
+| `unsupported_for_venue` | The datatype, or the WebSocket mode, is not offered on this venue; `details["available_on"]` lists where it is |
+| `route_not_found` | No route matches the path |
+| `not_found` | The route exists but the resource id does not |
+| `unauthorized`, `forbidden` | Missing or invalid API key; not allowed on this plan |
+| `insufficient_credits`, `rate_limited` | Monthly credits spent; too many requests |
+| `conflict` | The request conflicts with current state |
+| `upstream_unavailable`, `internal_error` | Retry later; quote `request_id` if it persists |
+| `endpoint_unsupported`, `slow_consumer` | WebSocket only (see below) |
+| `positions_unavailable`, `api_key_limit_reached`, `oauth_not_permitted` | Route-specific |
+
+The set is exported as `oxarchive.ERROR_CODES` (and the `ErrorCode` type). A server can add a code before an SDK release lists it, so treat an unknown value like a generic error. A request the SDK refuses before sending, such as `client.hyperliquid.trades.recent()`, raises `OxArchiveError` with the code the API would have returned; a network failure raises it with `status` 0 and no `error_code`.
+
+WebSocket errors arrive on `on_message` as `WsError` messages with the same `error_code` and a `message`. Two codes are WebSocket only: `slow_consumer` (the connection fell behind a stream and messages were dropped; re-subscribe or restart the replay to resync) and `endpoint_unsupported` (the endpoint does not serve the channel or operation; the message names the one that does).
+
+```python
+from oxarchive import WsError
+
+def on_message(msg):
+    if isinstance(msg, WsError):
+        if msg.error_code == "slow_consumer":
+            ws.subscribe_trades("BTC")  # resync
+        else:
+            print(msg.error_code, msg.message)
+
+ws.on_message(on_message)
 ```
 
 ## Type Hints
@@ -2526,6 +2658,7 @@ from oxarchive.types import (
     WalletPositions, LighterL1Accounts,
     CvdBucket, Hip3OracleExternalPrice, Hip4Question, WalletClassification, SymbolEntry,
     WebhookSubscription, WebhookEstimate, WebhookLimits,
+    Capability, ErrorCode,
 )
 from oxarchive.resources.trades import CursorResponse
 
@@ -2541,7 +2674,10 @@ from oxarchive import (
 client = Client(api_key="0xa_your_api_key")
 
 orderbook: OrderBook = client.hyperliquid.orderbook.get("BTC")
-result: CursorResponse = client.hyperliquid.trades.list("BTC", start=..., end=...)
+result: CursorResponse[list[Trade]] = client.hyperliquid.trades.history("BTC", start=..., end=...)
+more: bool = result.has_more
+print(result.meta.venue, result.meta.symbol)  # hyperliquid BTC
+capabilities: list[Capability] = client.capabilities()
 
 # Lighter current data is available, so recent() is available
 recent: list[Trade] = client.lighter.trades.recent("BTC")

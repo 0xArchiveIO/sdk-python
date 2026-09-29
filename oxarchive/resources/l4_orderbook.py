@@ -7,7 +7,7 @@ from typing import Optional
 from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, Timestamp
+from ..types import CursorResponse, ResponseMeta, Timestamp
 
 _UNSUPPORTED_HISTORY = {
     "depth": (
@@ -122,6 +122,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def adiffs(
@@ -148,6 +149,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def history(
@@ -187,6 +189,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -214,6 +217,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod

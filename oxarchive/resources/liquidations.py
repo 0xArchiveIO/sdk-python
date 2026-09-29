@@ -12,7 +12,9 @@ from ..types import (
     LiquidationLevels,
     LiquidationLevelsHistoryItem,
     LiquidationVolume,
+    ResponseMeta,
     Timestamp,
+    _record,
 )
 
 
@@ -52,7 +54,7 @@ class _LiquidationsBase:
         Example:
             >>> result = client.hyperliquid.liquidations.history("BTC", start=start, end=end, limit=1000)
             >>> liquidations = result.data
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.hyperliquid.liquidations.history(
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
@@ -71,6 +73,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -97,6 +100,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def volume(
@@ -143,6 +147,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def avolume(
@@ -171,6 +176,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -207,7 +213,7 @@ class _LiquidationsBase:
             f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels",
             params={"range_pct": range_pct, "buckets": buckets, "side": side, "at": at},
         )
-        return LiquidationLevels.model_validate(data["data"])
+        return _record(LiquidationLevels, data)
 
     async def alevels(
         self,
@@ -225,7 +231,7 @@ class _LiquidationsBase:
             f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels",
             params={"range_pct": range_pct, "buckets": buckets, "side": side, "at": at},
         )
-        return LiquidationLevels.model_validate(data["data"])
+        return _record(LiquidationLevels, data)
 
     def levels_history(
         self,
@@ -276,6 +282,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def alevels_history(
@@ -310,6 +317,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod
@@ -412,6 +420,7 @@ class LiquidationsResource(_LiquidationsBase):
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aby_user(
@@ -456,6 +465,7 @@ class LiquidationsResource(_LiquidationsBase):
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Generic, Literal, Optional, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 
 # =============================================================================
@@ -13,6 +13,143 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # =============================================================================
 
 T = TypeVar("T")
+
+
+# =============================================================================
+# API Contract Types
+# =============================================================================
+
+Venue = Literal["hyperliquid", "hip3", "hip4", "spot", "lighter", "rh-lighter"]
+"""A venue as the API names it in ``meta.venue``, ``/v1/capabilities`` and
+``/v1/symbols``: Hyperliquid core, HIP-3, HIP-4, Hyperliquid spot, Lighter and
+Lighter on Robinhood Chain (``"rh-lighter"``)."""
+
+VENUES: tuple[str, ...] = ("hyperliquid", "hip3", "hip4", "spot", "lighter", "rh-lighter")
+"""Every :data:`Venue`, in the API's order."""
+
+ErrorCode = Literal[
+    "invalid_parameter",
+    "invalid_symbol",
+    "invalid_interval",
+    "invalid_cursor",
+    "invalid_time_range",
+    "range_before_coverage",
+    "historical_range_exceeded",
+    "historical_depth_exceeded",
+    "unsupported_for_venue",
+    "route_not_found",
+    "not_found",
+    "unauthorized",
+    "forbidden",
+    "insufficient_credits",
+    "rate_limited",
+    "conflict",
+    "upstream_unavailable",
+    "internal_error",
+    "endpoint_unsupported",
+    "slow_consumer",
+    "positions_unavailable",
+    "api_key_limit_reached",
+    "oauth_not_permitted",
+]
+"""The stable ``error_code`` values of the API's public error set.
+
+- ``invalid_parameter``: a parameter failed to parse or validate (see
+  ``param`` and ``valid_values`` on the error).
+- ``invalid_symbol``: the symbol is not listed on this venue.
+- ``invalid_interval``: the interval is not one the route accepts.
+- ``invalid_cursor``: the cursor is malformed, stale or was issued for other
+  filters.
+- ``invalid_time_range``: ``start`` is after ``end``, or a time could not be
+  parsed.
+- ``range_before_coverage``: the whole range ends before the dataset's first
+  served instant.
+- ``historical_range_exceeded``: the span is longer than the plan allows per
+  request.
+- ``historical_depth_exceeded``: the request reaches further back than the
+  plan's history window.
+- ``unsupported_for_venue``: the datatype, or the WebSocket mode (live,
+  replay, ``replay.seek``), is not offered on this venue; the message names
+  where it is.
+- ``route_not_found``: no route matches the path.
+- ``not_found``: the route exists but the resource id does not.
+- ``unauthorized``, ``forbidden``, ``insufficient_credits``, ``rate_limited``,
+  ``conflict``: authentication, plan, credit, rate and state refusals.
+- ``upstream_unavailable``: a dependency is unavailable; retry later.
+- ``internal_error``: an unexpected server error.
+- ``endpoint_unsupported`` (WebSocket only): this endpoint does not serve the
+  channel or operation; the message names the endpoint that does.
+- ``slow_consumer`` (WebSocket only): the connection fell behind a stream and
+  messages were dropped; re-subscribe or restart the replay to resync.
+- ``positions_unavailable``, ``api_key_limit_reached``,
+  ``oauth_not_permitted``: route-specific codes.
+
+Branch on these strings rather than on messages. A server can add a code
+before an SDK release names it, so ``error_code`` attributes are typed as
+``str``."""
+
+ERROR_CODES: tuple[str, ...] = (
+    "invalid_parameter",
+    "invalid_symbol",
+    "invalid_interval",
+    "invalid_cursor",
+    "invalid_time_range",
+    "range_before_coverage",
+    "historical_range_exceeded",
+    "historical_depth_exceeded",
+    "unsupported_for_venue",
+    "route_not_found",
+    "not_found",
+    "unauthorized",
+    "forbidden",
+    "insufficient_credits",
+    "rate_limited",
+    "conflict",
+    "upstream_unavailable",
+    "internal_error",
+    "endpoint_unsupported",
+    "slow_consumer",
+    "positions_unavailable",
+    "api_key_limit_reached",
+    "oauth_not_permitted",
+)
+"""Every :data:`ErrorCode`, in the API's order."""
+
+WEBSOCKET_ERROR_CODES: frozenset[str] = frozenset({"endpoint_unsupported", "slow_consumer"})
+"""Codes only WebSocket error messages carry; REST never answers them."""
+
+
+def _ms_from_legacy(values: Any, field: str) -> Any:
+    """Fill ``<field>_ms`` from an integer ``<field>`` (the pre-2026-10 shape).
+
+    With the ``0xArchive-Version`` the SDK sends, the API returns the time as an
+    RFC 3339 string and the integer as ``<field>_ms``. A body in the older shape
+    carries Unix milliseconds in ``<field>`` itself; this keeps ``<field>_ms``
+    set in both cases.
+    """
+    if isinstance(values, dict):
+        value = values.get(field)
+        if (
+            values.get(f"{field}_ms") is None
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            values = {**values, f"{field}_ms": int(value)}
+    return values
+
+
+class _ApiRecord(BaseModel):
+    """A record a method returns on its own, with the response's ``meta`` attached."""
+
+    _response_meta: Optional["ResponseMeta"] = PrivateAttr(default=None)
+
+    @property
+    def response_meta(self) -> Optional["ResponseMeta"]:
+        """The ``meta`` of the response this record came in: ``request_id``,
+        and on per-symbol routes ``symbol`` (the canonical public symbol) and
+        ``venue``. ``None`` on a record that was not returned on its own (for
+        example a row inside a list)."""
+        return self._response_meta
 
 
 class ApiMeta(BaseModel):
@@ -55,7 +192,7 @@ class PriceLevel(BaseModel):
     """Number of orders at this level."""
 
 
-class OrderBook(BaseModel):
+class OrderBook(_ApiRecord):
     """L2 order book snapshot."""
 
     coin: str
@@ -172,7 +309,7 @@ class Trade(BaseModel):
 # =============================================================================
 
 
-class Instrument(BaseModel):
+class Instrument(_ApiRecord):
     """Trading instrument specification (Hyperliquid).
 
     Accepts either snake_case (``sz_decimals``, ``is_active``) or camelCase
@@ -204,7 +341,7 @@ class Instrument(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class Hip3Instrument(BaseModel):
+class Hip3Instrument(_ApiRecord):
     """HIP-3 Builder Perps instrument with latest market data.
 
     Derived from live open interest data. Useful for discovering
@@ -271,7 +408,7 @@ class Hip4AggregatedOi(BaseModel):
     side1_as_of: Optional[datetime] = None
 
 
-class Hip4Outcome(BaseModel):
+class Hip4Outcome(_ApiRecord):
     """HIP-4 per-side instrument metadata.
 
     Returned by /v1/hyperliquid/hip4/instruments and /instruments/{symbol}.
@@ -322,7 +459,7 @@ class Hip4Outcome(BaseModel):
     """Per-side URL slug mirroring HL's pattern."""
 
 
-class Hip4OutcomeAggregate(BaseModel):
+class Hip4OutcomeAggregate(_ApiRecord):
     """HIP-4 per-outcome aggregated metadata.
 
     Returned by /v1/hyperliquid/hip4/outcomes (list, no aggregated_oi)
@@ -366,7 +503,7 @@ class Hip4OutcomeAggregate(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class Hip4OpenInterestRecord(BaseModel):
+class Hip4OpenInterestRecord(_ApiRecord):
     """HIP-4 OI record (per side). Mirrors HIP-3 OI plus outcome_id and side.
 
     Note: `mark_price` is an implied probability in [0, 1], not a USD price.
@@ -386,7 +523,7 @@ class Hip4OpenInterestRecord(BaseModel):
     mid_price: Optional[str] = None
 
 
-class SpotPair(BaseModel):
+class SpotPair(_ApiRecord):
     """Hyperliquid spot trading pair metadata.
 
     Returned by ``/v1/hyperliquid/spot/pairs`` and the per-pair detail endpoint.
@@ -510,7 +647,7 @@ class SpotTwapStatus(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class SpotTableFreshness(BaseModel):
+class SpotTableFreshness(_ApiRecord):
     """Freshness of each dataset for a spot pair, from ``client.spot.get_freshness()``.
 
     One entry per dataset spot serves: ``orderbook``, ``trades``,
@@ -562,8 +699,8 @@ class SpotTableFreshness(BaseModel):
         return {name: value for name in names if (value := getattr(self, name)) is not None}
 
 
-class LighterInstrument(BaseModel):
-    """Trading instrument specification (Lighter.xyz).
+class LighterInstrument(_ApiRecord):
+    """Trading instrument specification (Lighter).
 
     Lighter instruments have a different schema than Hyperliquid with more
     detailed market configuration including fees and minimum amounts.
@@ -655,7 +792,7 @@ class BreadthCounts(BaseModel):
     """Candidates excluded because their completed candle is over five minutes old."""
 
 
-class BreadthSnapshot(BaseModel):
+class BreadthSnapshot(_ApiRecord):
     """Validated HIP-3 percent-above-session-VWAP market snapshot.
 
     Snapshots use the current UTC session and the close of the most recently
@@ -689,7 +826,7 @@ class BreadthSnapshot(BaseModel):
 # =============================================================================
 
 
-class FundingRate(BaseModel):
+class FundingRate(_ApiRecord):
     """Funding rate record."""
 
     coin: str
@@ -714,7 +851,7 @@ class FundingRate(BaseModel):
 # =============================================================================
 
 
-class OpenInterest(BaseModel):
+class OpenInterest(_ApiRecord):
     """Open interest snapshot with market context."""
 
     coin: str
@@ -852,7 +989,7 @@ class LiquidationLevelBucket(BaseModel):
     """Number of short positions in this bucket."""
 
 
-class LiquidationLevels(BaseModel):
+class LiquidationLevels(_ApiRecord):
     """Projected forced-liquidation levels for one snapshot.
 
     Computed from clearinghouse positions and margin state, bucketed around
@@ -864,7 +1001,10 @@ class LiquidationLevels(BaseModel):
     """Mark price at the snapshot, center of the requested range."""
 
     snapshot_ts: str
-    """UTC snapshot time the levels reflect."""
+    """UTC snapshot time the levels reflect, as an RFC 3339 string."""
+
+    snapshot_ts_ms: Optional[int] = None
+    """``snapshot_ts`` in Unix milliseconds."""
 
     block_number: int
     """Hyperliquid block height the snapshot reflects."""
@@ -891,6 +1031,11 @@ class LiquidationLevelsHistoryItem(BaseModel):
     """
 
     snapshot_ts: str
+    """UTC snapshot time, as an RFC 3339 string."""
+
+    snapshot_ts_ms: Optional[int] = None
+    """``snapshot_ts`` in Unix milliseconds."""
+
     block_number: int
     mid_price: float
     total_long: float
@@ -923,7 +1068,7 @@ class TriggerLevelBucket(BaseModel):
     """Ask-side trigger size in the bucket."""
 
 
-class TriggerLevels(BaseModel):
+class TriggerLevels(_ApiRecord):
     """Currently pending stop-loss and take-profit trigger orders.
 
     Grouped into price buckets near the current mid/mark price. Voluntary
@@ -955,6 +1100,11 @@ class TriggerLevelsHistoryItem(BaseModel):
     """
 
     snapshot_ts: str
+    """UTC snapshot time, as an RFC 3339 string."""
+
+    snapshot_ts_ms: Optional[int] = None
+    """``snapshot_ts`` in Unix milliseconds."""
+
     mid_price: float
     total_bid_size: float
     total_ask_size: float
@@ -976,7 +1126,7 @@ class DataTypeFreshness(BaseModel):
     """Lag in milliseconds from real-time."""
 
 
-class CoinFreshness(BaseModel):
+class CoinFreshness(_ApiRecord):
     """Per-coin freshness across all data types."""
 
     coin: str
@@ -1009,7 +1159,7 @@ class CoinFreshness(BaseModel):
 # =============================================================================
 
 
-class CoinSummary(BaseModel):
+class CoinSummary(_ApiRecord):
     """Combined market summary for a coin."""
 
     coin: str
@@ -1124,42 +1274,33 @@ WsChannel = Literal[
 ]
 """Available WebSocket channels.
 
-Notes:
-- ticker/all_tickers are real-time only.
-- liquidations and hip3_liquidations now stream live (realtime + replay).
-  Each item shares the trades wire shape (a fill row with ``is_liquidation: true``).
-- open_interest and funding (Hyperliquid core) support live subscriptions
-  and historical replay.
-- hip3_open_interest, hip3_funding are historical only (replay).
-- lighter_orderbook, lighter_trades, lighter_open_interest and lighter_funding
-  support live subscriptions and historical replay. Live messages use the
-  Hyperliquid-style shapes described on :class:`LighterLiveTrade` and
-  :class:`LighterMarketContext`; replay rows keep their historical shapes.
-- lighter_candles and lighter_l3_orderbook support historical replay only.
-- rh_lighter_orderbook, rh_lighter_trades, rh_lighter_open_interest and
-  rh_lighter_funding (Lighter on Robinhood Chain) support live subscriptions
-  and historical replay, with the same live message shapes as the mainnet
-  ``lighter_*`` channels. rh_lighter_orderbook accepts ``interval_ms`` like
-  lighter_orderbook. rh_lighter_candles supports historical replay only. Live
-  Robinhood Chain channels are served on wss://api.0xarchive.io/ws only.
-- l4_diffs, l4_orders: Hyperliquid core L4 order-level data. Historical replay
-  emits one ``l4_snapshot`` followed by ordered ``l4_batch`` messages.
-- hip3_l4_diffs, hip3_l4_orders: HIP-3 L4 order-level data (live-only).
-- orderbook_full, hip3_orderbook_full: full-depth L2 books (every price level)
-  for Hyperliquid core and HIP-3, aggregated from the order-level book. Live
-  subscriptions open with an ``l4_snapshot`` of the whole book, followed by
-  ``l4_batch`` messages of changed levels. Live-only: replay is rejected with
-  ``ValueError``; stored full-depth history is served by REST
-  ``l2_orderbook.history()`` and ``l2_orderbook.diffs()``.
-- hip4_trades: HIP-4 outcome-market fills (realtime + replay).
-- hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused.
-- hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (live-only).
-- HIP-4 has no funding or liquidation channels. Candles are served through REST.
-- spot_orderbook, spot_trades, spot_twap: Hyperliquid spot (realtime).
-- spot_l4_diffs, spot_l4_orders: Hyperliquid spot L4 (live-only).
-- Spot has no funding / open interest / liquidations WebSocket channels.
-  Candle history is REST-only; subscribe to the supported ``spot_*`` realtime
-  channels for live spot streams.
+Which channels stream live and which replay is listed per channel in
+``oxarchive.websocket.WS_CHANNELS``, which mirrors ``GET /v1/capabilities``
+(``client.capabilities()``). In short:
+
+- Live and replay: ``orderbook``, ``trades``, ``liquidations``,
+  ``open_interest``, ``funding`` and their ``hip3_*`` counterparts;
+  ``hip4_orderbook``, ``hip4_trades``, ``hip4_open_interest``; the four live
+  ``lighter_*`` and ``rh_lighter_*`` channels; every L4 channel
+  (``l4_diffs``, ``l4_orders`` and the ``hip3_``, ``hip4_`` and ``spot_``
+  versions); and the full-depth L2 channels ``orderbook_full`` and
+  ``hip3_orderbook_full``.
+- Replay only: ``candles``, ``hip3_candles``, ``lighter_candles``,
+  ``lighter_l3_orderbook`` and ``rh_lighter_candles``.
+- Live only: ``ticker``, ``all_tickers``, ``spot_orderbook``, ``spot_trades``
+  and ``spot_twap``.
+
+L4 and full-depth replay is bulk: it is single-channel only, ``speed`` is
+ignored and ``replay.seek`` is refused. It opens with one ``l4_snapshot`` from
+the nearest checkpoint at or before ``start``, followed by ordered
+``l4_batch`` messages. Full-depth replay batches carry changed price levels,
+exactly like the live channel.
+
+Liquidation items share the trades wire shape (a fill row with
+``is_liquidation: true``). Lighter and Robinhood Chain live and replay
+messages share one shape per channel (see :class:`LighterLiveTrade` and
+:class:`LighterMarketContext`). HIP-4 has no funding or liquidation channels,
+and spot has no funding, open interest or liquidation channels.
 """
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]
@@ -1174,6 +1315,8 @@ class WsSubscribed(BaseModel):
     coin: Optional[str] = None
     symbol: Optional[str] = None
     """Symbol as the server echoes it (Lighter symbols are echoed uppercase)."""
+    version: Optional[str] = None
+    """The API version the connection selected (``2026-10-01`` with this SDK)."""
 
 
 class WsUnsubscribed(BaseModel):
@@ -1193,10 +1336,22 @@ class WsPong(BaseModel):
 
 
 class WsError(BaseModel):
-    """Error from server."""
+    """Error from server.
+
+    ``error_code`` is the stable code to branch on (see :data:`ErrorCode`),
+    for example ``"invalid_parameter"``, ``"unsupported_for_venue"`` (the
+    channel does not offer that mode), ``"slow_consumer"`` (the connection
+    fell behind and messages were dropped: re-subscribe or restart the replay
+    to resync) or ``"endpoint_unsupported"`` (this endpoint does not serve the
+    channel; the message names the one that does).
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     type: Literal["error"]
     message: str
+    error_code: Optional[str] = None
+    """Stable machine-readable code; ``None`` only from a server that predates it."""
 
 
 class WsData(BaseModel):
@@ -1218,7 +1373,7 @@ class WsData(BaseModel):
 
 
 class WsL4Snapshot(BaseModel):
-    """Initial L4 orderbook state for a live stream or core replay."""
+    """Initial L4 (or full-depth L2) book state for a live stream or a replay."""
 
     type: Literal["l4_snapshot"]
     channel: WsChannel
@@ -1257,7 +1412,7 @@ class WsL4Batch(BaseModel):
 # ``lighter_orderbook`` books share the Hyperliquid live book shape
 # (``{coin, time, levels: [bids, asks]}``) and decode to :class:`OrderBook`.
 # Trades and market context carry Lighter-specific fields and are modelled here.
-# Replay of the same channels keeps its historical row shapes.
+# Replay of the same channels uses the same shapes.
 
 
 class LighterLiveTrade(BaseModel):
@@ -1401,7 +1556,12 @@ class WsReplayStarted(BaseModel):
     end: int
     """End timestamp in milliseconds."""
     speed: float
-    """Playback speed multiplier."""
+    """Playback speed multiplier. Echoed but not applied on the bulk L4 and
+    full-depth replays."""
+    symbol: Optional[str] = None
+    """Symbol as the server echoes it."""
+    version: Optional[str] = None
+    """The API version the connection selected (``2026-10-01`` with this SDK)."""
 
 
 class WsReplayPaused(BaseModel):
@@ -1440,13 +1600,18 @@ class WsReplayStopped(BaseModel):
 
 
 class WsHistoricalData(BaseModel):
-    """Historical data point (replay mode)."""
+    """Historical data point (replay mode).
+
+    ``data`` has the live shape of the channel. On ``lighter_trades`` and
+    ``rh_lighter_trades`` it is a list with one trade leg (see
+    :class:`LighterLiveTrade`); elsewhere it is an object.
+    """
 
     type: Literal["historical_data"]
     channel: WsChannel
     coin: str
     timestamp: int
-    data: dict[str, Any]
+    data: Union[dict[str, Any], list[dict[str, Any]]]
 
 
 class WsReplaySnapshot(BaseModel):
@@ -1463,8 +1628,9 @@ class WsReplaySnapshot(BaseModel):
     coin: str
     timestamp: int
     """Timestamp of the snapshot (ms)."""
-    data: dict[str, Any]
-    """Initial state data for this channel."""
+    data: Union[dict[str, Any], list[dict[str, Any]]]
+    """Initial state data for this channel, in the channel's live shape (a
+    list of trade legs on the Lighter trade channels)."""
 
 
 class OrderbookDelta(BaseModel):
@@ -1489,7 +1655,7 @@ class OrderbookDelta(BaseModel):
 class WsHistoricalTickData(BaseModel):
     """Historical tick data (granularity='tick' mode) - checkpoint + deltas.
 
-    This message type is sent when using granularity='tick' for Lighter.xyz
+    This message type is sent when using granularity='tick' for Lighter
     orderbook data. It provides a full checkpoint followed by incremental deltas.
     """
 
@@ -1767,18 +1933,114 @@ class Web3SubscribeResult(BaseModel):
 # =============================================================================
 
 
-class OxArchiveError(Exception):
-    """SDK error class."""
+def _code_for_status(status: int) -> Optional[str]:
+    """The ``error_code`` for an error body that carries none, from its HTTP status.
 
-    def __init__(self, message: str, code: int, request_id: Optional[str] = None):
+    Mirrors the API's own fallback, so a proxy error page (a 502 with an HTML
+    body, say) still gets a code to branch on.
+    """
+    if status < 400:
+        return None
+    if status == 401:
+        return "unauthorized"
+    if status == 402:
+        return "insufficient_credits"
+    if status == 403:
+        return "forbidden"
+    if status in (404, 410):
+        return "not_found"
+    if status == 405:
+        return "route_not_found"
+    if status == 409:
+        return "conflict"
+    if status == 429:
+        return "rate_limited"
+    if 502 <= status <= 504:
+        return "upstream_unavailable"
+    if status >= 500:
+        return "internal_error"
+    return "invalid_parameter"
+
+
+class OxArchiveError(Exception):
+    """An error from the API, or a request the SDK refused before sending.
+
+    Attributes:
+        message: The error message.
+        code: The HTTP status (``0`` for a network error). Also available as
+            :attr:`status`.
+        request_id: The API's request id, when the response carried one.
+        error_code: The stable, machine-readable code (see
+            :data:`ErrorCode`), for example ``"invalid_parameter"`` or
+            ``"unsupported_for_venue"``. Branch on it rather than on
+            ``message``. ``None`` for network errors. When an error body
+            carries no code (a proxy error page, for example), it is derived
+            from the HTTP status the way the API derives it.
+        param: The parameter that was refused, when the API names one.
+        valid_values: The values that parameter accepts, when the API lists
+            them.
+        details: The whole error body as the API sent it, including any
+            route-specific fields (``available_on`` on
+            ``unsupported_for_venue``, for example). Empty when there was no
+            JSON body.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        code: int,
+        request_id: Optional[str] = None,
+        *,
+        error_code: Optional[str] = None,
+        param: Optional[str] = None,
+        valid_values: Optional[list[Any]] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
         super().__init__(message)
         self.message = message
         self.code = code
         self.request_id = request_id
+        self.error_code = error_code
+        self.param = param
+        self.valid_values = valid_values
+        self.details: dict[str, Any] = dict(details or {})
+
+    @property
+    def status(self) -> int:
+        """The HTTP status (``0`` for a network error); the same value as ``code``."""
+        return self.code
+
+    @classmethod
+    def from_response(cls, status: int, body: Any) -> "OxArchiveError":
+        """Build the error for a non-2xx response from its status and JSON body."""
+        details = body if isinstance(body, dict) else {}
+        message = details.get("error") or details.get("message")
+        if not isinstance(message, str) or not message:
+            message = f"Request failed with status {status}"
+        error_code = details.get("error_code")
+        if not isinstance(error_code, str) or not error_code:
+            error_code = _code_for_status(status)
+        valid_values = details.get("valid_values")
+        param = details.get("param")
+        request_id = details.get("request_id")
+        return cls(
+            message,
+            status,
+            request_id if isinstance(request_id, str) else None,
+            error_code=error_code,
+            param=param if isinstance(param, str) else None,
+            valid_values=valid_values if isinstance(valid_values, list) else None,
+            details=details,
+        )
 
     def __str__(self) -> str:
+        context = []
+        if self.error_code:
+            context.append(f"error_code: {self.error_code}")
         if self.request_id:
-            return f"[{self.code}] {self.message} (request_id: {self.request_id})"
+            context.append(f"request_id: {self.request_id}")
+        if context:
+            return f"[{self.code}] {self.message} ({', '.join(context)})"
         return f"[{self.code}] {self.message}"
 
 
@@ -1803,7 +2065,10 @@ class LighterLiquidation(BaseModel):
     symbol: str
     """Market symbol."""
 
-    timestamp: int
+    timestamp: datetime
+    """Trade time (UTC)."""
+
+    timestamp_ms: Optional[int] = None
     """Trade time in Unix milliseconds."""
 
     transaction_time_us: Optional[int] = None
@@ -1897,6 +2162,11 @@ class LighterLiquidation(BaseModel):
     from the venue's finalized export, which carry an empty ``raw_json``; on
     Robinhood Chain these cover the span before live capture."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _timestamp_ms(cls, values: Any) -> Any:
+        return _ms_from_legacy(values, "timestamp")
+
 
 class LighterLiquidationVolume(BaseModel):
     """Aggregated Lighter liquidation volume for one time bucket.
@@ -1908,7 +2178,10 @@ class LighterLiquidationVolume(BaseModel):
     symbol: str
     """Market symbol."""
 
-    timestamp: int
+    timestamp: datetime
+    """Bucket start (UTC)."""
+
+    timestamp_ms: Optional[int] = None
     """Bucket start in Unix milliseconds."""
 
     total_usd: float
@@ -1916,6 +2189,11 @@ class LighterLiquidationVolume(BaseModel):
 
     count: int
     """Number of liquidation trades in the bucket."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _timestamp_ms(cls, values: Any) -> Any:
+        return _ms_from_legacy(values, "timestamp")
 
 
 # =============================================================================
@@ -2335,7 +2613,21 @@ class ResponseMeta(BaseModel):
     next_cursor: Optional[str] = None
     """Cursor for the next page; ``None`` on the last page."""
 
+    has_more: Optional[bool] = None
+    """On cursor-paged routes, whether another page follows. ``next_cursor``
+    is set exactly when it is ``True``. A final page can be empty when the
+    page before it was exactly full."""
+
     request_id: Optional[str] = None
+
+    symbol: Optional[str] = None
+    """On per-symbol routes, the canonical public symbol the response is for
+    (for example ``BTC``, ``km:US500``, ``HYPE-USDC``, ``#0``)."""
+
+    venue: Optional[str] = None
+    """On per-symbol routes, the venue that served it: ``"hyperliquid"``,
+    ``"hip3"``, ``"hip4"``, ``"spot"``, ``"lighter"`` or ``"rh-lighter"``
+    (see :data:`Venue`)."""
 
     finalized_through: Optional[datetime] = None
     """Every event before this instant is final and will not be re-derived.
@@ -2403,24 +2695,99 @@ class ResponseMeta(BaseModel):
     def _empty_instant_is_none(cls, value: Any) -> Any:
         return None if value == "" else value
 
+    @classmethod
+    def of(cls, envelope: Any) -> "ResponseMeta":
+        """The typed ``meta`` of a response envelope (empty when it has none)."""
+        meta = envelope.get("meta") if isinstance(envelope, dict) else None
+        return cls.model_validate(meta if isinstance(meta, dict) else {})
+
 
 # =============================================================================
 # Pagination Types
 # =============================================================================
 
 
+RecordT = TypeVar("RecordT", bound=_ApiRecord)
+
+
+def _record(model: type[RecordT], envelope: dict[str, Any]) -> RecordT:
+    """Parse ``envelope["data"]`` as ``model`` and attach the response's meta."""
+    record = model.model_validate(envelope["data"])
+    record._response_meta = ResponseMeta.of(envelope)
+    return record
+
+
+def _body(envelope: dict[str, Any]) -> Any:
+    """The payload of a data quality, status coverage or symbols response.
+
+    With the ``0xArchive-Version`` the SDK sends, these routes answer with the
+    standard envelope and the payload is ``data``. A body in the older shape
+    has the payload's fields at the top level instead; it is returned as is.
+    """
+    data = envelope.get("data")
+    return data if isinstance(data, (dict, list)) and "success" in envelope else envelope
+
+
+def _outlier_record(model: type[RecordT], envelope: dict[str, Any]) -> RecordT:
+    """Parse a data quality style response as ``model`` and attach its meta."""
+    record = model.model_validate(_body(envelope))
+    record._response_meta = ResponseMeta.of(envelope)
+    return record
+
+
 class CursorResponse(BaseModel, Generic[T]):
-    """Response with cursor for pagination."""
+    """One page of a cursor-paged response.
+
+    While ``has_more`` is ``True``, pass ``next_cursor`` back unchanged as
+    ``cursor`` with the other arguments unchanged. Stop when ``has_more`` is
+    ``False``: a page can be short, or even empty, and still not be the last,
+    so stop on ``has_more`` rather than on the page size.
+    """
 
     data: T
     """The paginated data."""
 
     next_cursor: Optional[str] = None
-    """Cursor for the next page (use as cursor parameter)."""
+    """Cursor for the next page (use as cursor parameter). Set exactly when
+    ``has_more`` is ``True``."""
+
+    has_more: bool = False
+    """Whether another page follows. Taken from the response's
+    ``meta.has_more``; on a route that does not send it, ``True`` exactly when
+    ``next_cursor`` is set."""
 
     meta: Optional[ResponseMeta] = None
-    """The response's metadata, where the method exposes it: account positions,
-    trades and Lighter liquidations. ``None`` elsewhere."""
+    """The response's metadata: ``request_id``, ``count``, ``has_more``, and on
+    per-symbol routes ``symbol`` and ``venue``, plus route-specific fields such
+    as ``finalized_through`` (Lighter trades) or ``coverage_from`` and
+    ``notice`` (a window before coverage)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _page_state(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        meta = values.get("meta")
+        if isinstance(meta, ResponseMeta):
+            meta_cursor, meta_more = meta.next_cursor, meta.has_more
+        elif isinstance(meta, dict):
+            meta_cursor, meta_more = meta.get("next_cursor"), meta.get("has_more")
+        else:
+            meta_cursor, meta_more = None, None
+        values = dict(values)
+        if values.get("next_cursor") is None and meta_cursor is not None:
+            values["next_cursor"] = meta_cursor
+        if values.get("has_more") is None:
+            values["has_more"] = (
+                bool(meta_more) if meta_more is not None else values.get("next_cursor") is not None
+            )
+        return values
+
+    @classmethod
+    def from_envelope(cls, envelope: dict[str, Any], data: Any) -> "CursorResponse[Any]":
+        """A page from a response envelope and its already-parsed ``data``."""
+        meta = ResponseMeta.of(envelope)
+        return cls(data=data, next_cursor=meta.next_cursor, meta=meta)
 
 
 # Type alias for timestamp parameters
@@ -2430,6 +2797,58 @@ Timestamp = Union[int, str, datetime]
 A time without a time zone is UTC: a naive datetime, an ISO string without an
 offset (``"2026-09-01T12:00:00"``) and a date alone (``"2026-09-01"``, midnight
 UTC) mean the same instant on every machine."""
+
+
+# =============================================================================
+# Capabilities
+# =============================================================================
+
+
+class Capability(BaseModel):
+    """What one venue serves for one datatype, from ``client.capabilities()``.
+
+    One row per venue and datatype. Coverage per symbol is on
+    ``client.symbols.list()``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    venue: str
+    """The venue (see :data:`Venue`)."""
+
+    datatype: str
+    """Datatype id, for example ``"trades"``, ``"l2_orderbook"``,
+    ``"l4_diffs"``, ``"funding"`` or ``"oi"``."""
+
+    rest_routes: list[str] = Field(default_factory=list)
+    """REST route templates that serve it, for example
+    ``/v1/hyperliquid/trades/{symbol}``."""
+
+    ws_channels: list[str] = Field(default_factory=list)
+    """WebSocket channels that carry it."""
+
+    live: bool = False
+    """``True`` when a WebSocket subscription streams it live."""
+
+    replay: bool = False
+    """``True`` when a WebSocket replay serves its history."""
+
+    available_from: Optional[datetime] = None
+    """The first served instant across the venue (UTC), or ``None`` where the
+    datatype has no venue-wide floor."""
+
+    cadence: Optional[str] = None
+    """``"event"``, ``"snapshot"``, ``"sample"``, ``"interval"`` or
+    ``"reference"``."""
+
+    page_limit: Optional[int] = None
+    """The largest ``limit`` one page accepts."""
+
+    intervals: list[str] = Field(default_factory=list)
+    """Values ``interval`` accepts, where the datatype is bucketed."""
+
+    notes: Optional[str] = None
+    """Anything else worth knowing, such as how its replay behaves."""
 
 
 # =============================================================================
@@ -2466,7 +2885,7 @@ class DataTypeStatus(BaseModel):
     """Data completeness over last 24 hours (0-100)."""
 
 
-class StatusResponse(BaseModel):
+class StatusResponse(_ApiRecord):
     """Overall system status response."""
 
     status: Literal["operational", "degraded", "outage", "maintenance"]
@@ -2510,7 +2929,7 @@ class DataTypeCoverage(BaseModel):
     """Completeness percentage (0-100)."""
 
 
-class ExchangeCoverage(BaseModel):
+class ExchangeCoverage(_ApiRecord):
     """Coverage for a single exchange."""
 
     exchange: str
@@ -2520,7 +2939,7 @@ class ExchangeCoverage(BaseModel):
     """Coverage per data type."""
 
 
-class CoverageResponse(BaseModel):
+class CoverageResponse(_ApiRecord):
     """Overall coverage response."""
 
     exchanges: list[ExchangeCoverage]
@@ -2578,7 +2997,7 @@ class SymbolDataTypeCoverage(BaseModel):
     """Empirical data cadence (present when sufficient data exists)."""
 
 
-class SymbolCoverageResponse(BaseModel):
+class SymbolCoverageResponse(_ApiRecord):
     """Per-symbol coverage response."""
 
     exchange: str
@@ -2591,7 +3010,7 @@ class SymbolCoverageResponse(BaseModel):
     """Coverage per data type."""
 
 
-class Incident(BaseModel):
+class Incident(_ApiRecord):
     """Data quality incident."""
 
     id: str
@@ -2653,7 +3072,7 @@ class Pagination(BaseModel):
     """Current offset."""
 
 
-class IncidentsResponse(BaseModel):
+class IncidentsResponse(_ApiRecord):
     """Incidents list response."""
 
     incidents: list[Incident]
@@ -2722,7 +3141,7 @@ class ExchangeLatency(BaseModel):
     """Data freshness metrics."""
 
 
-class LatencyResponse(BaseModel):
+class LatencyResponse(_ApiRecord):
     """Overall latency response."""
 
     measured_at: datetime
@@ -2783,7 +3202,7 @@ class SlaActual(BaseModel):
     """'met' or 'missed'."""
 
 
-class SlaResponse(BaseModel):
+class SlaResponse(_ApiRecord):
     """SLA compliance response."""
 
     period: str
@@ -2814,8 +3233,16 @@ totals; ``1m`` to ``30m`` are summed from taker fills."""
 class CvdBucket(BaseModel):
     """One cumulative volume delta bucket: taker buy and sell notional."""
 
-    timestamp: int
-    """Bucket open time in Unix milliseconds (UTC)."""
+    timestamp: datetime
+    """Bucket open time (UTC)."""
+
+    timestamp_ms: Optional[int] = None
+    """Bucket open time in Unix milliseconds."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _timestamp_ms(cls, values: Any) -> Any:
+        return _ms_from_legacy(values, "timestamp")
 
     buy_volume: float
     """Taker buy notional in the bucket."""
@@ -2836,7 +3263,7 @@ class CvdBucket(BaseModel):
 # =============================================================================
 
 
-class Hip3OracleDiscoveryBounds(BaseModel):
+class Hip3OracleDiscoveryBounds(_ApiRecord):
     """Instantaneous HIP-3 discovery bounds from the reference price and max leverage.
 
     The full ratcheted range can be wider when a deployer's reset
@@ -2867,11 +3294,19 @@ class Hip3OracleDiscoveryBounds(BaseModel):
     block_number: int
     """Source block number."""
 
-    timestamp: int
-    """Source timestamp in Unix milliseconds."""
+    timestamp: datetime
+    """Source time (UTC)."""
+
+    timestamp_ms: Optional[int] = None
+    """Source time in Unix milliseconds."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _timestamp_ms(cls, values: Any) -> Any:
+        return _ms_from_legacy(values, "timestamp")
 
 
-class Hip3OracleExternalPrice(BaseModel):
+class Hip3OracleExternalPrice(_ApiRecord):
     """Latest deployer-pushed external price and mark price for a HIP-3 market."""
 
     symbol: str
@@ -2886,8 +3321,16 @@ class Hip3OracleExternalPrice(BaseModel):
     block_number: int
     """Source block number."""
 
-    timestamp: int
-    """Source timestamp in Unix milliseconds."""
+    timestamp: datetime
+    """Source time (UTC)."""
+
+    timestamp_ms: Optional[int] = None
+    """Source time in Unix milliseconds."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _timestamp_ms(cls, values: Any) -> Any:
+        return _ms_from_legacy(values, "timestamp")
 
 
 # =============================================================================
@@ -2895,7 +3338,7 @@ class Hip3OracleExternalPrice(BaseModel):
 # =============================================================================
 
 
-class Hip4Question(BaseModel):
+class Hip4Question(_ApiRecord):
     """A HIP-4 question: a multi-choice resolver grouping binary outcome markets.
 
     One named outcome per choice, plus a fallback outcome that resolves Yes
@@ -3017,7 +3460,7 @@ class ClassifiedWallet(BaseModel):
     """Metric lookback period (for example ``"24h"``)."""
 
 
-class WalletClassification(BaseModel):
+class WalletClassification(_ApiRecord):
     """One page of wallet classification results."""
 
     wallets: list[ClassifiedWallet] = Field(default_factory=list)

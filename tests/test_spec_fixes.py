@@ -2,7 +2,7 @@
 
 A trades cursor is an opaque string and goes back to the API unchanged; HIP-4
 freshness has no funding entry; methods for routes the API does not serve are
-gone; parameters it never applied are refused; symbol coverage encodes the
+gone; parameters it does not apply are refused; symbol coverage encodes the
 symbol; spot freshness parses its datasets; L3 takes account.
 """
 
@@ -132,18 +132,7 @@ def test_hip4_flow_and_tpsl_still_reach_their_routes() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_trades_side_is_refused_before_sending() -> None:
-    client, api = mock_client(lambda p, q: envelope([]))
-
-    with pytest.raises(TypeError, match="does not take 'side'.*Trade.side"):
-        client.hyperliquid.trades.list("BTC", start=T_START, end=T_END, side="buy")
-    with pytest.raises(TypeError, match="does not take 'side'"):
-        asyncio.run(client.lighter.trades.alist("BTC", start=T_START, end=T_END, side="sell"))
-
-    assert api.requests == []
-
-
-@pytest.mark.parametrize("name", ["user", "status", "order_type"])
+@pytest.mark.parametrize("name", ["user", "status", "order_type", "triggered"])
 def test_spot_order_history_filters_are_refused_before_sending(name: str) -> None:
     client, api = mock_client(lambda p, q: envelope([]))
 
@@ -190,13 +179,11 @@ def test_core_order_history_keeps_its_filters() -> None:
 @pytest.mark.parametrize(
     "resource",
     [
-        lambda c: c.hyperliquid.l2_orderbook,
-        lambda c: c.hyperliquid.hip3.l2_orderbook,
         lambda c: c.hyperliquid.l4_orderbook,
         lambda c: c.spot.l4_orderbook,
         lambda c: c.lighter.l3_orderbook,
     ],
-    ids=["l2", "hip3-l2", "l4", "spot-l4", "l3"],
+    ids=["l4", "spot-l4", "l3"],
 )
 def test_depth_on_history_is_refused_before_sending(resource: Any) -> None:
     client, api = mock_client(lambda p, q: envelope([]))

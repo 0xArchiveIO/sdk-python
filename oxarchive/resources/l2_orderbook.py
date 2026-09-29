@@ -4,16 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, Timestamp
-
-_UNSUPPORTED_HISTORY = {
-    "depth": (
-        "history returns every price level of each snapshot. depth applies to get() only."
-    ),
-}
+from ..types import CursorResponse, ResponseMeta, Timestamp
 
 
 class L2OrderBookResource:
@@ -94,6 +87,7 @@ class L2OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        depth: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """
@@ -105,12 +99,13 @@ class L2OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
+            depth: Price levels per side in each snapshot (omit for every
+                level the plan allows)
 
         Returns:
             CursorResponse with L2 orderbook checkpoints and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
-        reject_unsupported("history", kwargs, _UNSUPPORTED_HISTORY)
         data = self._http.get(
             f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/l2/history",
             params={
@@ -118,11 +113,13 @@ class L2OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
+                "depth": depth,
             },
         )
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -133,11 +130,11 @@ class L2OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        depth: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """Async version of history()."""
         symbol = self._resolve_symbol(symbol, kwargs)
-        reject_unsupported("ahistory", kwargs, _UNSUPPORTED_HISTORY)
         data = await self._http.aget(
             f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/l2/history",
             params={
@@ -145,11 +142,13 @@ class L2OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
+                "depth": depth,
             },
         )
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def diffs(
@@ -188,6 +187,7 @@ class L2OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def adiffs(
@@ -214,6 +214,7 @@ class L2OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod

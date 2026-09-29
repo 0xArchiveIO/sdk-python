@@ -383,7 +383,9 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "raw ~1 min" not in readme
     assert "no funding, no liquidations, and no candles" not in readme
     assert "no funding / liquidations / candles" not in types
-    assert "stored replay only; live bridges paused" in types
+    # HIP-4 order book and open interest stream live and replay (capabilities).
+    assert "live bridges paused" not in types
+    assert "``hip4_orderbook``, ``hip4_trades``, ``hip4_open_interest``" in types
     assert "250 orders per side" in l3_resource
     assert "price levels per side" not in l3_resource
     assert "self.candles = CandlesResource" in exchanges
@@ -513,7 +515,7 @@ def test_g1_to_g4_public_copy_has_current_contracts() -> None:
     assert "fractional" in changelog and "non-annualized" in changelog
     assert "45-minute" not in changelog
     assert "l4_snapshot" in websocket and "ordered" in websocket
-    assert "l4_snapshot" in types and "live-only" in types
+    assert "l4_snapshot" in types and "replay is bulk" in types
 
 
 def _breadth_snapshot(*, value_pct: float | None = 20.93) -> dict[str, Any]:

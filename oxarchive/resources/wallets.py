@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Literal, Optional, Union
 
 from ..http import HttpClient
-from ..types import WalletClassification, WalletClassifySort
+from ..types import WalletClassification, WalletClassifySort, _record
 
 
 def _snapshot_date(value: Union[str, date, datetime, None]) -> Optional[str]:
@@ -128,7 +128,7 @@ class WalletsResource:
                 date,
             ),
         )
-        return WalletClassification.model_validate(data["data"])
+        return _record(WalletClassification, data)
 
     async def aclassify(
         self,
@@ -162,5 +162,5 @@ class WalletsResource:
                 date,
             ),
         )
-        return WalletClassification.model_validate(data["data"])
+        return _record(WalletClassification, data)
 

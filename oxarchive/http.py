@@ -6,7 +6,18 @@ from typing import Any, Optional
 
 import httpx
 
-from .types import OxArchiveError
+from .types import OxArchiveError, _code_for_status
+
+API_VERSION = "2026-10-01"
+"""The API version this SDK is written against. Every REST request sends it in
+the ``0xArchive-Version`` header, and the WebSocket client sends it as the
+``version`` connection parameter. It selects the response shapes the SDK
+parses: the standard ``{success, data, meta}`` envelope on every route, RFC
+3339 times with integer ``*_ms`` companions, and the live message shapes on
+Lighter replay."""
+
+API_VERSION_HEADER = "0xArchive-Version"
+"""Request header that selects the API version (echoed on the response)."""
 
 
 class HttpClient:
@@ -23,6 +34,7 @@ class HttpClient:
         return {
             "X-API-Key": self.api_key,
             "Content-Type": "application/json",
+            API_VERSION_HEADER: API_VERSION,
         }
 
     @property
@@ -87,20 +99,36 @@ class HttpClient:
             self._async_client = None
 
     def _handle_response(self, response: httpx.Response) -> dict[str, Any]:
-        """Handle the API response and raise errors if needed."""
+        """Handle the API response and raise errors if needed.
+
+        A non-2xx response raises :class:`OxArchiveError` carrying the status,
+        ``error_code``, ``request_id``, ``param`` and ``valid_values`` from the
+        error body, and the whole body as ``details``.
+        """
         try:
             data = response.json()
         except Exception:
+            if not response.is_success:
+                snippet = response.text[:200].strip()
+                message = f"Request failed with status {response.status_code}"
+                raise OxArchiveError(
+                    f"{message}: {snippet}" if snippet else message,
+                    response.status_code,
+                    error_code=_code_for_status(response.status_code),
+                ) from None
             raise OxArchiveError(
                 f"Invalid JSON response: {response.text[:200]}",
                 response.status_code,
-            )
+            ) from None
 
         if not response.is_success:
-            error_msg = data.get("error", f"Request failed with status {response.status_code}")
-            request_id = data.get("request_id")
-            raise OxArchiveError(error_msg, response.status_code, request_id)
+            raise OxArchiveError.from_response(response.status_code, data)
 
+        if not isinstance(data, dict):
+            raise OxArchiveError(
+                f"Unexpected response: expected a JSON object, got {type(data).__name__}",
+                response.status_code,
+            )
         return data
 
     def get(

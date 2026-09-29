@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional
 
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import BreadthSnapshot, CursorResponse, Timestamp
+from ..types import BreadthSnapshot, CursorResponse, ResponseMeta, Timestamp, _record
 
 BreadthInterval = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
 BREADTH_INTERVALS = frozenset({"1m", "5m", "15m", "30m", "1h", "4h", "1d"})
@@ -53,17 +53,18 @@ class BreadthResource:
         return CursorResponse(
             data=[BreadthSnapshot.model_validate(item) for item in payload["data"]],
             next_cursor=payload.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(payload),
         )
 
     def current(self) -> BreadthSnapshot:
         """Return the latest validated breadth snapshot."""
         payload = self._http.get(f"{self._base_path}/breadth/above-vwap/current")
-        return BreadthSnapshot.model_validate(payload["data"])
+        return _record(BreadthSnapshot, payload)
 
     async def acurrent(self) -> BreadthSnapshot:
         """Async version of :meth:`current`."""
         payload = await self._http.aget(f"{self._base_path}/breadth/above-vwap/current")
-        return BreadthSnapshot.model_validate(payload["data"])
+        return _record(BreadthSnapshot, payload)
 
     def history(
         self,
