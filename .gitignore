@@ -12,6 +12,7 @@ tests/*
 !tests/test_websocket_full_depth.py
 !tests/test_webhooks.py
 !tests/test_webhook_signature.py
+!tests/test_surface_parity.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -2780,6 +2780,283 @@ class SlaResponse(BaseModel):
 
 
 # =============================================================================
+# Cumulative Volume Delta Types
+# =============================================================================
+
+CvdInterval = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+"""Cumulative volume delta bucket widths. ``1h`` and longer roll up hourly
+totals; ``1m`` to ``30m`` are summed from taker fills."""
+
+
+class CvdBucket(BaseModel):
+    """One cumulative volume delta bucket: taker buy and sell notional."""
+
+    timestamp: int
+    """Bucket open time in Unix milliseconds (UTC)."""
+
+    buy_volume: float
+    """Taker buy notional in the bucket."""
+
+    sell_volume: float
+    """Taker sell notional in the bucket."""
+
+    delta: float
+    """``buy_volume`` minus ``sell_volume``."""
+
+    cumulative_delta: float
+    """Running total of ``delta`` from the first bucket of this response. It
+    restarts on every page, so rebuild it from ``delta`` when joining pages."""
+
+
+# =============================================================================
+# HIP-3 Oracle Types
+# =============================================================================
+
+
+class Hip3OracleDiscoveryBounds(BaseModel):
+    """Instantaneous HIP-3 discovery bounds from the reference price and max leverage.
+
+    The full ratcheted range can be wider when a deployer's reset
+    configuration applies.
+    """
+
+    symbol: str
+    """HIP-3 symbol (for example ``km:US500``)."""
+
+    reference_price: float
+    """External price when available, otherwise the mark price."""
+
+    reference_source: str
+    """Source of ``reference_price``: ``"external"`` or ``"mark"``."""
+
+    max_leverage: int
+    """Market max leverage used for the bound fraction."""
+
+    bound_fraction: float
+    """Fraction applied on each side of ``reference_price``."""
+
+    lower_bound: float
+    """Instantaneous lower discovery bound."""
+
+    upper_bound: float
+    """Instantaneous upper discovery bound."""
+
+    block_number: int
+    """Source block number."""
+
+    timestamp: int
+    """Source timestamp in Unix milliseconds."""
+
+
+class Hip3OracleExternalPrice(BaseModel):
+    """Latest deployer-pushed external price and mark price for a HIP-3 market."""
+
+    symbol: str
+    """HIP-3 symbol (for example ``km:US500``)."""
+
+    external_price: Optional[float] = None
+    """Externally derived reference price, when available."""
+
+    mark_price: Optional[float] = None
+    """On-chain mark input."""
+
+    block_number: int
+    """Source block number."""
+
+    timestamp: int
+    """Source timestamp in Unix milliseconds."""
+
+
+# =============================================================================
+# HIP-4 Question Types
+# =============================================================================
+
+
+class Hip4Question(BaseModel):
+    """A HIP-4 question: a multi-choice resolver grouping binary outcome markets.
+
+    One named outcome per choice, plus a fallback outcome that resolves Yes
+    when no named choice does.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    question_id: int
+    """Question identifier."""
+
+    name: str
+    """Question name as published on-chain (recurring markets use a generic
+    name such as ``"Recurring"``)."""
+
+    description: str
+    """Pipe-delimited question metadata, for example
+    ``"class:priceBucket|underlying:BTC|expiry:20260508-0600|priceThresholds:79303,82540|period:1d"``."""
+
+    fallback_outcome_id: int
+    """Outcome that resolves Yes when no named outcome does."""
+
+    named_outcome_ids: list[int] = Field(default_factory=list)
+    """Outcomes of the named choices grouped under this question."""
+
+    settled_named_outcomes: list[int] = Field(default_factory=list)
+    """The named outcomes that have already settled."""
+
+    first_seen_at: datetime
+    """When 0xArchive first observed the question (UTC)."""
+
+    last_updated_at: datetime
+    """When the question record was last updated (UTC)."""
+
+
+# =============================================================================
+# Wallet Classification Types
+# =============================================================================
+
+WalletClassifySort = Literal[
+    "total_orders",
+    "total_fills",
+    "total_volume",
+    "total_volume_usd",
+    "cancel_rate",
+    "fill_rate",
+    "maker_ratio",
+    "avg_order_size_usd",
+    "avg_order_notional",
+    "max_order_size_usd",
+    "max_order_notional",
+    "active_hours",
+    "unique_coins",
+    "total_fees",
+    "total_fees_usd",
+    "realized_pnl",
+    "realized_pnl_usd",
+    "median_cancel_speed_ms",
+    "twap_fills",
+    "total_priority_gas",
+    "total_priority_gas_paid",
+    "total_builder_fees",
+    "total_builder_fees_paid",
+]
+"""Metrics wallet classification can sort by."""
+
+
+class WalletClassifyMetrics(BaseModel):
+    """Precomputed daily behavior metrics for one wallet. Every field is optional."""
+
+    model_config = ConfigDict(extra="allow")
+
+    total_orders: Optional[int] = None
+    cancel_rate: Optional[float] = None
+    fill_rate: Optional[float] = None
+    order_to_trade_ratio: Optional[float] = None
+    ioc_ratio: Optional[float] = None
+    post_only_ratio: Optional[float] = None
+    tpsl_ratio: Optional[float] = None
+    trigger_order_ratio: Optional[float] = None
+    unique_coins_traded: Optional[int] = None
+    uses_tpsl: Optional[bool] = None
+    uses_builder: Optional[bool] = None
+    top_builder: Optional[str] = None
+    avg_order_size_usd: Optional[float] = None
+    max_order_size_usd: Optional[float] = None
+    median_cancel_speed_ms: Optional[float] = None
+    active_hours: Optional[int] = None
+    total_fills: Optional[int] = None
+    total_volume_usd: Optional[float] = None
+    maker_ratio: Optional[float] = None
+    long_short_ratio: Optional[float] = None
+    buy_volume_usd: Optional[float] = None
+    sell_volume_usd: Optional[float] = None
+    total_fees_usd: Optional[float] = None
+    realized_pnl_usd: Optional[float] = None
+    liquidation_count: Optional[int] = None
+    max_single_fill_usd: Optional[float] = None
+    unique_fill_coins: Optional[int] = None
+    uses_twap: Optional[bool] = None
+    twap_fill_ratio: Optional[float] = None
+    uses_cloid: Optional[bool] = None
+    cloid_ratio: Optional[float] = None
+    uses_priority_gas: Optional[bool] = None
+    total_priority_gas_paid: Optional[float] = None
+    total_builder_fees_paid: Optional[float] = None
+
+
+class ClassifiedWallet(BaseModel):
+    """A wallet and its precomputed behavior metrics."""
+
+    address: str
+    """Wallet address."""
+
+    metrics: WalletClassifyMetrics
+    """Behavior metrics over ``period``."""
+
+    period: str
+    """Metric lookback period (for example ``"24h"``)."""
+
+
+class WalletClassification(BaseModel):
+    """One page of wallet classification results."""
+
+    wallets: list[ClassifiedWallet] = Field(default_factory=list)
+    """Wallets on this page, in the requested sort order."""
+
+    total: int
+    """Wallets matching the filters, across every page."""
+
+    date: str
+    """Daily snapshot date the metrics describe (``YYYY-MM-DD``)."""
+
+
+# =============================================================================
+# Symbol Universe Types
+# =============================================================================
+
+
+class SymbolEntry(BaseModel):
+    """One market in the public symbol universe, from ``client.symbols.list()``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    symbol: str
+    """Symbol as the venue's routes take it (for example ``BTC``, ``km:US500``,
+    ``HYPE-USDC``, ``#0``)."""
+
+    exchange: str
+    """Venue family: ``"hyperliquid"``, ``"hip3"``, ``"hip4"``, ``"spot"``,
+    ``"lighter"`` or ``"rh-lighter"``."""
+
+    coverage_from: Optional[datetime] = None
+    """Earliest data for the symbol (UTC)."""
+
+    coverage_to: Optional[datetime] = None
+    """Latest data for the symbol (UTC), when it has ended."""
+
+    data_types: list[str] = Field(default_factory=list)
+    """Data types served for the symbol (for example ``"trades"``, ``"l2_orderbook"``)."""
+
+    coverage_by_type: dict[str, datetime] = Field(default_factory=dict)
+    """Earliest data per data type (UTC)."""
+
+    size_per_day: dict[str, float] = Field(default_factory=dict)
+    """Approximate size per day by data type."""
+
+    slug: Optional[str] = None
+    """HIP-4 slug, when available."""
+
+    outcome_pair: Optional[list[str]] = None
+    """HIP-4: the two side symbols of the outcome."""
+
+    display_title: Optional[str] = None
+    """HIP-4: human-readable title."""
+
+    is_settled: Optional[bool] = None
+    """HIP-4: whether the outcome has settled."""
+
+    is_active: Optional[bool] = None
+    """Whether the market is active, when the venue reports it."""
+
+
+# =============================================================================
 # Webhook Types
 # =============================================================================
 #

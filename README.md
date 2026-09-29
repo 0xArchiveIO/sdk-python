@@ -435,6 +435,24 @@ while history.next_cursor:
 
 The session resets at 00:00 UTC and compares the close of the most recently completed one-minute candle with session VWAP. Instruments without session volume or with a completed candle older than five minutes are excluded, so `coverage_ratio` varies with market hours. `value_pct` is `None`, not zero, when no instrument is eligible. History begins on 2026-08-28; the SDK does not imply synthetic pre-launch history. Interval downsampling uses the last snapshot in each bucket, never an average of percentages.
 
+#### HIP-3 Oracle
+
+The deployer-pushed external price of a HIP-3 market, and its instantaneous discovery bounds:
+
+```python
+price = client.hyperliquid.hip3.oracle.external_price("km:US500")
+print(price.external_price, price.mark_price, price.block_number)
+
+bounds = client.hyperliquid.hip3.oracle.discovery_bounds("km:US500")
+print(bounds.reference_source, bounds.lower_bound, bounds.upper_bound)
+
+# Async versions
+price = await client.hyperliquid.hip3.oracle.aexternal_price("km:US500")
+bounds = await client.hyperliquid.hip3.oracle.adiscovery_bounds("km:US500")
+```
+
+`external_price` and `mark_price` are `None` when the market has none. The discovery bounds are `reference_price` times one minus and one plus `bound_fraction`, where the reference is the external price when available and the mark price otherwise (`reference_source`) and the fraction follows from the market's max leverage. The full ratcheted range can be wider when a deployer's reset configuration applies. `timestamp` is Unix milliseconds.
+
 #### HIP-4 Outcome Markets
 
 HIP-4 binary-outcome markets resolve to ``Yes`` (side 0) or ``No`` (side 1) at expiry. Each outcome has two per-side coins (``#N``, where ``N = 10*outcome_id + side``). The SDK accepts both the bare numeric (``"0"``) and ``#``-prefixed (``"#0"``) forms. On REST paths it sends the bare form (the backend routes both to the same record). HIP-4 serves candles and outcome-side OI from 2026-05-02, with raw OI updates at ~10s. HIP-3 and Lighter candle pages accept up to 10,000 rows; HIP-4 candle pages are capped at 1,000 rows. HIP-4 has **no funding and no liquidations**. The ``mark_price`` field on HIP-4 OI/summary responses is an **implied probability in [0, 1]**, not a USD price.
@@ -456,6 +474,14 @@ outcome = client.hyperliquid.hip4.get_outcome_by_slug("btc-above-78213-may-04-06
 
 # Filter the list endpoint by slug. Short-circuits to a one-item response.
 result = client.hyperliquid.hip4.list_outcomes(slug="btc-above-78213-yes-may-04-0600")
+
+# Questions group several binary outcomes under one multi-choice resolver:
+# one named outcome per choice, plus a fallback outcome that resolves Yes when
+# no named choice does. Page with next_cursor, passed back unchanged.
+page = client.hyperliquid.hip4.list_questions(limit=100)
+question = client.hyperliquid.hip4.get_question(0)
+print(question.named_outcome_ids, question.fallback_outcome_id, question.settled_named_outcomes)
+# Also: client.hyperliquid.hip4.questions.list() / .get(), and alist() / aget()
 
 # Per-side instruments. Either bare or "#"-prefixed works.
 yes = client.hyperliquid.hip4.instruments.get("0")     # bare, recommended
@@ -814,13 +840,13 @@ print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
 print(f"  Long: ${summary.long_liquidation_volume_24h}")
 print(f"  Short: ${summary.short_liquidation_volume_24h}")
 
-# Lighter.xyz (price, funding, OI — no volume/liquidation data)
+# Lighter.xyz (price, funding, OI; no volume/liquidation data)
 lighter_summary = client.lighter.get_summary("BTC")
 
 # Lighter on Robinhood Chain (same shape as mainnet Lighter)
 rh_summary = client.rh_lighter.get_summary("BTC")
 
-# HIP-3 (includes mid_price — case-sensitive coins)
+# HIP-3 (includes mid_price; case-sensitive coins)
 hip3_summary = client.hyperliquid.hip3.get_summary("km:US500")
 print(f"Mid price: {hip3_summary.mid_price}")
 
@@ -944,6 +970,52 @@ spot_candles = await client.spot.candles.ahistory(
 | `4h` | 4 hours |
 | `1d` | 1 day |
 | `1w` | 1 week |
+
+### Cumulative Volume Delta
+
+Taker buy and sell notional per bucket, their difference, and a running total, for Hyperliquid core and HIP-3. Intervals of `1h` and longer roll up hourly totals; `1m`, `5m`, `15m` and `30m` are summed from taker fills.
+
+```python
+# One page. Without start (and without a cursor) the response is the newest
+# `limit` buckets of the 24 hours before `end`.
+page = client.hyperliquid.cvd.history(
+    "BTC",
+    start="2026-09-01T00:00:00Z",
+    end="2026-09-02T00:00:00Z",
+    interval="1m",  # 1m, 5m, 15m, 30m, 1h (default), 4h, 1d, 1w
+    limit=500,      # buckets per page (default 500, max 10000)
+)
+for bucket in page.data:
+    print(bucket.timestamp, bucket.buy_volume, bucket.sell_volume, bucket.delta)
+
+# Follow next_cursor with the same start, end and interval. Stop on the
+# cursor, not on a short page: below 1h a page can be short and still carry one.
+while page.next_cursor:
+    page = client.hyperliquid.cvd.history(
+        "BTC",
+        start="2026-09-01T00:00:00Z",
+        end="2026-09-02T00:00:00Z",
+        interval="1m",
+        cursor=page.next_cursor,
+    )
+
+# Or let the iterator follow the cursor
+running = 0.0
+for bucket in client.hyperliquid.cvd.iterate(
+    "BTC", start="2026-09-01T00:00:00Z", end="2026-09-02T00:00:00Z", interval="1m"
+):
+    running += bucket.delta
+
+# HIP-3 (case-sensitive coins)
+hip3 = client.hyperliquid.hip3.cvd.history("km:US500", start="2026-09-01T00:00:00Z", interval="1h")
+
+# Async versions
+page = await client.hyperliquid.cvd.ahistory("BTC", start="2026-09-01T00:00:00Z")
+async for bucket in client.hyperliquid.hip3.cvd.aiterate("km:US500", start="2026-09-01T00:00:00Z"):
+    ...
+```
+
+Buckets are labelled by their open time in UTC (`timestamp`, Unix milliseconds) and omitted when they hold no trades. `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so `1w` buckets open on Thursdays, and at those widths the first and last bucket of a window can be partial. `cumulative_delta` restarts on every page: to join pages, rebuild the running total from `delta`. A response that is one page of several says so in `meta.notice`.
 
 ### L4 Orderbook (Order-Level)
 
@@ -1241,6 +1313,53 @@ Things to know:
 - **Empty results are explained.** When a wallet has no open positions, `account_seen` is `flat`, `never_seen` (no activity recorded in the covered history; see `meta.notice` and `meta.coverage_from`), or `outside_coverage`.
 - **Cursors are bound to their request.** Pass `next_cursor` back with every other argument unchanged. If the snapshot a market cursor was paging is replaced, the API answers 409 (`OxArchiveError.code == 409`); restart without a cursor.
 - **Billing and limits.** Position rows are billed like trades, 1,000 rows per credit; `account()`, `account_history()`, and `by_l1()` are billed at the per-request minimum. Wallet routes return up to 5,000 rows per page (default 500), market routes up to 2,000 (default 100), bulk `all()` up to 2,000 (default 1,000), and summary series up to 168 hours per page.
+
+### Wallet Classification
+
+Precomputed daily behavior metrics for active wallets on Hyperliquid core and HIP-3: orders, fills, cancel and fill rates, maker ratio, order sizes, cancel speed, fees, realized PnL, TWAP, priority gas and builder usage. Filter and sort server side, and page with `limit` and `offset`.
+
+```python
+page = client.hyperliquid.wallets.classify(
+    min_orders=1000,
+    min_volume_usd=1_000_000,
+    sort="total_volume_usd",   # default total_orders
+    order="desc",
+    limit=100,                 # 1 to 1000 (default 100)
+    offset=0,                  # at most 100000
+    date="2026-09-28",         # daily snapshot; default yesterday (UTC)
+)
+print(f"{page.total} wallets match on {page.date}")
+for wallet in page.wallets:
+    m = wallet.metrics
+    print(wallet.address, m.total_volume_usd, m.maker_ratio, m.cancel_rate)
+
+# HIP-3 wallets, filtered by behavior
+hip3 = client.hyperliquid.hip3.wallets.classify(uses_twap=True, min_cancel_rate=0.5)
+
+# Async versions
+page = await client.hyperliquid.wallets.aclassify(sort="realized_pnl_usd")
+```
+
+`date` accepts a `date`, a `YYYY-MM-DD` string, or a datetime (a datetime without a time zone is UTC). Each request costs 10 credits, with row-based metering on the wallets returned where it applies. Every metric field is optional.
+
+### Symbol Universe
+
+Every public market across the venue families (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`), with the data types served for each and coverage dates overall and per data type. Use it to discover symbols before choosing a venue-specific route. The route needs no API key.
+
+```python
+symbols = client.symbols.list()
+hip3 = [s.symbol for s in symbols if s.exchange == "hip3"]
+btc = next(s for s in symbols if s.exchange == "hyperliquid" and s.symbol == "BTC")
+print(btc.data_types, btc.coverage_from, btc.coverage_by_type.get("trades"))
+
+# HIP-4 entries also carry the slug, the outcome pair and a display title
+outcomes = [s for s in symbols if s.exchange == "hip4" and not s.is_settled]
+
+# Async version
+symbols = await client.symbols.alist()
+```
+
+The whole universe is returned in one response, so fetch it once and filter locally.
 
 ### Data Quality Monitoring
 
@@ -2392,6 +2511,8 @@ from oxarchive.types import (
     LighterLiquidation, LighterLiquidationVolume, ResponseMeta,
     Position, PositionChange, MarketPosition, MarketPositionsSummary, AccountSummary,
     WalletPositions, LighterL1Accounts,
+    CvdBucket, Hip3OracleExternalPrice, Hip4Question, WalletClassification, SymbolEntry,
+    WebhookSubscription, WebhookEstimate, WebhookLimits,
 )
 from oxarchive.resources.trades import CursorResponse
 
@@ -2416,6 +2537,11 @@ recent: list[Trade] = client.lighter.trades.recent("BTC")
 now: CursorResponse[WalletPositions] = client.hyperliquid.positions.get("0xabc...")
 meta: ResponseMeta = now.meta
 legs: CursorResponse[list[PositionChange]] = client.rh_lighter.positions.changes(4521, start=..., end=...)
+
+# Cumulative volume delta, wallet classification and webhooks
+cvd: CursorResponse[list[CvdBucket]] = client.hyperliquid.cvd.history("BTC", start=...)
+wallets: WalletClassification = client.hyperliquid.wallets.classify(limit=10)
+rules: list[WebhookSubscription] = client.webhooks.list_subscriptions()
 
 # Lighter granularity type hint
 granularity: LighterGranularity = "10s"

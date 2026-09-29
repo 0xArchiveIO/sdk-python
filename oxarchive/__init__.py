@@ -112,6 +112,18 @@ from .types import (
     OxArchiveError,
     CursorResponse,
     ResponseMeta,
+    # Cumulative volume delta, HIP-3 oracle, HIP-4 questions
+    CvdBucket,
+    CvdInterval,
+    Hip3OracleDiscoveryBounds,
+    Hip3OracleExternalPrice,
+    Hip4Question,
+    # Wallet classification and the symbol universe
+    WalletClassifySort,
+    WalletClassifyMetrics,
+    ClassifiedWallet,
+    WalletClassification,
+    SymbolEntry,
     # Webhook types
     WebhookEventTypeParam,
     WebhookEventTypeMetric,
@@ -271,6 +283,18 @@ __all__ = [
     "OxArchiveError",
     "CursorResponse",
     "ResponseMeta",
+    # Cumulative Volume Delta, HIP-3 Oracle, HIP-4 Questions
+    "CvdBucket",
+    "CvdInterval",
+    "Hip3OracleDiscoveryBounds",
+    "Hip3OracleExternalPrice",
+    "Hip4Question",
+    # Wallet Classification and the Symbol Universe
+    "WalletClassifySort",
+    "WalletClassifyMetrics",
+    "ClassifiedWallet",
+    "WalletClassification",
+    "SymbolEntry",
     # Webhook Signature Verification
     "WebhookVerifier",
     "WebhookEvent",

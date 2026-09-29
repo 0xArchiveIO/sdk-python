@@ -14,6 +14,7 @@ from .resources import (
     FundingResource,
     OpenInterestResource,
     DataQualityResource,
+    SymbolsResource,
     Web3Resource,
     WebhooksResource,
 )
@@ -44,8 +45,9 @@ class Client:
     `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
     `client.rh_lighter.positions`.
 
-    Cross-venue: `client.data_quality`, and `client.webhooks` (push delivery;
-    verify deliveries with :class:`~oxarchive.WebhookVerifier`).
+    Cross-venue: `client.symbols` (the public symbol universe),
+    `client.data_quality`, and `client.webhooks` (push delivery; verify
+    deliveries with :class:`~oxarchive.WebhookVerifier`).
 
     Example:
         >>> from oxarchive import Client
@@ -146,6 +148,10 @@ class Client:
         # Web3 wallet-based authentication
         self.web3 = Web3Resource(self._http)
         """Wallet-based auth: get API keys via SIWE signature"""
+
+        # Public symbol universe (cross-venue discovery)
+        self.symbols = SymbolsResource(self._http)
+        """Every public symbol across venue families, with coverage dates"""
 
         # Webhooks (push delivery). Delivery needs a paid plan; the estimate
         # and dry-run previews are available on every plan.

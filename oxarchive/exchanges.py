@@ -11,13 +11,16 @@ from .http import HttpClient
 from .resources import (
     BreadthResource,
     CandlesResource,
+    CvdResource,
     FundingResource,
     Hip3CandlesResource,
     Hip3InstrumentsResource,
+    Hip3OracleResource,
     Hip4CandlesResource,
     Hip4InstrumentsResource,
     Hip4OpenInterestResource,
     Hip4OutcomesResource,
+    Hip4QuestionsResource,
     HyperliquidPositionsResource,
     InstrumentsResource,
     L2OrderBookResource,
@@ -35,6 +38,7 @@ from .resources import (
     SpotPairsResource,
     SpotTwapResource,
     TradesResource,
+    WalletsResource,
 )
 from .types import (
     CoinFreshness,
@@ -42,6 +46,7 @@ from .types import (
     CursorResponse,
     Hip4Outcome,
     Hip4OutcomeAggregate,
+    Hip4Question,
     LiquidationVolume,
     PriceSnapshot,
     SpotTableFreshness,
@@ -118,6 +123,12 @@ class HyperliquidClient:
         """Account positions by wallet address: current, as-of, hourly history,
         change log, account summaries, and market-wide listings. Change log from
         2025-05-25, hourly history from 2026-06-07, live every 5 minutes."""
+
+        self.cvd = CvdResource(http, base_path)
+        """Cumulative volume delta: taker buy and sell notional per bucket."""
+
+        self.wallets = WalletsResource(http, base_path)
+        """Wallet classification: daily behavior metrics for active wallets."""
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (trades from 2025-10-13)"""
@@ -376,6 +387,15 @@ class Hip3Client:
         Change log from 2025-10-13, hourly history from 2026-06-07, live every
         5 minutes."""
 
+        self.cvd = CvdResource(http, base_path, coin_transform=coin_transform)
+        """Cumulative volume delta: taker buy and sell notional per bucket."""
+
+        self.oracle = Hip3OracleResource(http, base_path)
+        """Deployer-pushed external price and discovery bounds."""
+
+        self.wallets = WalletsResource(http, base_path)
+        """Wallet classification: daily behavior metrics for active HIP-3 wallets."""
+
     _convert_timestamp = staticmethod(to_unix_ms)
 
     def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
@@ -553,6 +573,9 @@ class Hip4Client:
         self.outcomes = Hip4OutcomesResource(http, base_path)
         """HIP-4 outcome-level metadata (one row per outcome_id)."""
 
+        self.questions = Hip4QuestionsResource(http, base_path)
+        """HIP-4 questions: multi-choice groupings of outcome markets."""
+
         self.orderbook = OrderBookResource(http, base_path, coin_transform=_hip4_encode)
         """L2 order book snapshots."""
 
@@ -652,6 +675,32 @@ class Hip4Client:
     async def aget_outcome_by_slug(self, slug: str) -> Hip4OutcomeAggregate:
         """Async version of get_outcome_by_slug()."""
         return await self.outcomes.aget_by_slug(slug)
+
+    def list_questions(
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> CursorResponse[list[Hip4Question]]:
+        """List questions, ascending by question ID. Pass ``next_cursor`` back unchanged."""
+        return self.questions.list(cursor=cursor, limit=limit)
+
+    async def alist_questions(
+        self,
+        *,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> CursorResponse[list[Hip4Question]]:
+        """Async version of list_questions()."""
+        return await self.questions.alist(cursor=cursor, limit=limit)
+
+    def get_question(self, question_id: int) -> Hip4Question:
+        """Get a single question by its numeric ID."""
+        return self.questions.get(question_id)
+
+    async def aget_question(self, question_id: int) -> Hip4Question:
+        """Async version of get_question()."""
+        return await self.questions.aget(question_id)
 
     # -----------------------------------------------------------------
     # Market-data flat helpers (mirror HIP-3 surface)

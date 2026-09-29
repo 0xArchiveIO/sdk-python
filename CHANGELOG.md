@@ -139,6 +139,29 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `WebhookPreviewOccurrence`, `WebhookEstimateDayCount`,
   `WebhookEstimateRung`, `WebhookEstimateDistribution` and
   `WebhookEstimateBasis`. Every webhook model keeps unknown fields.
+- Cumulative volume delta: `client.hyperliquid.cvd` and
+  `client.hyperliquid.hip3.cvd` with `history()` (one page; pass
+  `next_cursor` back unchanged with the same `start`, `end` and `interval`)
+  and `iterate()`, which follows the cursor, plus `ahistory()` and
+  `aiterate()`. Buckets are `CvdBucket`; intervals `1m` to `1w`
+  (`CvdInterval`). `cumulative_delta` restarts on every page.
+- HIP-3 oracle: `client.hyperliquid.hip3.oracle.external_price(symbol)` and
+  `discovery_bounds(symbol)` (and `aexternal_price()`,
+  `adiscovery_bounds()`), typed as `Hip3OracleExternalPrice` and
+  `Hip3OracleDiscoveryBounds`.
+- HIP-4 questions: `client.hyperliquid.hip4.questions.list()` (cursor paged)
+  and `get(question_id)`, the flat helpers
+  `client.hyperliquid.hip4.list_questions()` and `get_question()`, and their
+  async versions, typed as `Hip4Question`.
+- Wallet classification: `client.hyperliquid.wallets.classify()` and
+  `client.hyperliquid.hip3.wallets.classify()` (and `aclassify()`), with
+  every filter, sort and `limit`/`offset` paging, typed as
+  `WalletClassification`, `ClassifiedWallet` and `WalletClassifyMetrics`.
+  `date` takes a date, a `YYYY-MM-DD` string or a datetime (a datetime
+  without a time zone is UTC).
+- The public symbol universe: `client.symbols.list()` and `alist()`, one
+  `SymbolEntry` per market across every venue family, with data types and
+  coverage dates.
 - Full-depth L2 WebSocket channels `orderbook_full` (Hyperliquid core) and
   `hip3_orderbook_full` (HIP-3) for live subscription, with helpers
   `subscribe_orderbook_full()`, `subscribe_hip3_orderbook_full()` and their
@@ -206,6 +229,9 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - A README section on webhooks: plan limits, pauses and resumes, the event
   catalog, configuration, previews, verifying deliveries, secret rotation and
   retries.
+- README sections for cumulative volume delta, the HIP-3 oracle, HIP-4
+  questions, wallet classification, the symbol universe and the full-depth L2
+  WebSocket channels.
 
 ## [1.11.0] - 2026-09-25
 
