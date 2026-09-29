@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 from urllib.parse import quote
 
 from ..http import HttpClient
-from ..types import CursorResponse, Hip4OutcomeAggregate, Hip4Question, ResponseMeta
+from ..types import CursorResponse, Hip4OutcomeAggregate, Hip4Question, ResponseMeta, _record
 
 
 class Hip4OutcomesResource:
@@ -54,6 +54,7 @@ class Hip4OutcomesResource:
         return CursorResponse(
             data=[Hip4OutcomeAggregate.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def alist(
@@ -77,17 +78,18 @@ class Hip4OutcomesResource:
         return CursorResponse(
             data=[Hip4OutcomeAggregate.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def get(self, outcome_id: int) -> Hip4OutcomeAggregate:
         """Get a single outcome market by id. Includes ``aggregated_oi``."""
         data = self._http.get(f"{self._base_path}/outcomes/{int(outcome_id)}")
-        return Hip4OutcomeAggregate.model_validate(data["data"])
+        return _record(Hip4OutcomeAggregate, data)
 
     async def aget(self, outcome_id: int) -> Hip4OutcomeAggregate:
         """Async version of get()."""
         data = await self._http.aget(f"{self._base_path}/outcomes/{int(outcome_id)}")
-        return Hip4OutcomeAggregate.model_validate(data["data"])
+        return _record(Hip4OutcomeAggregate, data)
 
     def get_by_slug(self, slug: str) -> Hip4OutcomeAggregate:
         """Look up an outcome by its synthesized slug.
@@ -98,12 +100,12 @@ class Hip4OutcomesResource:
         :py:meth:`get`.
         """
         data = self._http.get(f"{self._base_path}/outcomes/by-slug/{quote(slug, safe='')}")
-        return Hip4OutcomeAggregate.model_validate(data["data"])
+        return _record(Hip4OutcomeAggregate, data)
 
     async def aget_by_slug(self, slug: str) -> Hip4OutcomeAggregate:
         """Async version of get_by_slug()."""
         data = await self._http.aget(f"{self._base_path}/outcomes/by-slug/{quote(slug, safe='')}")
-        return Hip4OutcomeAggregate.model_validate(data["data"])
+        return _record(Hip4OutcomeAggregate, data)
 
 
 def _questions_page(payload: dict[str, Any]) -> CursorResponse[list[Hip4Question]]:
@@ -147,8 +149,8 @@ class Hip4QuestionsResource:
             limit: Page size (default 100, max 1000).
 
         Returns:
-            CursorResponse with the questions and ``next_cursor``; ``None`` on
-            the last page.
+            CursorResponse with the questions, ``has_more`` and
+            ``next_cursor`` (``None`` on the last page).
         """
         data = self._http.get(
             f"{self._base_path}/questions",
@@ -172,9 +174,9 @@ class Hip4QuestionsResource:
     def get(self, question_id: int) -> Hip4Question:
         """Get a single question by its numeric ID."""
         data = self._http.get(f"{self._base_path}/questions/{int(question_id)}")
-        return Hip4Question.model_validate(data["data"])
+        return _record(Hip4Question, data)
 
     async def aget(self, question_id: int) -> Hip4Question:
         """Async version of get()."""
         data = await self._http.aget(f"{self._base_path}/questions/{int(question_id)}")
-        return Hip4Question.model_validate(data["data"])
+        return _record(Hip4Question, data)

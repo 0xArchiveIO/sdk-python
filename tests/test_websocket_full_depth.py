@@ -16,7 +16,6 @@ from websockets.protocol import State as WsState
 from oxarchive.types import WsChannel, WsL4Batch, WsL4Snapshot, WsSubscribed
 from oxarchive.websocket import (
     FULL_DEPTH_L2_CHANNELS,
-    FULL_DEPTH_LIVE_ONLY_ERROR,
     OxArchiveWs,
     WsOptions,
 )
@@ -172,24 +171,23 @@ def _offline_client() -> tuple[OxArchiveWs, list[dict[str, Any]]]:
 
 
 @pytest.mark.parametrize("channel", sorted(FULL_DEPTH_L2_CHANNELS))
-def test_full_depth_channels_are_live_only_for_replay(channel: str) -> None:
+def test_full_depth_channels_replay(channel: str) -> None:
     channel = cast(WsChannel, channel)
     ws, sent = _offline_client()
 
-    with pytest.raises(ValueError) as caught:
-        asyncio.run(ws.replay(channel, "BTC", start=1_757_000_000_000, speed=10))
+    asyncio.run(ws.replay(channel, "BTC", start=1_757_000_000_000, speed=10))
 
-    assert str(caught.value) == FULL_DEPTH_LIVE_ONLY_ERROR
-    assert "l2_orderbook.history()" in FULL_DEPTH_LIVE_ONLY_ERROR
-    assert sent == []
+    assert sent == [
+        {"op": "replay", "channel": channel, "symbol": "BTC", "start": 1_757_000_000_000, "speed": 10}
+    ]
 
 
 @pytest.mark.parametrize("channel", sorted(FULL_DEPTH_L2_CHANNELS))
-def test_full_depth_channels_are_live_only_for_multi_replay(channel: str) -> None:
+def test_full_depth_channels_replay_on_their_own_not_in_multi_replay(channel: str) -> None:
     channel = cast(WsChannel, channel)
     ws, sent = _offline_client()
 
-    with pytest.raises(ValueError, match="live subscriptions only"):
+    with pytest.raises(ValueError, match="single-channel only"):
         asyncio.run(ws.multi_replay(["orderbook", channel], "BTC", start=1_757_000_000_000))
 
     assert sent == []

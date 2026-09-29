@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from typing import Generic, Optional, TypeVar
 
-from pydantic import BaseModel
-
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, Hip4OpenInterestRecord, OpenInterest, Timestamp
+from ..types import (
+    CursorResponse,
+    Hip4OpenInterestRecord,
+    OpenInterest,
+    ResponseMeta,
+    Timestamp,
+    _ApiRecord,
+    _record,
+)
 
-RecordT = TypeVar("RecordT", bound=BaseModel)
+RecordT = TypeVar("RecordT", bound=_ApiRecord)
 
 
 class _OpenInterestResourceBase(Generic[RecordT]):
@@ -70,7 +76,7 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         Example:
             >>> result = client.open_interest.history("BTC", start=start, end=end, limit=1000)
             >>> records = result.data
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.open_interest.history(
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
@@ -92,6 +98,7 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         return CursorResponse(
             data=[self._record_model.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -122,6 +129,7 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         return CursorResponse(
             data=[self._record_model.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def current(self, symbol: str, **kwargs) -> RecordT:
@@ -138,7 +146,7 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         data = self._http.get(
             f"{self._base_path}/openinterest/{self._coin_transform(symbol)}/current"
         )
-        return self._record_model.model_validate(data["data"])
+        return _record(self._record_model, data)
 
     async def acurrent(self, symbol: str, **kwargs) -> RecordT:
         """Async version of current()."""
@@ -146,7 +154,7 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         data = await self._http.aget(
             f"{self._base_path}/openinterest/{self._coin_transform(symbol)}/current"
         )
-        return self._record_model.model_validate(data["data"])
+        return _record(self._record_model, data)
 
     @staticmethod
     def _resolve_symbol(symbol, kwargs):

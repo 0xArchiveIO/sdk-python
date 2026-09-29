@@ -52,8 +52,10 @@ from .types import (
     Hip4Question,
     LiquidationVolume,
     PriceSnapshot,
+    ResponseMeta,
     SpotTableFreshness,
     Timestamp,
+    _record,
 )
 
 
@@ -189,6 +191,7 @@ class HyperliquidClient:
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aget_liquidation_volume(
@@ -218,6 +221,7 @@ class HyperliquidClient:
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def get_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
@@ -235,13 +239,13 @@ class HyperliquidClient:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"/v1/hyperliquid/freshness/{symbol.upper()}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"/v1/hyperliquid/freshness/{symbol.upper()}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """
@@ -258,13 +262,13 @@ class HyperliquidClient:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"/v1/hyperliquid/summary/{symbol.upper()}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"/v1/hyperliquid/summary/{symbol.upper()}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     def get_price_history(
         self,
@@ -306,6 +310,7 @@ class HyperliquidClient:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aget_price_history(
@@ -335,6 +340,7 @@ class HyperliquidClient:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -419,13 +425,13 @@ class Hip3Client:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"/v1/hyperliquid/hip3/freshness/{symbol}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"/v1/hyperliquid/hip3/freshness/{symbol}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """
@@ -439,13 +445,13 @@ class Hip3Client:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"/v1/hyperliquid/hip3/summary/{symbol}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"/v1/hyperliquid/hip3/summary/{symbol}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     def get_price_history(
         self,
@@ -487,6 +493,7 @@ class Hip3Client:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aget_price_history(
@@ -516,6 +523,7 @@ class Hip3Client:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -772,13 +780,13 @@ class Hip4Client:
         """Get data freshness for a HIP-4 symbol across data types."""
         encoded = _hip4_encode(symbol)
         data = self._http.get(f"/v1/hyperliquid/hip4/freshness/{encoded}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     async def aget_freshness(self, symbol: str) -> CoinFreshness:
         """Async version of get_freshness()."""
         encoded = _hip4_encode(symbol)
         data = await self._http.aget(f"/v1/hyperliquid/hip4/freshness/{encoded}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     def get_summary(self, symbol: str) -> CoinSummary:
         """Get 24h market summary for a HIP-4 symbol.
@@ -788,13 +796,13 @@ class Hip4Client:
         """
         encoded = _hip4_encode(symbol)
         data = self._http.get(f"/v1/hyperliquid/hip4/summary/{encoded}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     async def aget_summary(self, symbol: str) -> CoinSummary:
         """Async version of get_summary()."""
         encoded = _hip4_encode(symbol)
         data = await self._http.aget(f"/v1/hyperliquid/hip4/summary/{encoded}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     def get_prices(
         self,
@@ -823,6 +831,7 @@ class Hip4Client:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aget_prices(
@@ -848,7 +857,15 @@ class Hip4Client:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
+
+    get_price_history = get_prices
+    """Mid-price history: the same method as :meth:`get_prices`, under the name
+    the other venue clients use."""
+
+    aget_price_history = aget_prices
+    """Async version of :meth:`get_price_history`."""
 
     def get_order_history(self, symbol: str, **kwargs):
         """Get order lifecycle history."""
@@ -950,13 +967,13 @@ class _LighterDeploymentClient:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"{self._base_path}/freshness/{_lighter_encode(symbol)}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     async def aget_freshness(self, symbol: str, **kwargs) -> CoinFreshness:
         """Async version of get_freshness()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"{self._base_path}/freshness/{_lighter_encode(symbol)}")
-        return CoinFreshness.model_validate(data["data"])
+        return _record(CoinFreshness, data)
 
     def get_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """
@@ -970,13 +987,13 @@ class _LighterDeploymentClient:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"{self._base_path}/summary/{_lighter_encode(symbol)}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     async def aget_summary(self, symbol: str, **kwargs) -> CoinSummary:
         """Async version of get_summary()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"{self._base_path}/summary/{_lighter_encode(symbol)}")
-        return CoinSummary.model_validate(data["data"])
+        return _record(CoinSummary, data)
 
     def get_price_history(
         self,
@@ -1018,6 +1035,7 @@ class _LighterDeploymentClient:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aget_price_history(
@@ -1047,14 +1065,15 @@ class _LighterDeploymentClient:
         return CursorResponse(
             data=[PriceSnapshot.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
 class LighterClient(_LighterDeploymentClient):
     """
-    Lighter.xyz exchange client (Lighter mainnet).
+    Lighter exchange client (Lighter mainnet).
 
-    Access Lighter.xyz market data through the 0xarchive API. Lighter has two
+    Access Lighter market data through the 0xarchive API. Lighter has two
     deployments: mainnet (this client, ``client.lighter``) and Robinhood Chain
     (``client.rh_lighter``, see :class:`RhLighterClient`).
 
@@ -1132,8 +1151,9 @@ class SpotClient:
     (``PURR/USDC`` or ``@107``) internally.
 
     Spot has no funding, no open interest, or liquidations. Candle history is
-    served from ``2025-03-22T10:50:22Z``; orderbook, L4, TWAP, and orders are
-    live-only from 2026-05-05. Candle pages are capped at 1,000 rows.
+    served from ``2025-03-22T10:50:22Z``; L4 and order history from
+    2026-03-10; the order book from 2026-05-05. Candle pages are capped at
+    1,000 rows.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -1150,7 +1170,7 @@ class SpotClient:
         """Spot pair metadata (list and per-pair detail)."""
 
         self.orderbook = OrderBookResource(http, base_path)
-        """L2 orderbook snapshots (live from 2026-05-05)."""
+        """L2 orderbook snapshots (from 2026-05-05)."""
 
         self.trades = TradesResource(http, base_path)
         """Trade/fill history (from 2025-03-22), including ``recent()``."""
@@ -1159,12 +1179,12 @@ class SpotClient:
         """OHLCV candle history (from 2025-03-22T10:50:22Z; max 1,000 rows)."""
 
         self.orders = SpotOrdersResource(http, base_path)
-        """L4 order lifecycle history (live from 2026-05-05). Spot serves
+        """L4 order lifecycle history (from 2026-03-10). Spot serves
         ``history()`` only: no flow, TP/SL or trigger levels."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path)
         """L4 order-level orderbook: full reconstruction, raw diffs,
-        and checkpoint history. Live from 2026-05-05."""
+        and checkpoint history (from 2026-03-10)."""
 
         self.twap = SpotTwapResource(http, base_path)
         """TWAP status records by pair or by user wallet."""
@@ -1185,10 +1205,10 @@ class SpotClient:
         """
         symbol = _resolve_symbol(symbol, kwargs)
         data = self._http.get(f"/v1/hyperliquid/spot/freshness/{symbol.upper()}")
-        return SpotTableFreshness.model_validate(data["data"])
+        return _record(SpotTableFreshness, data)
 
     async def aget_freshness(self, symbol: str, **kwargs) -> SpotTableFreshness:
         """Async version of get_freshness()."""
         symbol = _resolve_symbol(symbol, kwargs)
         data = await self._http.aget(f"/v1/hyperliquid/spot/freshness/{symbol.upper()}")
-        return SpotTableFreshness.model_validate(data["data"])
+        return _record(SpotTableFreshness, data)

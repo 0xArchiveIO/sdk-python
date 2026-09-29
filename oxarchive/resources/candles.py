@@ -6,7 +6,7 @@ from typing import Optional
 
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import Candle, CandleInterval, CursorResponse, Timestamp
+from ..types import Candle, CandleInterval, CursorResponse, ResponseMeta, Timestamp
 
 
 class CandlesResource:
@@ -24,7 +24,7 @@ class CandlesResource:
         >>>
         >>> # Paginate through large datasets
         >>> all_candles = result.data
-        >>> while result.next_cursor:
+        >>> while result.has_more:
         ...     result = client.candles.history(
         ...         "BTC", start=start, end=end, cursor=result.next_cursor
         ...     )
@@ -80,7 +80,7 @@ class CandlesResource:
             ...     "BTC", start=start, end=end, interval="1h", limit=10000
             ... )
             >>> candles = result.data
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.candles.history(
             ...         "BTC", start=start, end=end, interval="1h",
             ...         cursor=result.next_cursor, limit=10000
@@ -102,6 +102,7 @@ class CandlesResource:
         return CursorResponse(
             data=[Candle.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -131,6 +132,7 @@ class CandlesResource:
         return CursorResponse(
             data=[Candle.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod

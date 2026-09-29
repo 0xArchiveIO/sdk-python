@@ -143,7 +143,7 @@ class _PositionsBase:
         while True:
             page = self._fetch(_Endpoint(ep.path, params, ep.parse))
             yield from rows(page.data)
-            if not page.next_cursor:
+            if not (page.has_more and page.next_cursor):
                 return
             params["cursor"] = page.next_cursor
 
@@ -153,7 +153,7 @@ class _PositionsBase:
             page = await self._afetch(_Endpoint(ep.path, params, ep.parse))
             for row in rows(page.data):
                 yield row
-            if not page.next_cursor:
+            if not (page.has_more and page.next_cursor):
                 return
             params["cursor"] = page.next_cursor
 

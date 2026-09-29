@@ -7,6 +7,7 @@ from typing import Optional
 
 from .http import HttpClient
 from .exchanges import HyperliquidClient, LighterClient, RhLighterClient, SpotClient
+from .types import Capability
 from .resources import (
     OrderBookResource,
     TradesResource,
@@ -35,7 +36,8 @@ class Client:
       - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
       - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace
     - `client.spot` - Hyperliquid spot pairs (trades and candles from 2025-03-22,
-      orderbook/L4/TWAP live from 2026-05-05; no funding, OI, or liquidations)
+      L4 and order history from 2026-03-10, order book from 2026-05-05; no
+      funding, OI, or liquidations)
     - `client.lighter` - Lighter mainnet
     - `client.rh_lighter` - Lighter on Robinhood Chain (USDG-quoted perps and
       spot; trades and liquidations from 2026-06-26; order book, OI and
@@ -45,9 +47,15 @@ class Client:
     `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
     `client.rh_lighter.positions`.
 
-    Cross-venue: `client.symbols` (the public symbol universe),
+    Cross-venue: `client.capabilities()` (what each venue serves, per
+    datatype), `client.symbols` (the public symbol universe),
     `client.data_quality`, and `client.webhooks` (push delivery; verify
     deliveries with :class:`~oxarchive.WebhookVerifier`).
+
+    Every request sends the API version this SDK is written against
+    (``0xArchive-Version: 2026-10-01``). Errors raise
+    :class:`~oxarchive.OxArchiveError`, whose ``error_code`` is the stable code
+    to branch on.
 
     Example:
         >>> from oxarchive import Client
@@ -58,7 +66,7 @@ class Client:
         >>> hl_orderbook = client.hyperliquid.orderbook.get("BTC")
         >>> print(f"BTC mid price: {hl_orderbook.mid_price}")
         >>>
-        >>> # Lighter.xyz data
+        >>> # Lighter data
         >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
         >>>
         >>> # Lighter on Robinhood Chain
@@ -128,8 +136,9 @@ class Client:
         """Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)"""
 
         self.spot = SpotClient(self._http)
-        """Hyperliquid spot pairs. Trades and candles from 2025-03-22; orderbook, L4,
-        TWAP, and orders live from 2026-05-05. No funding, OI, or liquidations."""
+        """Hyperliquid spot pairs. Trades and candles from 2025-03-22; L4 and order
+        history from 2026-03-10; order book from 2026-05-05. No funding, OI, or
+        liquidations."""
 
         self.lighter = LighterClient(self._http)
         """Lighter mainnet data. Trade history begins January 17, 2025;
@@ -178,6 +187,30 @@ class Client:
 
         self.open_interest = OpenInterestResource(self._http, legacy_base)
         """[DEPRECATED] Use client.hyperliquid.open_interest instead"""
+
+    def capabilities(self) -> list[Capability]:
+        """
+        List what every venue serves, one row per venue and datatype.
+
+        Each :class:`~oxarchive.Capability` names the REST routes and
+        WebSocket channels for the datatype, whether it streams live and
+        replays, the first served instant (``available_from``), its cadence,
+        the largest page and the accepted intervals. The route needs no API
+        key and costs no credits. Per-symbol coverage is on
+        ``client.symbols.list()``.
+
+        Example:
+            >>> rows = client.capabilities()
+            >>> replayable = {c for row in rows if row.replay for c in row.ws_channels}
+            >>> [row.datatype for row in rows if row.venue == "spot"]
+        """
+        data = self._http.get("/v1/capabilities")
+        return [Capability.model_validate(row) for row in data["data"]]
+
+    async def acapabilities(self) -> list[Capability]:
+        """Async version of :meth:`capabilities`."""
+        data = await self._http.aget("/v1/capabilities")
+        return [Capability.model_validate(row) for row in data["data"]]
 
     def close(self) -> None:
         """Close the HTTP client and release resources."""

@@ -6,7 +6,7 @@ from typing import Callable
 from urllib.parse import quote
 
 from ..http import HttpClient
-from ..types import Hip3Instrument, Hip4Outcome, Instrument, LighterInstrument
+from ..types import Hip3Instrument, Hip4Outcome, Instrument, LighterInstrument, _record
 
 
 def _hip4_path_segment(symbol: str) -> str:
@@ -63,17 +63,17 @@ class InstrumentsResource:
             Instrument details
         """
         data = self._http.get(f"{self._base_path}/instruments/{coin.upper()}")
-        return Instrument.model_validate(data["data"])
+        return _record(Instrument, data)
 
     async def aget(self, coin: str) -> Instrument:
         """Async version of get()."""
         data = await self._http.aget(f"{self._base_path}/instruments/{coin.upper()}")
-        return Instrument.model_validate(data["data"])
+        return _record(Instrument, data)
 
 
 class LighterInstrumentsResource:
     """
-    Lighter.xyz Instruments API resource.
+    Lighter Instruments API resource.
 
     Lighter instruments have a different schema than Hyperliquid with more
     detailed market configuration including fees and minimum amounts.
@@ -123,14 +123,14 @@ class LighterInstrumentsResource:
             Lighter instrument details with full market configuration
         """
         data = self._http.get(f"{self._base_path}/instruments/{self._coin_transform(coin)}")
-        return LighterInstrument.model_validate(data["data"])
+        return _record(LighterInstrument, data)
 
     async def aget(self, coin: str) -> LighterInstrument:
         """Async version of get()."""
         data = await self._http.aget(
             f"{self._base_path}/instruments/{self._coin_transform(coin)}"
         )
-        return LighterInstrument.model_validate(data["data"])
+        return _record(LighterInstrument, data)
 
 
 class Hip3InstrumentsResource:
@@ -181,13 +181,13 @@ class Hip3InstrumentsResource:
         """
         coin = self._coin_transform(coin)
         data = self._http.get(f"{self._base_path}/instruments/{coin}")
-        return Hip3Instrument.model_validate(data["data"])
+        return _record(Hip3Instrument, data)
 
     async def aget(self, coin: str) -> Hip3Instrument:
         """Async version of get()."""
         coin = self._coin_transform(coin)
         data = await self._http.aget(f"{self._base_path}/instruments/{coin}")
-        return Hip3Instrument.model_validate(data["data"])
+        return _record(Hip3Instrument, data)
 
 
 class Hip4InstrumentsResource:
@@ -229,10 +229,10 @@ class Hip4InstrumentsResource:
         """
         seg = _hip4_path_segment(symbol)
         data = self._http.get(f"{self._base_path}/instruments/{seg}")
-        return Hip4Outcome.model_validate(data["data"])
+        return _record(Hip4Outcome, data)
 
     async def aget(self, symbol: str) -> Hip4Outcome:
         """Async version of get()."""
         seg = _hip4_path_segment(symbol)
         data = await self._http.aget(f"{self._base_path}/instruments/{seg}")
-        return Hip4Outcome.model_validate(data["data"])
+        return _record(Hip4Outcome, data)

@@ -581,7 +581,7 @@ def test_hyperliquid_live_subscription_remains_allowed() -> None:
         "spot_l4_orders",
     ],
 )
-def test_non_core_l4_channels_remain_live_only_for_replay(channel: str) -> None:
+def test_non_core_l4_channels_replay(channel: str) -> None:
     channel = cast(WsChannel, channel)
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
     sent: list[dict[str, Any]] = []
@@ -591,14 +591,22 @@ def test_non_core_l4_channels_remain_live_only_for_replay(channel: str) -> None:
 
     setattr(ws, "_send", fake_send)
 
-    with pytest.raises(ValueError, match="live subscriptions only"):
-        asyncio.run(ws.replay(channel, "BTC", start=1_757_000_000_000))
+    asyncio.run(ws.replay(channel, "BTC", start=1_757_000_000_000, end=1_757_003_600_000))
 
-    assert sent == []
+    assert sent == [
+        {
+            "op": "replay",
+            "channel": channel,
+            "symbol": "BTC",
+            "start": 1_757_000_000_000,
+            "speed": 1.0,
+            "end": 1_757_003_600_000,
+        }
+    ]
 
 
-@pytest.mark.parametrize("channel", ["hip3_l4_diffs", "hip4_l4_orders", "spot_l4_diffs"])
-def test_non_core_l4_channels_remain_live_only_for_multi_replay(channel: str) -> None:
+@pytest.mark.parametrize("channel", ["l4_diffs", "hip3_l4_diffs", "hip4_l4_orders", "spot_l4_diffs"])
+def test_l4_channels_replay_on_their_own_not_in_multi_replay(channel: str) -> None:
     channel = cast(WsChannel, channel)
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
     sent: list[dict[str, Any]] = []
@@ -608,7 +616,7 @@ def test_non_core_l4_channels_remain_live_only_for_multi_replay(channel: str) ->
 
     setattr(ws, "_send", fake_send)
 
-    with pytest.raises(ValueError, match="live subscriptions only"):
+    with pytest.raises(ValueError, match="single-channel only"):
         asyncio.run(ws.multi_replay(["orderbook", channel], "BTC", start=1_757_000_000_000))
 
     assert sent == []

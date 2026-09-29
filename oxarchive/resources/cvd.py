@@ -98,11 +98,12 @@ class CvdResource:
         """
         Get one page of cumulative volume delta buckets.
 
-        While ``next_cursor`` is set, more buckets may follow inside
-        ``[start, end]``: pass it back as ``cursor`` with ``start``, ``end``
-        and ``interval`` unchanged, and stop when it is None. Below ``1h`` a
-        page can hold fewer than ``limit`` buckets and still carry a cursor,
-        so stop on the cursor, not on a short page. Without ``start`` or
+        While ``has_more`` is true, more buckets follow inside
+        ``[start, end]``: pass ``next_cursor`` back as ``cursor`` with
+        ``start``, ``end`` and ``interval`` unchanged, and stop when
+        ``has_more`` is false. Below ``1h`` a page can hold fewer than
+        ``limit`` buckets and still not be the last, so stop on ``has_more``,
+        not on a short page. Without ``start`` or
         ``cursor``, the response is the newest ``limit`` buckets of the 24
         hours before ``end`` (or now), with no cursor.
 
@@ -150,7 +151,8 @@ class CvdResource:
         limit: Optional[int] = None,
     ) -> Iterator[CvdBucket]:
         """
-        Yield every bucket in ``[start, end]``, following ``next_cursor``.
+        Yield every bucket in ``[start, end]``, following ``next_cursor``
+        while ``has_more`` is true.
 
         Each page is requested with the same ``start``, ``end`` and
         ``interval``. ``cumulative_delta`` on the yielded buckets restarts at
@@ -161,7 +163,7 @@ class CvdResource:
         while True:
             page = _page(self._http.get(path, params=params))
             yield from page.data
-            if not page.next_cursor:
+            if not (page.has_more and page.next_cursor):
                 return
             params = {**params, "cursor": page.next_cursor}
 
@@ -181,6 +183,6 @@ class CvdResource:
             page = _page(await self._http.aget(path, params=params))
             for bucket in page.data:
                 yield bucket
-            if not page.next_cursor:
+            if not (page.has_more and page.next_cursor):
                 return
             params = {**params, "cursor": page.next_cursor}

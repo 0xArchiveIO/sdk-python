@@ -7,7 +7,8 @@ the dashed form.
 
 Spot has no funding, no open interest, or liquidations. Candle history is served
 from ``2025-03-22T10:50:22Z`` with 1,000-row pages; trades go back to
-2025-03-22. Orderbook / L4 / TWAP / orders are live-only from 2026-05-05.
+2025-03-22. L4 and order history are served from 2026-03-10 and the order book
+from 2026-05-05.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Optional
 
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, SpotPair, SpotTwapStatus, Timestamp
+from ..types import CursorResponse, ResponseMeta, SpotPair, SpotTwapStatus, Timestamp, _record
 
 
 class SpotPairsResource:
@@ -55,12 +56,12 @@ class SpotPairsResource:
                 ``PURR-USDC``). Symbol is upper-cased before sending.
         """
         data = self._http.get(f"{self._base_path}/pairs/{symbol.upper()}")
-        return SpotPair.model_validate(data["data"])
+        return _record(SpotPair, data)
 
     async def aget(self, symbol: str) -> SpotPair:
         """Async version of get()."""
         data = await self._http.aget(f"{self._base_path}/pairs/{symbol.upper()}")
-        return SpotPair.model_validate(data["data"])
+        return _record(SpotPair, data)
 
 
 class SpotTwapResource:
@@ -73,8 +74,11 @@ class SpotTwapResource:
       * by user: ``/v1/hyperliquid/spot/twap/user/{user}`` returns TWAP statuses
         for that wallet across all pairs.
 
+    ``history(symbol)`` is the same method as ``by_symbol(symbol)``, under
+    the name every paged series uses.
+
     Example:
-        >>> recent = client.spot.twap.by_symbol("HYPE-USDC", start=..., end=...)
+        >>> recent = client.spot.twap.history("HYPE-USDC", start=..., end=...)
         >>> mine = client.spot.twap.by_user("0xabc...", start=..., end=...)
     """
 
@@ -115,6 +119,7 @@ class SpotTwapResource:
         return CursorResponse(
             data=[SpotTwapStatus.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aby_symbol(
@@ -139,7 +144,15 @@ class SpotTwapResource:
         return CursorResponse(
             data=[SpotTwapStatus.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
+
+    history = by_symbol
+    """TWAP status records for a spot pair, one page at a time: the same method
+    as :meth:`by_symbol`."""
+
+    ahistory = aby_symbol
+    """Async version of :meth:`history` (the same method as :meth:`aby_symbol`)."""
 
     def by_user(
         self,
@@ -172,6 +185,7 @@ class SpotTwapResource:
         return CursorResponse(
             data=[SpotTwapStatus.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aby_user(
@@ -196,4 +210,5 @@ class SpotTwapResource:
         return CursorResponse(
             data=[SpotTwapStatus.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )

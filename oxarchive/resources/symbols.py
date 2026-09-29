@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import Any, List
 
 from ..http import HttpClient
-from ..types import SymbolEntry
+from ..types import SymbolEntry, _body
 
 
 def _entries(payload: dict[str, Any]) -> list[SymbolEntry]:
-    return [SymbolEntry.model_validate(item) for item in payload.get("symbols") or []]
+    body = _body(payload)
+    rows = body if isinstance(body, list) else body.get("symbols") or []
+    return [SymbolEntry.model_validate(item) for item in rows]
 
 
 class SymbolsResource:

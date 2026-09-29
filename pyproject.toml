@@ -11,7 +11,7 @@ license = "MIT"
 authors = [
     { name = "0xarchive", email = "support@0xarchive.io" }
 ]
-keywords = ["0xarchive", "market-data", "hyperliquid", "lighterxyz", "orderbook", "trades", "replay", "api", "sdk"]
+keywords = ["0xarchive", "market-data", "hyperliquid", "lighter", "orderbook", "trades", "replay", "api", "sdk"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",

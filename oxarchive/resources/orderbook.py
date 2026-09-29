@@ -6,7 +6,7 @@ from typing import AsyncIterator, Iterator, Literal, Optional
 
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, OrderBook, Timestamp
+from ..types import CursorResponse, OrderBook, ResponseMeta, Timestamp, _record
 from ..orderbook_reconstructor import (
     OrderBookReconstructor,
     OrderbookDelta,
@@ -15,7 +15,7 @@ from ..orderbook_reconstructor import (
     ReconstructOptions,
 )
 
-# Lighter orderbook granularity levels (Lighter.xyz only)
+# Lighter orderbook granularity levels (Lighter only)
 LighterGranularity = Literal["checkpoint", "30s", "10s", "1s", "tick"]
 
 
@@ -33,7 +33,7 @@ class OrderBookResource:
         >>> # Get order book history
         >>> history = client.hyperliquid.orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
         >>>
-        >>> # Lighter.xyz order book
+        >>> # Lighter order book
         >>> lighter_ob = client.lighter.orderbook.get("BTC")
     """
 
@@ -71,7 +71,7 @@ class OrderBookResource:
                 "depth": depth,
             },
         )
-        return OrderBook.model_validate(data["data"])
+        return _record(OrderBook, data)
 
     async def aget(
         self,
@@ -90,7 +90,7 @@ class OrderBookResource:
                 "depth": depth,
             },
         )
-        return OrderBook.model_validate(data["data"])
+        return _record(OrderBook, data)
 
     def history(
         self,
@@ -113,8 +113,10 @@ class OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor (timestamp)
             limit: Maximum number of results (default: 100, max: 1000)
-            depth: Number of price levels per side
-            granularity: Data resolution for Lighter orderbook (Lighter.xyz only, ignored for Hyperliquid).
+            depth: Number of price levels per side in each snapshot (every
+                venue: Hyperliquid core, HIP-3, HIP-4, spot and Lighter)
+            granularity: Data resolution for the Lighter order book (Lighter
+                mainnet and Robinhood Chain only).
                 Options: 'checkpoint' (1min, default), '30s', '10s', '1s', 'tick'.
                 Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
 
@@ -124,13 +126,13 @@ class OrderBookResource:
         Example:
             >>> result = client.orderbook.history("BTC", start=start, end=end, limit=1000)
             >>> snapshots = result.data
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.orderbook.history(
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
             ...     snapshots.extend(result.data)
             >>>
-            >>> # Lighter.xyz with 10s granularity
+            >>> # Lighter with 10s granularity
             >>> result = client.lighter.orderbook.history(
             ...     "BTC", start=start, end=end, granularity="10s"
             ... )
@@ -150,6 +152,7 @@ class OrderBookResource:
         return CursorResponse(
             data=[OrderBook.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -180,6 +183,7 @@ class OrderBookResource:
         return CursorResponse(
             data=[OrderBook.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def history_tick(
