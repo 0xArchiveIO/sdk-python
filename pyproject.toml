@@ -48,7 +48,7 @@ all = [
 
 [project.urls]
 Homepage = "https://www.0xarchive.io/github-python"
-Documentation = "https://www.0xarchive.io/docs/sdks"
+Documentation = "https://docs.0xarchive.io/sdks"
 Repository = "https://github.com/0xArchiveIO/sdk-python"
 Issues = "https://github.com/0xArchiveIO/sdk-python/issues"
 

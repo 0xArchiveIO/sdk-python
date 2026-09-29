@@ -103,7 +103,7 @@ class HyperliquidClient:
         """OHLCV candle data"""
 
         self.liquidations = LiquidationsResource(http, base_path)
-        """Liquidation events (May 2025+)"""
+        """Liquidation events (2025-12-22+)"""
 
         self.orders = OrdersResource(http, base_path)
         """L4 order history, flow, and TP/SL"""
@@ -120,7 +120,7 @@ class HyperliquidClient:
         2025-05-25, hourly history from 2026-06-07, live every 5 minutes."""
 
         self.hip3 = Hip3Client(http)
-        """HIP-3 builder-deployed perpetuals (February 2026+)"""
+        """HIP-3 builder-deployed perpetuals (trades from 2025-10-13)"""
 
         self.hip4 = Hip4Client(http)
         """HIP-4 outcome markets (May 2026+)"""
@@ -345,7 +345,7 @@ class Hip3Client:
         """Percent of eligible instruments above current UTC-session VWAP."""
 
         self.orderbook = OrderBookResource(http, base_path, coin_transform=coin_transform)
-        """Order book snapshots (February 2026+)"""
+        """Order book snapshots (2026-02-16+)"""
 
         self.trades = TradesResource(http, base_path, coin_transform=coin_transform)
         """Trade/fill history"""

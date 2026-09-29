@@ -69,9 +69,9 @@ history = client.hyperliquid.orderbook.history(
 
 | Need | Link |
 | --- | --- |
-| First authenticated route | [Quick Start](https://www.0xarchive.io/docs/quick-start) |
-| SDK install and route docs | [SDK docs](https://www.0xarchive.io/docs/sdks) |
-| Claude Code, ChatGPT Codex, and coding-agent workflows | [AI Clients](https://www.0xarchive.io/docs/ai-clients) |
+| First authenticated route | [Quick Start](https://docs.0xarchive.io/quickstart) |
+| SDK install and route docs | [SDK docs](https://docs.0xarchive.io/sdks) |
+| Claude Code, ChatGPT Codex, and coding-agent workflows | [AI Clients](https://docs.0xarchive.io/ai-clients) |
 | File-based historical pulls | [Data Catalog](https://www.0xarchive.io/data) |
 | Route contract and machine context | [OpenAPI](https://www.0xarchive.io/openapi.json), [llms.txt](https://www.0xarchive.io/llms.txt) |
 | Plans and limits | [Pricing](https://www.0xarchive.io/pricing) |
@@ -81,7 +81,7 @@ history = client.hyperliquid.orderbook.history(
 | Venue | Coverage | Notes |
 | --- | --- | --- |
 | Hyperliquid | April 2023+ | Core perpetuals; coverage varies by schema and route. |
-| Hyperliquid HIP-3 | February 2026+ for served history | Builder perps; funding and OI update at roughly 10 seconds. |
+| Hyperliquid HIP-3 | Trades and oracle prices from 2025-10-13; candles and liquidations from 2025-12-22; order book, funding, and OI from 2026-02-16; L4 and order history from 2026-03-10 | Builder perps; funding and OI update at roughly 10 seconds. |
 | Hyperliquid HIP-4 | May 2026+ | Outcome markets. Candles and outcome-side OI are served from 2026-05-02; OI updates at ~10s. No funding or liquidations. |
 | Hyperliquid Spot | Trades and candles from 2025-03-22; candle coverage starts exactly 2025-03-22T10:50:22Z; orderbook, L4, TWAP, and orders from 2026-05 | 326 authenticated inventory rows using dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`). Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
 | Lighter.xyz | Observed global per-fill trade floor January 17, 2025; exact starts vary by market. L3 from March 5, 2026+ | Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
@@ -167,7 +167,7 @@ history = client.hyperliquid.orderbook.history(
 
 # HIP-3 order book (case-sensitive coins)
 hip3_ob = client.hyperliquid.hip3.orderbook.get("km:US500")
-hip3_history = client.hyperliquid.hip3.orderbook.history("km:US500", start="2026-02-01", end="2026-02-02")
+hip3_history = client.hyperliquid.hip3.orderbook.history("km:US500", start="2026-09-01", end="2026-09-02")
 
 # Async versions
 orderbook = await client.hyperliquid.orderbook.aget("BTC")
@@ -334,7 +334,7 @@ recent = client.lighter.trades.recent("BTC", limit=100)
 hip3_recent = client.hyperliquid.hip3.trades.recent("km:US500", limit=100)
 
 # HIP-3 trade history
-hip3_trades = client.hyperliquid.hip3.trades.list("km:US500", start="2026-02-01", end="2026-02-02")
+hip3_trades = client.hyperliquid.hip3.trades.list("km:US500", start="2026-09-01", end="2026-09-02")
 
 # Async versions
 result = await client.hyperliquid.trades.alist("ETH", start=..., end=...)
@@ -407,11 +407,7 @@ hip3_instruments = await client.hyperliquid.hip3.instruments.alist()
 us500 = await client.hyperliquid.hip3.instruments.aget("km:US500")
 ```
 
-**Available HIP-3 Coins:**
-| Builder | Coins |
-|---------|-------|
-| xyz (Hyperliquid) | `xyz:XYZ100` |
-| km (Kinetiq Markets) | `km:US500`, `km:SMALL2000`, `km:GOOGL`, `km:USBOND`, `km:GOLD`, `km:USTECH`, `km:NVDA`, `km:SILVER`, `km:BABA` |
+**HIP-3 coins:** builders list and delist markets over time, so this README does not pin a list. Call `client.hyperliquid.hip3.instruments.list()` for the current set. Coin names are case-sensitive and carry the builder prefix (`xyz:XYZ100`, `km:US500`).
 
 #### HIP-3 Market Breadth
 
@@ -604,7 +600,7 @@ history = client.hyperliquid.funding.history(
 
 # HIP-3 funding (case-sensitive coins)
 hip3_current = client.hyperliquid.hip3.funding.current("km:US500")
-hip3_history = client.hyperliquid.hip3.funding.history("km:US500", start="2026-02-01", end="2026-02-07")
+hip3_history = client.hyperliquid.hip3.funding.history("km:US500", start="2026-09-01", end="2026-09-07")
 
 # Async versions
 current = await client.hyperliquid.funding.acurrent("BTC")
@@ -648,7 +644,7 @@ oi = client.hyperliquid.open_interest.history(
 
 # HIP-3 open interest (case-sensitive coins)
 hip3_current = client.hyperliquid.hip3.open_interest.current("km:US500")
-hip3_history = client.hyperliquid.hip3.open_interest.history("km:US500", start="2026-02-01", end="2026-02-07")
+hip3_history = client.hyperliquid.hip3.open_interest.history("km:US500", start="2026-09-01", end="2026-09-07")
 
 # Async versions
 current = await client.hyperliquid.open_interest.acurrent("BTC")
@@ -669,7 +665,7 @@ hip3_current = await client.hyperliquid.hip3.open_interest.acurrent("km:US500")
 
 ### Liquidations
 
-Get historical liquidation events. Available for Hyperliquid (May 2025+), HIP-3, and both Lighter deployments (`client.lighter.liquidations`, `client.rh_lighter.liquidations`). The projected forced-liquidation price-level endpoints refresh about every five minutes. This is a measured cadence, not an exact five-minute guarantee.
+Get historical liquidation events. Available for Hyperliquid and HIP-3 (from 2025-12-22) and both Lighter deployments (`client.lighter.liquidations`, `client.rh_lighter.liquidations`). The projected forced-liquidation price-level endpoints refresh about every five minutes. This is a measured cadence, not an exact five-minute guarantee.
 
 ```python
 # Get liquidation history for a coin (Hyperliquid)
@@ -703,16 +699,16 @@ user_liquidations = client.hyperliquid.liquidations.by_user(
 # HIP-3 liquidations (case-sensitive coins)
 hip3_liquidations = client.hyperliquid.hip3.liquidations.history(
     "km:US500",
-    start="2026-02-01",
-    end="2026-02-02",
+    start="2026-09-01",
+    end="2026-09-02",
     limit=100
 )
 
 # HIP-3 liquidation volume
 hip3_volume = client.hyperliquid.hip3.liquidations.volume(
     "km:US500",
-    start="2026-02-01",
-    end="2026-02-08",
+    start="2026-09-01",
+    end="2026-09-08",
     interval="1h"
 )
 
@@ -758,8 +754,8 @@ for bucket in volume.data:
 # HIP-3 liquidation volume
 hip3_volume = client.hyperliquid.hip3.liquidations.volume(
     "km:US500",
-    start="2026-02-01",
-    end="2026-02-08",
+    start="2026-09-01",
+    end="2026-09-08",
     interval="1d"
 )
 
@@ -857,7 +853,7 @@ lighter_prices = client.lighter.get_price_history("BTC", start="2026-01-01", end
 rh_prices = client.rh_lighter.get_price_history("BTC", start="2026-09-01", end="2026-09-02", interval="1h")
 
 # HIP-3 (case-sensitive coins)
-hip3_prices = client.hyperliquid.hip3.get_price_history("km:US500", start="2026-02-01", end="2026-02-02", interval="1d")
+hip3_prices = client.hyperliquid.hip3.get_price_history("km:US500", start="2026-09-01", end="2026-09-02", interval="1d")
 
 # Paginate for larger ranges
 result = client.hyperliquid.get_price_history("BTC", start=..., end=..., interval="4h", limit=1000)
@@ -914,8 +910,8 @@ rh_candles = client.rh_lighter.candles.history("BTC", start="2026-09-01", end="2
 # HIP-3 candles (case-sensitive coins)
 hip3_candles = client.hyperliquid.hip3.candles.history(
     "km:US500",
-    start="2026-02-01",
-    end="2026-02-02",
+    start="2026-09-01",
+    end="2026-09-02",
     interval="1h"
 )
 
@@ -1737,7 +1733,7 @@ ws = OxArchiveWs(WsOptions(
 | `orderbook` | L2 order book updates | Yes | Yes | Yes |
 | `trades` | Trade/fill updates | Yes | Yes | Yes |
 | `candles` | OHLCV candle data | Yes | No | Yes |
-| `liquidations` | Liquidation events (May 2025+) | Yes | Yes | Yes |
+| `liquidations` | Liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `open_interest` | Open interest snapshots | Yes | Yes | Yes |
 | `funding` | Funding rate records | Yes | Yes | Yes |
 | `ticker` | Price and 24h volume | Yes | Yes | No |
@@ -1758,7 +1754,7 @@ Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. T
 | `hip3_candles` | HIP-3 OHLCV candle data | Yes | Yes | Yes |
 | `hip3_open_interest` | HIP-3 open interest snapshots | Yes | No | Yes |
 | `hip3_funding` | HIP-3 funding rate records | Yes | No | Yes |
-| `hip3_liquidations` | HIP-3 liquidation events (Feb 2026+) | Yes | Yes | Yes |
+| `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
 
@@ -2094,11 +2090,11 @@ For large-scale data exports (route-specific order books, fill-level trade histo
 
 ## Links
 
-- [API Docs](https://www.0xarchive.io/docs)
+- [API Docs](https://docs.0xarchive.io)
 - [TypeScript SDK](https://npmjs.com/package/@0xarchive/sdk)
 - [Rust SDK](https://crates.io/crates/oxarchive)
 - [CLI](https://npmjs.com/package/@0xarchive/cli)
-- [MCP Server](https://mcp.0xarchive.io)
+- [MCP Server](https://docs.0xarchive.io/mcp-server)
 - [0xArchive Skill](https://github.com/0xArchiveIO/0xarchive-skill)
 - [Examples](https://github.com/0xArchiveIO/examples)
 
