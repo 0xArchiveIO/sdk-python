@@ -123,6 +123,15 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `1d`, which the API refuses.
 
 ### Fixed
+- `trades.list()` and `alist()` send `cursor` back exactly as the API
+  returned it. A trades cursor is an opaque string such as
+  `"1790640000578_218303497631402"` (Lighter adds a third part), and it was
+  converted as if it were a timestamp, so asking for the second page raised
+  `ValueError` or sent a different cursor. Integer and datetime cursors are
+  still accepted.
+- `CoinFreshness.funding` is optional. HIP-4 has no funding, and
+  `client.hyperliquid.hip4.get_freshness()` raised a validation error on
+  every response.
 - Times without a time zone are UTC on every method. Before, a naive
   `datetime` and an ISO string without an offset (`"2026-09-01"`,
   `"2026-09-01T00:00:00"`) were read as the machine's local time, so the

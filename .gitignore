@@ -8,6 +8,7 @@ tests/*
 !tests/test_rh_lighter.py
 !tests/_mock_api.py
 !tests/test_timestamps.py
+!tests/test_spec_fixes.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

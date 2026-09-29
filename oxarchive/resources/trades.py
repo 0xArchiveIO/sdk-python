@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from .._time import to_unix_ms
 from ..http import HttpClient
@@ -46,6 +46,19 @@ class TradesResource:
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
+    @staticmethod
+    def _cursor(cursor: Optional[Timestamp]) -> Optional[Union[str, int]]:
+        """The ``cursor`` query value.
+
+        A trades cursor is opaque: a string such as ``"1790640000578_218303497631402"``
+        (Hyperliquid, HIP-3, HIP-4 and spot) or ``"1790540000288_32247366750_1"``
+        (Lighter), sent back exactly as the API returned it. A string or an
+        integer is passed through unchanged; only a datetime is converted.
+        """
+        if cursor is None or isinstance(cursor, (str, int)):
+            return cursor
+        return to_unix_ms(cursor, "cursor")
+
     def list(
         self,
         symbol: str,
@@ -67,7 +80,7 @@ class TradesResource:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             start: Start timestamp (required)
             end: End timestamp (required)
-            cursor: Cursor from previous response's next_cursor (timestamp)
+            cursor: The previous response's next_cursor, passed back unchanged
             limit: Maximum number of results (default: 100, max: 1000)
             side: Filter by trade side
 
@@ -95,7 +108,7 @@ class TradesResource:
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
-                "cursor": self._convert_timestamp(cursor),
+                "cursor": self._cursor(cursor),
                 "limit": limit,
                 "side": side,
             },
@@ -128,7 +141,7 @@ class TradesResource:
             params={
                 "start": self._convert_timestamp(start),
                 "end": self._convert_timestamp(end),
-                "cursor": self._convert_timestamp(cursor),
+                "cursor": self._cursor(cursor),
                 "limit": limit,
                 "side": side,
             },

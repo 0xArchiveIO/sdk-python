@@ -971,8 +971,8 @@ class CoinFreshness(BaseModel):
     trades: DataTypeFreshness
     """Trades data freshness."""
 
-    funding: DataTypeFreshness
-    """Funding rate data freshness."""
+    funding: Optional[DataTypeFreshness] = None
+    """Funding rate data freshness. ``None`` on HIP-4, which has no funding."""
 
     open_interest: DataTypeFreshness
     """Open interest data freshness."""
