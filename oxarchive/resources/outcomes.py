@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, List, Optional
+from urllib.parse import quote
 
 from ..http import HttpClient
 from ..types import CursorResponse, Hip4OutcomeAggregate, Hip4Question, ResponseMeta
@@ -96,12 +97,12 @@ class Hip4OutcomesResource:
         :class:`Hip4OutcomeAggregate` with ``aggregated_oi`` populated, like
         :py:meth:`get`.
         """
-        data = self._http.get(f"{self._base_path}/outcomes/by-slug/{slug}")
+        data = self._http.get(f"{self._base_path}/outcomes/by-slug/{quote(slug, safe='')}")
         return Hip4OutcomeAggregate.model_validate(data["data"])
 
     async def aget_by_slug(self, slug: str) -> Hip4OutcomeAggregate:
         """Async version of get_by_slug()."""
-        data = await self._http.aget(f"{self._base_path}/outcomes/by-slug/{slug}")
+        data = await self._http.aget(f"{self._base_path}/outcomes/by-slug/{quote(slug, safe='')}")
         return Hip4OutcomeAggregate.model_validate(data["data"])
 
 
