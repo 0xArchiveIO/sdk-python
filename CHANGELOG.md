@@ -175,6 +175,8 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   and `multi_replay()` reject them with `ValueError`
   (`FULL_DEPTH_LIVE_ONLY_ERROR`) before anything is sent. Stored full-depth
   history is on REST `l2_orderbook.history()` and `diffs()`.
+- `client.lighter.l3_orderbook.get()` takes `account`, and `history()` takes
+  `granularity` (`checkpoint`, `30s`, `10s`, `1s` or `tick`) and `account`.
 
 ### Changed
 - `WsChannel` includes the five `rh_lighter_*` channels, `orderbook_full` and
@@ -189,6 +191,12 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `hip4`, `spot`, `lighter` and `rh-lighter`.
 - `LighterClient` shares its resources with `RhLighterClient` through a common
   base class; its paths and behavior are unchanged.
+- Parameters the API never applied are removed, and passing one now raises
+  `TypeError` before anything is sent instead of returning unfiltered data:
+  `side` on `trades.list()`; `user`, `status` and `order_type` on
+  `client.spot.orders.history()` (core, HIP-3 and HIP-4 order history keep
+  them); `depth` on `l2_orderbook.history()`, `l4_orderbook.history()` and
+  `lighter.l3_orderbook.history()` (it still applies to `get()`).
 - `client.hyperliquid.hip3.breadth.history()` and `ahistory()` accept
   `interval="1m"`. The API serves 1-minute buckets on breadth, open
   interest, funding, price and liquidation-volume history for every venue.
@@ -196,6 +204,23 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - The order-flow docstring and README list the buckets the API serves: `1m`
   (the default), `5m`, `15m` and `1h`. The docstring used to suggest `4h` and
   `1d`, which the API refuses.
+
+### Removed
+- Methods that called routes the API does not serve, so every call failed
+  with a 404:
+  - `client.hyperliquid.hip4.l2_orderbook` (`get()`, `history()`,
+    `diffs()` and their async versions). HIP-4 has no full-depth L2 route;
+    use `hip4.orderbook` and `hip4.l4_orderbook`.
+  - `client.hyperliquid.hip4.orders.trigger_levels()` and
+    `trigger_levels_history()`.
+  - `client.spot.orders.flow()`, `tpsl()`, `trigger_levels()` and
+    `trigger_levels_history()`. Spot serves order history only.
+  - `client.hyperliquid.hip3.liquidations.by_user()`. The per-user route
+    exists for Hyperliquid core only.
+- The async versions of those methods go with them. The affected resources
+  are now `Hip4OrdersResource`, `SpotOrdersResource` and
+  `Hip3LiquidationsResource`; Hyperliquid core and HIP-3 keep
+  `OrdersResource`, and Hyperliquid core keeps `LiquidationsResource`.
 
 ### Fixed
 - `trades.list()` and `alist()` send `cursor` back exactly as the API
@@ -207,6 +232,16 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - `CoinFreshness.funding` is optional. HIP-4 has no funding, and
   `client.hyperliquid.hip4.get_freshness()` raised a validation error on
   every response.
+- `data_quality.symbol_coverage()` and `asymbol_coverage()` send the symbol
+  as given, URL-encoded as one path segment. They upper-cased it, which
+  turned case-sensitive HIP-3 symbols such as `km:US500` into a symbol
+  with no data, and they did not encode the `#` of HIP-4 symbols, which cut
+  the path short.
+- `SpotTableFreshness` has the shape the API returns: `symbol`, `coin`,
+  `exchange`, `measured_at`, and `orderbook`, `trades`, `l4_diffs`,
+  `l4_checkpoints`, `orders` and `twap` as `DataTypeFreshness`. Its
+  `tables` field was never filled; `tables` is now a property that returns
+  the datasets present.
 - Times without a time zone are UTC on every method. Before, a naive
   `datetime` and an ISO string without an offset (`"2026-09-01"`,
   `"2026-09-01T00:00:00"`) were read as the machine's local time, so the

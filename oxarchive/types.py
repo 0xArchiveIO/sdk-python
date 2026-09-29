@@ -511,32 +511,55 @@ class SpotTwapStatus(BaseModel):
 
 
 class SpotTableFreshness(BaseModel):
-    """Per-table freshness lag for a spot pair.
+    """Freshness of each dataset for a spot pair, from ``client.spot.get_freshness()``.
 
-    Returned by ``/v1/hyperliquid/spot/freshness/{symbol}`` for each backing
-    table (``spot_orderbook_snapshots``, ``spot_fills``, ``spot_orderbook_l4_diffs``,
-    ``spot_orders``, ``spot_twap``). Mirrors the per-data-type shape used by
-    :class:`CoinFreshness` but keyed by table name rather than fixed channels.
-
-    The ``tables`` field accepts either fully-typed :class:`DataTypeFreshness`
-    objects or raw dicts so the model survives backend shape evolution. Each
-    entry typically has ``last_updated`` and ``lag_ms`` keys, both optional.
+    One entry per dataset spot serves: ``orderbook``, ``trades``,
+    ``l4_diffs``, ``l4_checkpoints``, ``orders`` and ``twap``. Each carries
+    ``last_updated`` and ``lag_ms``, both optional. Spot has no funding, open
+    interest or liquidations. Unknown fields are kept.
     """
+
+    symbol: Optional[str] = None
+    """Pair symbol in dashed canonical form (for example ``HYPE-USDC``)."""
 
     coin: Optional[str] = None
     """Pair symbol in dashed canonical form."""
 
     exchange: Optional[str] = None
-    """Exchange name (``hyperliquid_spot``)."""
+    """Venue family (``spot``)."""
 
     measured_at: Optional[datetime] = None
     """When this freshness was measured."""
 
-    tables: dict[str, Any] = Field(default_factory=dict)
-    """Per-dataset freshness lag, keyed by dataset name. Values are
-    typically ``{last_updated, lag_ms}`` dicts but the schema is permissive."""
+    orderbook: Optional[DataTypeFreshness] = None
+    """L2 order book snapshots."""
+
+    trades: Optional[DataTypeFreshness] = None
+    """Trades."""
+
+    l4_diffs: Optional[DataTypeFreshness] = None
+    """L4 order book diffs."""
+
+    l4_checkpoints: Optional[DataTypeFreshness] = None
+    """L4 order book checkpoints."""
+
+    orders: Optional[DataTypeFreshness] = None
+    """L4 order lifecycle events."""
+
+    twap: Optional[DataTypeFreshness] = None
+    """TWAP statuses."""
 
     model_config = {"extra": "allow"}
+
+    @property
+    def tables(self) -> dict[str, DataTypeFreshness]:
+        """The datasets present in the response, keyed by name.
+
+        Before 1.12.0 this was a field that the API never filled, so it was
+        always empty; it now lists the datasets above.
+        """
+        names = ("orderbook", "trades", "l4_diffs", "l4_checkpoints", "orders", "twap")
+        return {name: value for name in names if (value := getattr(self, name)) is not None}
 
 
 class LighterInstrument(BaseModel):

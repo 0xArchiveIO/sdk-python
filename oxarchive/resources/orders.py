@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
+from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import (
@@ -14,21 +15,8 @@ from ..types import (
 )
 
 
-class OrdersResource:
-    """
-    L4 order history, flow, and TP/SL endpoints.
-
-    Example:
-        >>> # Get order history
-        >>> result = client.hyperliquid.orders.history("BTC", start="2024-01-01", end="2024-01-02")
-        >>> orders = result.data
-        >>>
-        >>> # Get order flow aggregation
-        >>> flow = client.hyperliquid.orders.flow("BTC", start="2024-01-01", end="2024-01-02")
-        >>>
-        >>> # Get TP/SL history
-        >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start="2024-01-01", end="2024-01-02")
-    """
+class _OrdersBase:
+    """Shared construction and symbol handling for the order resources."""
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
@@ -36,6 +24,26 @@ class OrdersResource:
         self._coin_transform = coin_transform
 
     _convert_timestamp = staticmethod(to_unix_ms)
+
+    @staticmethod
+    def _resolve_symbol(symbol: str, kwargs: dict[str, Any]) -> str:
+        import warnings
+
+        if "coin" in kwargs:
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+        return symbol
+
+
+class _OrderFlowResource(_OrdersBase):
+    """Order history, flow and TP/SL: the routes Hyperliquid core, HIP-3 and HIP-4 share."""
 
     def history(
         self,
@@ -266,6 +274,22 @@ class OrdersResource:
         )
 
 
+class OrdersResource(_OrderFlowResource):
+    """
+    L4 order history, flow, TP/SL and trigger levels (Hyperliquid core and HIP-3).
+
+    Example:
+        >>> # Get order history
+        >>> result = client.hyperliquid.orders.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> orders = result.data
+        >>>
+        >>> # Get order flow aggregation
+        >>> flow = client.hyperliquid.orders.flow("BTC", start="2024-01-01", end="2024-01-02")
+        >>>
+        >>> # Get TP/SL history
+        >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start="2024-01-01", end="2024-01-02")
+    """
+
     def trigger_levels(
         self,
         symbol: str,
@@ -388,18 +412,102 @@ class OrdersResource:
             next_cursor=data.get("meta", {}).get("next_cursor"),
         )
 
-    @staticmethod
-    def _resolve_symbol(symbol, kwargs):
-        import warnings
 
-        if "coin" in kwargs:
-            warnings.warn(
-                "'coin' is deprecated, use 'symbol' instead",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            if symbol is None:
-                symbol = kwargs.pop("coin")
-            else:
-                kwargs.pop("coin")
-        return symbol
+class Hip4OrdersResource(_OrderFlowResource):
+    """
+    HIP-4 L4 order history, flow and TP/SL.
+
+    HIP-4 has no trigger-level map, so this resource has no ``trigger_levels``.
+
+    Example:
+        >>> result = client.hyperliquid.hip4.orders.history("0", start=..., end=...)
+        >>> flow = client.hyperliquid.hip4.orders.flow("0", start=..., end=...)
+    """
+
+
+_UNSUPPORTED_SPOT_HISTORY = {
+    name: "the spot order history route does not filter by it. Filter the returned rows instead."
+    for name in ("user", "status", "order_type")
+}
+
+
+class SpotOrdersResource(_OrdersBase):
+    """
+    Hyperliquid spot L4 order lifecycle history (live from 2026-05-05).
+
+    Spot serves order history only: there is no flow, TP/SL or trigger-level
+    route, and the history route takes no user, status or order-type filter.
+
+    Example:
+        >>> result = client.spot.orders.history("HYPE-USDC", start=..., end=...)
+        >>> while result.next_cursor:
+        ...     result = client.spot.orders.history(
+        ...         "HYPE-USDC", start=..., end=..., cursor=result.next_cursor
+        ...     )
+    """
+
+    def history(
+        self,
+        symbol: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        **kwargs: Any,
+    ) -> CursorResponse[list[dict[str, Any]]]:
+        """
+        Get spot order lifecycle history.
+
+        Args:
+            symbol: Pair symbol in dashed canonical form (e.g., 'HYPE-USDC')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            cursor: Cursor from previous response's next_cursor
+            limit: Maximum number of results
+
+        Returns:
+            CursorResponse with order data and next_cursor for pagination
+        """
+        symbol = self._resolve_symbol(symbol, kwargs)
+        reject_unsupported("history", kwargs, _UNSUPPORTED_SPOT_HISTORY)
+        data = self._http.get(
+            f"{self._base_path}/orders/{self._coin_transform(symbol)}/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "cursor": cursor,
+                "limit": limit,
+            },
+        )
+        return CursorResponse(
+            data=data["data"],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def ahistory(
+        self,
+        symbol: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        **kwargs: Any,
+    ) -> CursorResponse[list[dict[str, Any]]]:
+        """Async version of history()."""
+        symbol = self._resolve_symbol(symbol, kwargs)
+        reject_unsupported("ahistory", kwargs, _UNSUPPORTED_SPOT_HISTORY)
+        data = await self._http.aget(
+            f"{self._base_path}/orders/{self._coin_transform(symbol)}/history",
+            params={
+                "start": self._convert_timestamp(start),
+                "end": self._convert_timestamp(end),
+                "cursor": cursor,
+                "limit": limit,
+            },
+        )
+        return CursorResponse(
+            data=data["data"],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )

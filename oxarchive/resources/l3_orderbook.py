@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, Timestamp
+from .orderbook import LighterGranularity
+
+_UNSUPPORTED_HISTORY = {
+    "depth": (
+        "history returns every resting order of each snapshot, up to 250 per side. "
+        "depth applies to get() only."
+    ),
+}
 
 
 class L3OrderBookResource:
@@ -44,6 +53,7 @@ class L3OrderBookResource:
         *,
         timestamp: Optional[Timestamp] = None,
         depth: Optional[int] = None,
+        account: Optional[int] = None,
         **kwargs,
     ) -> dict:
         """
@@ -53,6 +63,7 @@ class L3OrderBookResource:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             timestamp: Optional timestamp to get historical snapshot
             depth: Maximum individual resting orders per side (1 to 250)
+            account: Only the orders of this Lighter account index
 
         Returns:
             L3 order book snapshot (dict)
@@ -64,6 +75,7 @@ class L3OrderBookResource:
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
+                "account": account,
             },
         )
         return data["data"]
@@ -74,6 +86,7 @@ class L3OrderBookResource:
         *,
         timestamp: Optional[Timestamp] = None,
         depth: Optional[int] = None,
+        account: Optional[int] = None,
         **kwargs,
     ) -> dict:
         """Async version of get()."""
@@ -84,6 +97,7 @@ class L3OrderBookResource:
             params={
                 "timestamp": self._convert_timestamp(timestamp),
                 "depth": depth,
+                "account": account,
             },
         )
         return data["data"]
@@ -96,7 +110,8 @@ class L3OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-        depth: Optional[int] = None,
+        granularity: Optional[LighterGranularity] = None,
+        account: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """
@@ -108,13 +123,15 @@ class L3OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
-            depth: Maximum individual resting orders per side (1 to 250)
+            granularity: History resolution: 'checkpoint' (default), '30s',
+                '10s', '1s' or 'tick'
+            account: Only the orders of this Lighter account index
 
         Returns:
             CursorResponse with L3 orderbook snapshots and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
-        self._validate_depth(depth)
+        reject_unsupported("history", kwargs, _UNSUPPORTED_HISTORY)
         data = self._http.get(
             f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}/history",
             params={
@@ -122,7 +139,8 @@ class L3OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
-                "depth": depth,
+                "granularity": granularity,
+                "account": account,
             },
         )
         return CursorResponse(
@@ -138,12 +156,13 @@ class L3OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-        depth: Optional[int] = None,
+        granularity: Optional[LighterGranularity] = None,
+        account: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """Async version of history()."""
         symbol = self._resolve_symbol(symbol, kwargs)
-        self._validate_depth(depth)
+        reject_unsupported("ahistory", kwargs, _UNSUPPORTED_HISTORY)
         data = await self._http.aget(
             f"{self._base_path}/l3orderbook/{self._coin_transform(symbol)}/history",
             params={
@@ -151,7 +170,8 @@ class L3OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
-                "depth": depth,
+                "granularity": granularity,
+                "account": account,
             },
         )
         return CursorResponse(

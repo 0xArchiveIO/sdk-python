@@ -324,8 +324,8 @@ while result.next_cursor:
     )
     trades.extend(result.data)
 
-# Filter by side
-buys = client.hyperliquid.trades.list("BTC", start=..., end=..., side="buy")
+# The API does not filter trades by side; filter the returned rows
+buys = [t for t in result.data if t.side == "B"]
 
 # Get recent trades (Lighter and HIP-3 - have real-time data)
 recent = client.lighter.trades.recent("BTC", limit=100)
@@ -553,11 +553,12 @@ orders = client.spot.orders.history("HYPE-USDC", start=..., end=...)
 twap_pair = client.spot.twap.by_symbol("HYPE-USDC", start=..., end=...)
 twap_user = client.spot.twap.by_user("0xabc...", start=..., end=...)
 
-# Per-table freshness lag
+# Per-dataset freshness lag: orderbook, trades, l4_diffs, l4_checkpoints,
+# orders and twap, each with optional lag_ms and last_updated
 fresh = client.spot.get_freshness("HYPE-USDC")
-for table, lag in fresh.tables.items():
-    # Values are dicts with optional `lag_ms` and `last_updated` keys.
-    print(f"{table}: lag={lag.get('lag_ms')}ms last_updated={lag.get('last_updated')}")
+print(fresh.orderbook.lag_ms, fresh.trades.last_updated)
+for dataset, lag in fresh.tables.items():
+    print(f"{dataset}: lag={lag.lag_ms}ms last_updated={lag.last_updated}")
 
 # Async versions are available on every method:
 ob = await client.spot.orderbook.aget("HYPE-USDC")
@@ -721,7 +722,7 @@ while liquidations.next_cursor:
     )
     all_liquidations.extend(liquidations.data)
 
-# Get liquidations for a specific user
+# Get liquidations for a specific user (Hyperliquid core; HIP-3 has no per-user route)
 user_liquidations = client.hyperliquid.liquidations.by_user(
     "0x1234...",
     start="2025-06-01",
@@ -1044,12 +1045,11 @@ diffs = client.hyperliquid.l4_orderbook.diffs(
     limit=1000
 )
 
-# Get L4 orderbook history (full snapshots over time)
+# Get L4 orderbook history (full checkpoints over time)
 history = client.hyperliquid.l4_orderbook.history(
     "BTC",
     start="2024-01-01",
     end="2024-01-02",
-    depth=20,
     limit=100
 )
 
@@ -1071,7 +1071,7 @@ hip3_snapshot = await client.hyperliquid.hip3.l4_orderbook.aget("km:US500")
 |--------|-------------|
 | `get(symbol, *, timestamp, depth)` | Get L4 orderbook snapshot |
 | `diffs(symbol, *, start, end, cursor, limit)` | Get L4 orderbook diffs (order-level changes) |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get L4 orderbook history (full snapshots) |
+| `history(symbol, *, start, end, cursor, limit)` | Get L4 orderbook history (full checkpoints; `depth` applies to `get()` only) |
 
 ### L3 Orderbook (Lighter.xyz Only)
 
@@ -1085,12 +1085,16 @@ snapshot = client.lighter.l3_orderbook.get("BTC", depth=20)
 # Get L3 orderbook at a specific timestamp
 historical = client.lighter.l3_orderbook.get("BTC", timestamp=1704067200000)
 
+# Only one account's resting orders
+mine = client.lighter.l3_orderbook.get("BTC", account=281474976710654)
+
 # Get L3 orderbook history
 history = client.lighter.l3_orderbook.history(
     "BTC",
     start="2026-03-05",
     end="2026-03-06",
-    depth=250,
+    granularity="checkpoint",  # checkpoint (default), 30s, 10s, 1s, tick
+    account=281474976710654,   # optional: one account's orders
     limit=100
 )
 
@@ -1113,8 +1117,8 @@ history = await client.lighter.l3_orderbook.ahistory("BTC", start=..., end=...)
 
 | Method | Description |
 |--------|-------------|
-| `get(symbol, *, timestamp, depth)` | Get an L3 snapshot, up to 250 orders per side |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get tick-level L3 history from March 5, 2026, up to 250 orders per side |
+| `get(symbol, *, timestamp, depth, account)` | Get an L3 snapshot, up to 250 orders per side |
+| `history(symbol, *, start, end, cursor, limit, granularity, account)` | Get L3 history from March 5, 2026, up to 250 orders per side |
 
 ### L2 Orderbook (Full-Depth)
 
@@ -1145,7 +1149,7 @@ l2_diffs = await client.hyperliquid.l2_orderbook.adiffs("BTC", start=..., end=..
 | Method | Description |
 |--------|-------------|
 | `get(symbol, *, timestamp, depth)` | Get L2 full-depth orderbook snapshot |
-| `history(symbol, *, start, end, cursor, limit, depth)` | Get L2 orderbook history |
+| `history(symbol, *, start, end, cursor, limit)` | Get L2 orderbook history (every level; `depth` applies to `get()` only) |
 | `diffs(symbol, *, start, end, cursor, limit)` | Get L2 tick-level diffs |
 
 ### Orders (L4 Order History)
@@ -1219,6 +1223,8 @@ hip3_orders = await client.hyperliquid.hip3.orders.ahistory("km:US500", start=..
 | `history(symbol, *, start, end, user, status, order_type, cursor, limit)` | Get order history |
 | `flow(symbol, *, start, end, interval, cursor, limit)` | Get order flow aggregation, one page of buckets |
 | `tpsl(symbol, *, start, end, user, triggered, cursor, limit)` | Get TP/SL history |
+
+Hyperliquid core and HIP-3 also have `trigger_levels()` and `trigger_levels_history()`. HIP-4 serves `history()`, `flow()` and `tpsl()`. Spot serves `history(symbol, *, start, end, cursor, limit)` only, without user, status or order-type filters.
 
 ### Account Positions
 
@@ -1437,7 +1443,7 @@ coverage = await client.data_quality.acoverage()
 | `status()` | Overall system health and per-exchange status |
 | `coverage()` | Data coverage summary for venue APIs |
 | `exchange_coverage(exchange)` | Coverage details for a venue scope (`hyperliquid`, `hip3`, `hip4`, `spot`, `lighter`, `rh-lighter`) |
-| `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage |
+| `symbol_coverage(exchange, symbol, *, from_time, to_time)` | Coverage with gap detection, cadence, and historical coverage. The symbol is sent as given, URL-encoded (`km:US500`, `HYPE-USDC`, `#0`) |
 | `list_incidents(...)` | List incidents with filtering and pagination |
 | `get_incident(incident_id)` | Get specific incident details |
 | `latency()` | Current latency metrics (WebSocket, REST, data freshness) |

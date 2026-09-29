@@ -15,11 +15,11 @@ from .l2_orderbook import L2OrderBookResource
 from .l3_orderbook import L3OrderBookResource
 from .l4_orderbook import L4OrderBookResource
 from .lighter_liquidations import LighterLiquidationsResource
-from .liquidations import LiquidationsResource
+from .liquidations import Hip3LiquidationsResource, LiquidationsResource
 from .openinterest import Hip4OpenInterestResource, OpenInterestResource
 from .oracle import Hip3OracleResource
 from .orderbook import OrderBookResource
-from .orders import OrdersResource
+from .orders import Hip4OrdersResource, OrdersResource, SpotOrdersResource
 from .outcomes import Hip4OutcomesResource, Hip4QuestionsResource
 from .positions import (
     HyperliquidPositionsResource,
@@ -49,10 +49,13 @@ __all__ = [
     "Hip4CandlesResource",
     "SpotCandlesResource",
     "LiquidationsResource",
+    "Hip3LiquidationsResource",
     "LighterLiquidationsResource",
     "DataQualityResource",
     "Web3Resource",
     "OrdersResource",
+    "Hip4OrdersResource",
+    "SpotOrdersResource",
     "Hip4OutcomesResource",
     "L4OrderBookResource",
     "L2OrderBookResource",

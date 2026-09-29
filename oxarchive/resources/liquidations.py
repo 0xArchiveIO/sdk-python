@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from .._time import to_unix_ms
 from ..http import HttpClient
@@ -16,29 +16,8 @@ from ..types import (
 )
 
 
-class LiquidationsResource:
-    """
-    Liquidations API resource.
-
-    Retrieve historical liquidation events from Hyperliquid.
-
-    Note: Liquidation data is available from May 25, 2025 onwards.
-
-    Example:
-        >>> # Get recent liquidations
-        >>> liquidations = client.hyperliquid.liquidations.history(
-        ...     "BTC",
-        ...     start="2025-06-01",
-        ...     end="2025-06-02"
-        ... )
-        >>>
-        >>> # Get liquidations for a specific user
-        >>> user_liquidations = client.hyperliquid.liquidations.by_user(
-        ...     "0x1234...",
-        ...     start="2025-06-01",
-        ...     end="2025-06-02"
-        ... )
-    """
+class _LiquidationsBase:
+    """Liquidation history, volume and projected liquidation levels."""
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
         self._http = http
@@ -114,111 +93,6 @@ class LiquidationsResource:
                 "cursor": cursor,
                 "limit": limit,
             },
-        )
-        return CursorResponse(
-            data=[Liquidation.model_validate(item) for item in data["data"]],
-            next_cursor=data.get("meta", {}).get("next_cursor"),
-        )
-
-    def by_user(
-        self,
-        user_address: str,
-        *,
-        start: Timestamp,
-        end: Timestamp,
-        symbol: Optional[str] = None,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None,
-        **kwargs,
-    ) -> CursorResponse[list[Liquidation]]:
-        """
-        Get liquidation history for a specific user.
-
-        This returns liquidations where the user was either:
-        - The liquidated party (their position was liquidated)
-        - The liquidator (they executed the liquidation)
-
-        Args:
-            user_address: User's wallet address (e.g., '0x1234...')
-            start: Start timestamp (required)
-            end: End timestamp (required)
-            symbol: Optional symbol filter (e.g., 'BTC', 'ETH')
-            cursor: Cursor from previous response's next_cursor
-            limit: Maximum number of results (default: 100, max: 1000)
-
-        Returns:
-            CursorResponse with liquidation records and next_cursor for pagination
-        """
-        # Handle deprecated 'coin' kwarg for the symbol filter
-        if "coin" in kwargs:
-            import warnings
-
-            warnings.warn(
-                "'coin' is deprecated, use 'symbol' instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if symbol is None:
-                symbol = kwargs.pop("coin")
-            else:
-                kwargs.pop("coin")
-
-        params = {
-            "start": self._convert_timestamp(start),
-            "end": self._convert_timestamp(end),
-            "cursor": cursor,
-            "limit": limit,
-        }
-        if symbol:
-            params["coin"] = symbol.upper()
-
-        data = self._http.get(
-            f"{self._base_path}/liquidations/user/{user_address}",
-            params=params,
-        )
-        return CursorResponse(
-            data=[Liquidation.model_validate(item) for item in data["data"]],
-            next_cursor=data.get("meta", {}).get("next_cursor"),
-        )
-
-    async def aby_user(
-        self,
-        user_address: str,
-        *,
-        start: Timestamp,
-        end: Timestamp,
-        symbol: Optional[str] = None,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None,
-        **kwargs,
-    ) -> CursorResponse[list[Liquidation]]:
-        """Async version of by_user()."""
-        # Handle deprecated 'coin' kwarg for the symbol filter
-        if "coin" in kwargs:
-            import warnings
-
-            warnings.warn(
-                "'coin' is deprecated, use 'symbol' instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if symbol is None:
-                symbol = kwargs.pop("coin")
-            else:
-                kwargs.pop("coin")
-
-        params = {
-            "start": self._convert_timestamp(start),
-            "end": self._convert_timestamp(end),
-            "cursor": cursor,
-            "limit": limit,
-        }
-        if symbol:
-            params["coin"] = symbol.upper()
-
-        data = await self._http.aget(
-            f"{self._base_path}/liquidations/user/{user_address}",
-            params=params,
         )
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
@@ -439,7 +313,7 @@ class LiquidationsResource:
         )
 
     @staticmethod
-    def _resolve_symbol(symbol, kwargs):
+    def _resolve_symbol(symbol: str, kwargs: dict[str, Any]) -> str:
         import warnings
 
         if "coin" in kwargs:
@@ -453,3 +327,147 @@ class LiquidationsResource:
             else:
                 kwargs.pop("coin")
         return symbol
+
+
+class LiquidationsResource(_LiquidationsBase):
+    """
+    Liquidations API resource.
+
+    Retrieve historical liquidation events from Hyperliquid.
+
+    Note: Liquidation data is available from May 25, 2025 onwards.
+
+    Example:
+        >>> # Get recent liquidations
+        >>> liquidations = client.hyperliquid.liquidations.history(
+        ...     "BTC",
+        ...     start="2025-06-01",
+        ...     end="2025-06-02"
+        ... )
+        >>>
+        >>> # Get liquidations for a specific user
+        >>> user_liquidations = client.hyperliquid.liquidations.by_user(
+        ...     "0x1234...",
+        ...     start="2025-06-01",
+        ...     end="2025-06-02"
+        ... )
+    """
+
+    def by_user(
+        self,
+        user_address: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        symbol: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        **kwargs,
+    ) -> CursorResponse[list[Liquidation]]:
+        """
+        Get liquidation history for a specific user.
+
+        This returns liquidations where the user was either:
+        - The liquidated party (their position was liquidated)
+        - The liquidator (they executed the liquidation)
+
+        Args:
+            user_address: User's wallet address (e.g., '0x1234...')
+            start: Start timestamp (required)
+            end: End timestamp (required)
+            symbol: Optional symbol filter (e.g., 'BTC', 'ETH')
+            cursor: Cursor from previous response's next_cursor
+            limit: Maximum number of results (default: 100, max: 1000)
+
+        Returns:
+            CursorResponse with liquidation records and next_cursor for pagination
+        """
+        # Handle deprecated 'coin' kwarg for the symbol filter
+        if "coin" in kwargs:
+            import warnings
+
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+
+        params = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "cursor": cursor,
+            "limit": limit,
+        }
+        if symbol:
+            params["coin"] = symbol.upper()
+
+        data = self._http.get(
+            f"{self._base_path}/liquidations/user/{user_address}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[Liquidation.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+    async def aby_user(
+        self,
+        user_address: str,
+        *,
+        start: Timestamp,
+        end: Timestamp,
+        symbol: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        **kwargs,
+    ) -> CursorResponse[list[Liquidation]]:
+        """Async version of by_user()."""
+        # Handle deprecated 'coin' kwarg for the symbol filter
+        if "coin" in kwargs:
+            import warnings
+
+            warnings.warn(
+                "'coin' is deprecated, use 'symbol' instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if symbol is None:
+                symbol = kwargs.pop("coin")
+            else:
+                kwargs.pop("coin")
+
+        params = {
+            "start": self._convert_timestamp(start),
+            "end": self._convert_timestamp(end),
+            "cursor": cursor,
+            "limit": limit,
+        }
+        if symbol:
+            params["coin"] = symbol.upper()
+
+        data = await self._http.aget(
+            f"{self._base_path}/liquidations/user/{user_address}",
+            params=params,
+        )
+        return CursorResponse(
+            data=[Liquidation.model_validate(item) for item in data["data"]],
+            next_cursor=data.get("meta", {}).get("next_cursor"),
+        )
+
+
+class Hip3LiquidationsResource(_LiquidationsBase):
+    """
+    HIP-3 liquidations: history, volume and projected liquidation levels.
+
+    HIP-3 has no per-user liquidation route, so this resource has no
+    ``by_user``. Symbols keep their builder prefix and case.
+
+    Example:
+        >>> liqs = client.hyperliquid.hip3.liquidations.history(
+        ...     "xyz:XYZ100", start="2026-09-01", end="2026-09-02"
+        ... )
+    """

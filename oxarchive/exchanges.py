@@ -15,10 +15,12 @@ from .resources import (
     FundingResource,
     Hip3CandlesResource,
     Hip3InstrumentsResource,
+    Hip3LiquidationsResource,
     Hip3OracleResource,
     Hip4CandlesResource,
     Hip4InstrumentsResource,
     Hip4OpenInterestResource,
+    Hip4OrdersResource,
     Hip4OutcomesResource,
     Hip4QuestionsResource,
     HyperliquidPositionsResource,
@@ -35,6 +37,7 @@ from .resources import (
     OrderBookResource,
     OrdersResource,
     SpotCandlesResource,
+    SpotOrdersResource,
     SpotPairsResource,
     SpotTwapResource,
     TradesResource,
@@ -374,8 +377,10 @@ class Hip3Client:
         self.candles = Hip3CandlesResource(http, base_path, coin_transform=coin_transform)
         """OHLCV candle data (max 10,000 rows per page)"""
 
-        self.liquidations = LiquidationsResource(http, base_path, coin_transform=coin_transform)
-        """Liquidation events"""
+        self.liquidations = Hip3LiquidationsResource(
+            http, base_path, coin_transform=coin_transform
+        )
+        """Liquidation events, volume and levels (no per-user route on HIP-3)"""
 
         self.orders = OrdersResource(http, base_path, coin_transform=coin_transform)
         """L4 order history, flow, and TP/SL"""
@@ -594,14 +599,11 @@ class Hip4Client:
         )
         """Per-side open interest. For paired/aggregated OI use ``outcomes.get()``."""
 
-        self.orders = OrdersResource(http, base_path, coin_transform=_hip4_encode)
+        self.orders = Hip4OrdersResource(http, base_path, coin_transform=_hip4_encode)
         """L4 order history, flow, and TP/SL."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path, coin_transform=_hip4_encode)
         """L4 order-level orderbook data."""
-
-        self.l2_orderbook = L2OrderBookResource(http, base_path, coin_transform=_hip4_encode)
-        """L2 full-depth orderbook (derived from L4)."""
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
@@ -1156,12 +1158,9 @@ class SpotClient:
         self.candles = SpotCandlesResource(http, base_path)
         """OHLCV candle history (from 2025-03-22T10:50:22Z; max 1,000 rows)."""
 
-        self.orders = OrdersResource(http, base_path)
-        """L4 order lifecycle history (live from 2026-05-05).
-
-        Note: spot exposes only ``history()``. Flow and TP/SL endpoints exist
-        on the resource but the spot backend does not implement them.
-        """
+        self.orders = SpotOrdersResource(http, base_path)
+        """L4 order lifecycle history (live from 2026-05-05). Spot serves
+        ``history()`` only: no flow, TP/SL or trigger levels."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path)
         """L4 order-level orderbook: full reconstruction, raw diffs,

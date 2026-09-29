@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Union
+from typing import Optional, Union
 
+from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import CursorResponse, OxArchiveError, ResponseMeta, Trade, Timestamp
+
+
+_UNSUPPORTED_LIST = {
+    "side": "the API does not filter trades by side. Filter the returned trades on Trade.side.",
+}
 
 
 class TradesResource:
@@ -67,7 +73,6 @@ class TradesResource:
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
-        side: Optional[Literal["buy", "sell"]] = None,
         **kwargs,
     ) -> CursorResponse[list[Trade]]:
         """
@@ -82,7 +87,6 @@ class TradesResource:
             end: End timestamp (required)
             cursor: The previous response's next_cursor, passed back unchanged
             limit: Maximum number of results (default: 100, max: 1000)
-            side: Filter by trade side
 
         Returns:
             CursorResponse with trades and next_cursor for pagination. On
@@ -103,6 +107,7 @@ class TradesResource:
             ...     trades.extend(result.data)
         """
         symbol = self._resolve_symbol(symbol, kwargs)
+        reject_unsupported("list", kwargs, _UNSUPPORTED_LIST)
         data = self._http.get(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}",
             params={
@@ -110,7 +115,6 @@ class TradesResource:
                 "end": self._convert_timestamp(end),
                 "cursor": self._cursor(cursor),
                 "limit": limit,
-                "side": side,
             },
         )
         return CursorResponse(
@@ -127,7 +131,6 @@ class TradesResource:
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
-        side: Optional[Literal["buy", "sell"]] = None,
         **kwargs,
     ) -> CursorResponse[list[Trade]]:
         """
@@ -136,6 +139,7 @@ class TradesResource:
         Uses cursor-based pagination by default.
         """
         symbol = self._resolve_symbol(symbol, kwargs)
+        reject_unsupported("alist", kwargs, _UNSUPPORTED_LIST)
         data = await self._http.aget(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}",
             params={
@@ -143,7 +147,6 @@ class TradesResource:
                 "end": self._convert_timestamp(end),
                 "cursor": self._cursor(cursor),
                 "limit": limit,
-                "side": side,
             },
         )
         return CursorResponse(
