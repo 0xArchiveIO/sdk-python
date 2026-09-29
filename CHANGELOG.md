@@ -134,6 +134,16 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   not a timestamp raises `ValueError` instead of being dropped from the
   request.
 
+### Documentation
+- The README's HIP-3 coverage row lists each dataset's first date, replacing
+  "February 2026+": trades and oracle prices from 2025-10-13, candles and
+  liquidations from 2025-12-22, order book, funding and open interest from
+  2026-02-16, L4 and order history from 2026-03-10. Hyperliquid liquidations
+  are listed from 2025-12-22 (was "May 2025+").
+- The HIP-3 coin table is removed, since builders list and delist markets;
+  call `client.hyperliquid.hip3.instruments.list()` for the current set.
+- Documentation links point at docs.0xarchive.io.
+
 ## [1.11.0] - 2026-09-25
 
 Versions 1.7.1, 1.8.0, 1.9.0, 1.9.1 and 1.10.0 were not published to PyPI.
