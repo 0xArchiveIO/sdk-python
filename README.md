@@ -435,6 +435,13 @@ while history.next_cursor:
 
 The session resets at 00:00 UTC and compares the close of the most recently completed one-minute candle with session VWAP. Instruments without session volume or with a completed candle older than five minutes are excluded, so `coverage_ratio` varies with market hours. `value_pct` is `None`, not zero, when no instrument is eligible. History begins on 2026-08-28; the SDK does not imply synthetic pre-launch history. Interval downsampling uses the last snapshot in each bucket, never an average of percentages.
 
+The same breadth is served for Hyperliquid core perpetuals on `client.hyperliquid.breadth`, with the same methods, intervals and cursor paging. Core history begins on 2026-08-24, and core responses carry empty `namespaces` maps.
+
+```python
+current = client.hyperliquid.breadth.current()
+history = client.hyperliquid.breadth.history(start="2026-08-24T00:00:00Z", interval="1h")
+```
+
 #### HIP-3 Oracle
 
 The deployer-pushed external price of a HIP-3 market, and its instantaneous discovery bounds:

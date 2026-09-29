@@ -532,3 +532,85 @@ def test_hip4_order_flow_flat_helpers_forward_the_cursor() -> None:
     expected = {"start": str(T_START), "end": str(T_END), "cursor": "c1"}
     assert api.calls == [("/v1/hyperliquid/hip4/orders/0/flow", expected)] * 2
 
+
+
+# ---------------------------------------------------------------------------
+# Hyperliquid core breadth
+# ---------------------------------------------------------------------------
+
+CORE_BREADTH: dict[str, Any] = {
+    "session_date": "2026-09-29",
+    "calculated_at": "2026-09-29T03:09:00Z",
+    "value_pct": 11.3636,
+    "coverage_ratio": 0.7521367521367521,
+    "counts": {
+        "candidates": 234,
+        "eligible": 176,
+        "above": 20,
+        "at": 0,
+        "below": 156,
+        "excluded_no_session_volume": 56,
+        "excluded_stale_price": 2,
+    },
+    "namespaces": {"eligible": {}, "above": {}, "at": {}, "below": {}},
+}
+
+
+def test_core_breadth_current_and_history_paths() -> None:
+    client, api = mock_client(
+        lambda path, q: envelope(CORE_BREADTH)
+        if path.endswith("/current")
+        else envelope([CORE_BREADTH], next_cursor="1787529600000")
+    )
+
+    current = client.hyperliquid.breadth.current()
+    acurrent = asyncio.run(client.hyperliquid.breadth.acurrent())
+    history = client.hyperliquid.breadth.history(
+        start=T_START, end=T_END, interval="1h", cursor="1787529600000", limit=10
+    )
+    ahistory = asyncio.run(client.hyperliquid.breadth.ahistory(start=T_START))
+
+    query = {
+        "start": str(T_START),
+        "end": str(T_END),
+        "interval": "1h",
+        "cursor": "1787529600000",
+        "limit": "10",
+    }
+    assert api.calls == [
+        ("/v1/hyperliquid/breadth/above-vwap/current", {}),
+        ("/v1/hyperliquid/breadth/above-vwap/current", {}),
+        ("/v1/hyperliquid/breadth/above-vwap", query),
+        ("/v1/hyperliquid/breadth/above-vwap", {"start": str(T_START)}),
+    ]
+    assert current == acurrent
+    assert current.value_pct == 11.3636 and current.counts.eligible == 176
+    assert current.session_date == date(2026, 9, 29)
+    assert history.next_cursor == ahistory.next_cursor == "1787529600000"
+    assert history.data[0].counts.above == 20
+
+
+def test_core_breadth_validation_names_the_venue() -> None:
+    client, api = mock_client(lambda path, q: envelope([]))
+
+    with pytest.raises(ValueError, match="for Hyperliquid core breadth"):
+        client.hyperliquid.breadth.history(interval="2h")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="for Hyperliquid core breadth"):
+        client.hyperliquid.breadth.history(limit=1001)
+    with pytest.raises(ValueError, match="for HIP-3 breadth"):
+        client.hyperliquid.hip3.breadth.history(limit=0)
+    assert api.requests == []
+
+
+def test_hip4_outcomes_settlement_filter_is_sent_as_is_settled() -> None:
+    client, api = mock_client(lambda path, q: envelope([]))
+
+    client.hyperliquid.hip4.outcomes.list(is_settled=False, limit=5)
+    client.hyperliquid.hip4.list_outcomes(is_settled=True)
+    asyncio.run(client.hyperliquid.hip4.alist_outcomes(is_settled=False))
+
+    assert api.calls == [
+        ("/v1/hyperliquid/hip4/outcomes", {"is_settled": "false", "limit": "5"}),
+        ("/v1/hyperliquid/hip4/outcomes", {"is_settled": "true"}),
+        ("/v1/hyperliquid/hip4/outcomes", {"is_settled": "false"}),
+    ]

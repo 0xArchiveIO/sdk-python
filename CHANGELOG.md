@@ -159,6 +159,9 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `WalletClassification`, `ClassifiedWallet` and `WalletClassifyMetrics`.
   `date` takes a date, a `YYYY-MM-DD` string or a datetime (a datetime
   without a time zone is UTC).
+- Hyperliquid core breadth: `client.hyperliquid.breadth` with `current()` and
+  `history()` (and `acurrent()`, `ahistory()`), the same resource as HIP-3
+  breadth, served from 2026-08-24. Core responses carry empty `namespaces`.
 - The public symbol universe: `client.symbols.list()` and `alist()`, one
   `SymbolEntry` per market across every venue family, with data types and
   coverage dates.
@@ -224,6 +227,8 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - The HIP-3 coin table is removed, since builders list and delist markets;
   call `client.hyperliquid.hip3.instruments.list()` for the current set.
 - Documentation links point at docs.0xarchive.io.
+- The breadth `history()` docstring says `start` defaults to 24 hours before
+  now, as the API applies it, rather than 24 hours before `end`.
 - The README's order-flow example pages a full day at `1m`, following
   `next_cursor` until it is `None`, and the `flow()` docstring describes
   paging.

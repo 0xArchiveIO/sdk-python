@@ -124,6 +124,10 @@ class HyperliquidClient:
         change log, account summaries, and market-wide listings. Change log from
         2025-05-25, hourly history from 2026-06-07, live every 5 minutes."""
 
+        self.breadth = BreadthResource(http, base_path, label="Hyperliquid core")
+        """Percent of eligible core perpetuals above their UTC-session VWAP
+        (history from 2026-08-24)."""
+
         self.cvd = CvdResource(http, base_path)
         """Cumulative volume delta: taker buy and sell notional per bucket."""
 
