@@ -10,6 +10,8 @@ tests/*
 !tests/test_timestamps.py
 !tests/test_spec_fixes.py
 !tests/test_websocket_full_depth.py
+!tests/test_webhooks.py
+!tests/test_webhook_signature.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

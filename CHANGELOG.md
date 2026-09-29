@@ -103,6 +103,42 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `cursor` with the same `start`, `end` and `interval` until it is `None`.
   Before this, a `cursor` keyword was accepted and silently dropped, so every
   call returned the first page.
+- Webhooks: `client.webhooks` (`WebhooksResource`) covers all 21 operations
+  under `/v1/webhooks`, each with an `a`-prefixed async version:
+  `event_types()`, `limits()`; `list_endpoints()`, `create_endpoint()`,
+  `delete_endpoint()`, `enable_endpoint()`, `rotate_secret()`,
+  `test_endpoint()`; `list_deliveries()`, `redeliver()`;
+  `list_subscriptions()`, `create_subscription()`, `update_subscription()`,
+  `delete_subscription()`, `resume_subscription()`,
+  `resume_all_subscriptions()`; `dry_run()`, `estimate()`;
+  `list_addresses()`, `add_address()`, `delete_address()`. A subscription
+  configuration is passed as `config`, a dict or a
+  `WebhookSubscriptionConfig`. Subscriptions report their pause state
+  (`status`, `pause_reason`, `pause_message`, suppressed counts), and a
+  resume returns the missed window as `WebhookResumeGap`. `limits()`
+  reports the plan's caps, today's delivery budget and the paused count.
+  Webhook delivery needs a paid plan; `estimate()` and `dry_run()` are
+  available on every plan.
+- Webhook signature verification in `oxarchive.webhook_signature`:
+  `WebhookVerifier`, `verify_webhook()`, `verify_webhook_signature()`,
+  `parse_signature_header()`, `WebhookEvent`, `WebhookSignature`,
+  `WebhookSignatureError` and the header name constants. It verifies the raw
+  request bytes, accepts every `v1=` signature in the header (two during a
+  secret rotation), enforces a replay window (5 minutes by default) and
+  compares in constant time.
+- Webhook models: `WebhookEventType` (with `WebhookEventTypeParam`,
+  `WebhookEventTypeMetric`, `WebhookCostFloor`), `WebhookEndpoint`,
+  `WebhookEndpointCreated`, `WebhookEndpointSecret`,
+  `WebhookSubscriptionConfig`, `WebhookSubscriptionCondition`,
+  `WebhookSubscription`, `WebhookSubscriptionResume`,
+  `WebhookSubscriptionResumeAll`, `WebhookResumeGap`,
+  `WebhookResumeReplayWindow`, `WebhookDelivery`, `WebhookDeliveryQueued`,
+  `WebhookRedelivery`, `WebhookWatchedAddress`, `WebhookLimits`,
+  `WebhookLimitUsage`, `WebhookDeliveryBudget`, `WebhookPausedSubscriptions`,
+  `WebhookDryRun`, `WebhookEstimate`, `WebhookPreviewWindow`,
+  `WebhookPreviewOccurrence`, `WebhookEstimateDayCount`,
+  `WebhookEstimateRung`, `WebhookEstimateDistribution` and
+  `WebhookEstimateBasis`. Every webhook model keeps unknown fields.
 - Full-depth L2 WebSocket channels `orderbook_full` (Hyperliquid core) and
   `hip3_orderbook_full` (HIP-3) for live subscription, with helpers
   `subscribe_orderbook_full()`, `subscribe_hip3_orderbook_full()` and their
@@ -167,6 +203,9 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
 - The README's order-flow example pages a full day at `1m`, following
   `next_cursor` until it is `None`, and the `flow()` docstring describes
   paging.
+- A README section on webhooks: plan limits, pauses and resumes, the event
+  catalog, configuration, previews, verifying deliveries, secret rotation and
+  retries.
 
 ## [1.11.0] - 2026-09-25
 

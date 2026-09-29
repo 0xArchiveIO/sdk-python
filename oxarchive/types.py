@@ -2777,3 +2777,788 @@ class SlaResponse(BaseModel):
 
     total_downtime_minutes: int
     """Total downtime in minutes."""
+
+
+# =============================================================================
+# Webhook Types
+# =============================================================================
+#
+# Webhook delivery is a paid feature. Free has no endpoints, subscriptions,
+# watched wallets or deliveries, but every plan keeps the two previews
+# (estimate and dry-run), so a rule can be designed and sized before
+# upgrading. ``client.webhooks.limits()`` reports what the plan allows.
+#
+# Every model here keeps unknown fields. The webhook surface gains fields
+# faster than the SDK ships, and an extra key must never raise in a receiver.
+
+
+class WebhookEventTypeParam(BaseModel):
+    """A tunable parameter an event type declares.
+
+    Values sent under ``params`` are checked against this declaration, and a
+    declared parameter left unset is stored at its default.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: Optional[str] = None
+    """Value type: ``"integer"``, ``"number"``, ``"string"`` or ``"array_of_number"``."""
+
+    unit: Optional[str] = None
+    """Unit the value is expressed in, when it has one (for example ``"s"``)."""
+
+    default: Any = None
+    """Value used when the parameter is not supplied."""
+
+    min: Optional[float] = None
+    """Lowest accepted value, when bounded below."""
+
+    max: Optional[float] = None
+    """Highest accepted value, when bounded above."""
+
+    enum: Optional[list[Any]] = None
+    """Accepted values, when the parameter is a fixed choice."""
+
+    description: Optional[str] = None
+    """What the parameter changes."""
+
+
+class WebhookEventTypeMetric(BaseModel):
+    """A metric an event carries, and so a metric a condition may be written against."""
+
+    model_config = ConfigDict(extra="allow")
+
+    type: Optional[str] = None
+    """Value type, which decides the operators a condition may use: for example
+    ``"number"``, ``"integer"``, ``"string"``, ``"boolean"`` or ``"timestamp"``."""
+
+    unit: Optional[str] = None
+    """Unit the metric is expressed in, when it has one (for example ``"USD"``)."""
+
+    values: Optional[list[str]] = None
+    """Accepted values, when the metric is a fixed choice."""
+
+    description: Optional[str] = None
+    """What the metric measures, including when it is null."""
+
+
+class WebhookCostFloor(BaseModel):
+    """The smallest occurrence an event type reports at all."""
+
+    model_config = ConfigDict(extra="allow")
+
+    metric: Optional[str] = None
+    """Metric the floor applies to (for example ``"notional_usd"``)."""
+
+    min: Optional[float] = None
+    """Lowest value still reported."""
+
+
+class WebhookEventType(BaseModel):
+    """One entry in the event catalog, from ``client.webhooks.event_types()``.
+
+    Subscriptions are validated against this declaration, so it is the
+    authority on the filters, parameters, metrics and operators a
+    configuration may use. Read them from here rather than hardcoding them.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: str
+    """Event type identifier, for example ``"market.liquidation"``. Send it as
+    ``event_type`` when creating a subscription."""
+
+    schema_version: int
+    """Version of the delivered payload shape for this event type."""
+
+    live: bool
+    """True when the type accepts subscriptions. A type that is published but
+    not yet live is refused at create time."""
+
+    scope: str
+    """Who the event is about: ``"public"`` (market wide), ``"user"`` (your own
+    account and platform activity) or ``"addresses"`` (only wallets on your
+    watched list)."""
+
+    venues: list[str] = Field(default_factory=list)
+    """Venues the type covers. Empty when the type is not venue scoped."""
+
+    filters: list[str] = Field(default_factory=list)
+    """Filter keys a configuration accepts. A key not listed is refused."""
+
+    params: dict[str, WebhookEventTypeParam] = Field(default_factory=dict)
+    """Tunable parameters, keyed by parameter name."""
+
+    metrics: dict[str, WebhookEventTypeMetric] = Field(default_factory=dict)
+    """Metrics the event carries, keyed by name. Conditions may only use these."""
+
+    cost_floor: Optional[WebhookCostFloor] = None
+    """The smallest occurrence the type reports. ``None`` when it has no floor."""
+
+    latency_class: str
+    """Rough delivery latency from the occurrence to the first attempt:
+    ``"seconds"`` or ``"minutes"``."""
+
+    description: str
+    """What the event reports and what one occurrence means."""
+
+    filters_example: Optional[dict[str, Any]] = None
+    """A worked example of a configuration for this type."""
+
+    operators: dict[str, list[str]] = Field(default_factory=dict)
+    """Operator vocabulary grouped by metric type, plus the ``any`` group that
+    applies to every metric."""
+
+
+class WebhookEndpoint(BaseModel):
+    """A delivery destination.
+
+    The signing secret is not part of this shape: it is returned once when the
+    endpoint is created (:class:`WebhookEndpointCreated`) and again when it is
+    rotated (:class:`WebhookEndpointSecret`), never on a list.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    """Endpoint identifier (UUID)."""
+
+    url: str
+    """HTTPS destination that receives deliveries."""
+
+    description: str = ""
+    """Your own label for the endpoint."""
+
+    status: str
+    """``"active"`` is serving, ``"disabled"`` means you switched it off, and
+    ``"auto_disabled"`` means a long run of failed deliveries switched it off
+    for you. Bring it back with ``enable_endpoint()``."""
+
+    consecutive_failures: int = 0
+    """Failed attempts since the last success. Resets to zero on a delivery that lands."""
+
+    created_at: datetime
+    """When the endpoint was created (UTC)."""
+
+
+class WebhookEndpointCreated(WebhookEndpoint):
+    """A newly created endpoint, with its signing secret.
+
+    Creation and rotation are the only responses that carry the secret. Store
+    it now: no later call returns it.
+    """
+
+    secret: str
+    """Signing secret (``whsec_`` followed by 64 hex characters). Pass the whole
+    string to :class:`~oxarchive.WebhookVerifier`; the prefix is part of the key."""
+
+    note: Optional[str] = None
+    """The API's advisory that the secret is shown once."""
+
+
+class WebhookEndpointSecret(BaseModel):
+    """A freshly rotated signing secret."""
+
+    model_config = ConfigDict(extra="allow")
+
+    secret: str
+    """The new signing secret. The previous one keeps verifying for 24 hours."""
+
+    note: Optional[str] = None
+    """The API's advisory on how long the previous secret keeps verifying."""
+
+
+class WebhookSubscriptionCondition(BaseModel):
+    """One condition on an event metric; every condition must hold for a delivery."""
+
+    model_config = ConfigDict(extra="allow")
+
+    metric: str
+    """A metric the event type declares (for example ``"notional_usd"``)."""
+
+    op: str
+    """Comparison, in canonical spelling: ``greater_than``,
+    ``greater_than_or_equal``, ``less_than``, ``less_than_or_equal``, ``equal``,
+    ``not_equal``, ``between``, ``not_between``, ``in``, ``not_in``,
+    ``contains``, ``not_contains``, ``starts_with``, ``ends_with``, ``before``,
+    ``after``, ``is_empty`` or ``is_not_empty``. Symbol spellings such as
+    ``">="`` are accepted on the way in and stored canonically."""
+
+    value: Any = None
+    """What to compare against: a number, string, boolean or RFC 3339
+    timestamp; a ``[low, high]`` pair for ``between`` and ``not_between``; a
+    non-empty list for ``in`` and ``not_in``. Left out for ``is_empty`` and
+    ``is_not_empty``."""
+
+
+class WebhookSubscriptionConfig(BaseModel):
+    """What a subscription matches on.
+
+    Every key is checked against the event type's catalog declaration, so an
+    unknown key, an undeclared parameter or a condition on an undeclared
+    metric is refused rather than ignored. The stored form is normalised:
+    venues and addresses lowercased, declared parameters filled in at their
+    defaults, operators in canonical spelling. A declared parameter may also
+    appear at the top level; such keys are kept as extra fields.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    venue: Optional[Union[str, list[str]]] = None
+    """Venue or venues to match, from the event type's ``venues``. A single
+    string, a pipe separated string or a list. ``None`` matches every covered
+    venue."""
+
+    symbols: Optional[list[str]] = None
+    """Instrument symbols to match. ``None`` matches every symbol."""
+
+    addresses: Optional[list[str]] = None
+    """Wallets to match, for an address scoped type. Each must already be on
+    your watched list. ``None`` matches all of them."""
+
+    params: Optional[dict[str, Any]] = None
+    """Parameter values, keyed by the names the event type declares."""
+
+    conditions: Optional[list[WebhookSubscriptionCondition]] = None
+    """Conditions on the event's metrics, all of which must hold. At most 16."""
+
+    min_notional_usd: Optional[float] = None
+    """Shorthand for a ``notional_usd`` at-or-above condition, kept for
+    compatibility. It is stored as a condition and mirrored back here as the
+    loosest notional lower bound the configuration carries."""
+
+
+class WebhookSubscription(BaseModel):
+    """A rule: one event type and one configuration, delivered to one endpoint."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    """Subscription identifier (UUID)."""
+
+    endpoint_id: str
+    """Endpoint that receives this rule's deliveries."""
+
+    event_type: str
+    """Event type this rule subscribes to."""
+
+    filters: WebhookSubscriptionConfig = Field(default_factory=WebhookSubscriptionConfig)
+    """The stored, normalised configuration. The API names it ``filters``; the
+    SDK methods take it as ``config`` (see :attr:`config`)."""
+
+    enabled: bool
+    """Your own on and off switch. Resuming a paused rule never changes it."""
+
+    created_at: datetime
+    """When the rule was created (UTC)."""
+
+    status: str
+    """``"active"`` is serving. ``"auto_paused"`` means delivery was paused for
+    you and nothing is being sent; it stays paused until you resume it."""
+
+    pause_message: Optional[str] = None
+    """Why the rule is paused and what clears it, in plain words. Present only
+    while the rule is paused."""
+
+    paused_at: Optional[datetime] = None
+    """Start of the current gap. ``None`` while the rule is serving."""
+
+    pause_reason: Optional[str] = None
+    """Machine readable cause of the current pause: ``"deliveries_per_day_cap"``
+    (the account reached its daily delivery limit) or ``"plan_no_webhooks"``
+    (the plan does not include webhook delivery). ``None`` while serving."""
+
+    suppressed_count: int = 0
+    """Matches observed but not delivered since the current pause began. A
+    lower bound, not a total."""
+
+    suppressed_first_at: Optional[datetime] = None
+    """First suppressed match of the current pause."""
+
+    suppressed_last_at: Optional[datetime] = None
+    """Most recent suppressed match of the current pause."""
+
+    last_paused_at: Optional[datetime] = None
+    """Start of the last pause that has already ended."""
+
+    last_resumed_at: Optional[datetime] = None
+    """When that pause ended."""
+
+    last_pause_reason: Optional[str] = None
+    """Cause of the last ended pause, in the same vocabulary as ``pause_reason``."""
+
+    last_suppressed_count: int = 0
+    """Matches suppressed during the last pause that has already ended."""
+
+    last_suppressed_first_at: Optional[datetime] = None
+    """First suppressed match of that pause."""
+
+    last_suppressed_last_at: Optional[datetime] = None
+    """Most recent suppressed match of that pause."""
+
+    @property
+    def config(self) -> WebhookSubscriptionConfig:
+        """Alias for :attr:`filters`, matching the SDK's request vocabulary."""
+        return self.filters
+
+
+class WebhookResumeReplayWindow(BaseModel):
+    """The missed window of a resume, as a range to re-read for yourself."""
+
+    model_config = ConfigDict(extra="allow")
+
+    start: Optional[datetime] = None
+    """Window start (UTC)."""
+
+    end: Optional[datetime] = None
+    """Window end (UTC)."""
+
+
+class WebhookResumeGap(BaseModel):
+    """The window a resume just closed.
+
+    Nothing is buffered while a rule is paused, so this describes what was
+    missed rather than replaying it. Re-read the window through the REST
+    routes to recover it.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    paused_at: Optional[datetime] = None
+    """Start of the gap."""
+
+    resumed_at: Optional[datetime] = None
+    """End of the gap."""
+
+    replay_window: WebhookResumeReplayWindow = Field(
+        default_factory=WebhookResumeReplayWindow
+    )
+    """The gap as a window to re-read."""
+
+    reason: Optional[str] = None
+    """Cause of the pause that was cleared. ``None`` on a bulk resume whose
+    rules were paused for more than one reason."""
+
+    reasons: Optional[list[str]] = None
+    """Distinct causes across the resumed rules. Bulk resume only."""
+
+    pause_message: Optional[str] = None
+    """The cause in plain words."""
+
+    suppressed_count: Optional[int] = None
+    """Matches suppressed inside the window. ``None`` when the rules were address
+    scoped, because their occurrences were never looked at."""
+
+    counted: bool = False
+    """Whether anything inside the window was counted. False means the count is
+    ``None`` because nothing was looked at, not because nothing happened."""
+
+    suppressed_first_at: Optional[datetime] = None
+    """First suppressed match inside the window."""
+
+    suppressed_last_at: Optional[datetime] = None
+    """Most recent suppressed match inside the window."""
+
+    uncounted_subscriptions: Optional[int] = None
+    """How many resumed rules were address scoped and so not counted. Bulk resume only."""
+
+    note: Optional[str] = None
+    """What can and cannot be recovered for the window, and how."""
+
+
+class WebhookSubscriptionResume(BaseModel):
+    """Result of ``resume_subscription()``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    subscription: WebhookSubscription
+    """The subscription after the resume."""
+
+    gap: Optional[WebhookResumeGap] = None
+    """The window the resume closed. ``None`` when the rule was already
+    serving, in which case nothing changed."""
+
+    note: Optional[str] = None
+    """Present only when nothing changed, to say why."""
+
+
+class WebhookSubscriptionResumeAll(BaseModel):
+    """Result of ``resume_all_subscriptions()``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    subscriptions: list[WebhookSubscription] = Field(default_factory=list)
+    """The rules that were put back into service."""
+
+    resumed_count: int = 0
+    """How many rules were put back into service."""
+
+    gap: Optional[WebhookResumeGap] = None
+    """The window the resume closed, across the rules it cleared. ``None`` when
+    nothing was paused."""
+
+    note: Optional[str] = None
+    """Present only when nothing changed, to say why."""
+
+
+class WebhookDelivery(BaseModel):
+    """One record in an endpoint's delivery log.
+
+    An event and an endpoint share a single record for their whole life, so a
+    repeat delivery rewrites this record rather than adding another.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    """Delivery identifier. Pass it to ``redeliver()``."""
+
+    event_id: str
+    """Event identifier, sent as the ``0xa-event-id`` header. Stable across
+    retries and repeat deliveries: deduplicate on it."""
+
+    event_type: str
+    """Event type delivered."""
+
+    state: str
+    """``"pending"`` (queued or waiting to retry), ``"delivered"``, ``"failed"``
+    (the last attempt's result) or ``"exhausted"`` (the retry window closed
+    without success)."""
+
+    attempts: int = 0
+    """Attempts made so far."""
+
+    last_status_code: Optional[int] = None
+    """HTTP status your receiver returned on the last attempt."""
+
+    last_error: Optional[str] = None
+    """Why the last attempt failed. ``None`` when it succeeded."""
+
+    last_latency_ms: Optional[int] = None
+    """How long the last attempt took, in milliseconds."""
+
+    next_attempt_at: datetime
+    """When the next attempt is due (UTC)."""
+
+    delivered_at: Optional[datetime] = None
+    """When the delivery landed. ``None`` until it does."""
+
+    created_at: datetime
+    """When the delivery was queued. A repeat delivery resets it."""
+
+    payload: dict[str, Any] = Field(default_factory=dict)
+    """The event body as sent, with its ``id``, ``type``, ``schema_version``,
+    ``observed_at`` and ``data``. For inspection only: verify signatures
+    against the raw request bytes your receiver got, never against a
+    re-serialised copy of this."""
+
+
+class WebhookDeliveryQueued(BaseModel):
+    """A delivery that has just been queued, from ``test_endpoint()``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    delivery_id: str
+    """Delivery identifier. Read it back from ``list_deliveries()``."""
+
+    event_id: str
+    """Event identifier carried in the delivered payload and the ``0xa-event-id`` header."""
+
+
+class WebhookRedelivery(BaseModel):
+    """A past delivery queued for another attempt, re-queued in place."""
+
+    model_config = ConfigDict(extra="allow")
+
+    delivery_id: str
+    """Delivery identifier, the same one that was asked for."""
+
+    event_id: str
+    """Event identifier, unchanged, so a receiver that already processed the
+    event can deduplicate on it."""
+
+    event_type: str
+    """Event type being delivered again."""
+
+    state: str
+    """Always ``"pending"`` immediately after a repeat delivery is queued."""
+
+    attempts: int = 0
+    """Attempt counter, restarted from zero."""
+
+    next_attempt_at: datetime
+    """When the attempt is due, which is immediately."""
+
+    note: Optional[str] = None
+    """The API's note on what the repeat delivery rewrites on the record."""
+
+
+class WebhookWatchedAddress(BaseModel):
+    """A wallet on your watched list. Address scoped event types report only on these."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    """Watched address identifier. Pass it to ``delete_address()``."""
+
+    address: str
+    """The wallet, stored lowercase."""
+
+    label: str = ""
+    """Your own label for the wallet, at most 64 characters."""
+
+    created_at: datetime
+    """When the wallet was added (UTC)."""
+
+
+class WebhookLimitUsage(BaseModel):
+    """One cap: what the plan allows, what is in use and what is left."""
+
+    model_config = ConfigDict(extra="allow")
+
+    used: int
+    """In use now."""
+
+    limit: int
+    """What the plan allows. Zero on a plan without webhook delivery."""
+
+    remaining: int
+    """What is left, never below zero. A plan change can leave an account
+    legitimately over a cap."""
+
+
+class WebhookDeliveryBudget(BaseModel):
+    """Today's delivery budget. It resets on its own; a paused rule does not."""
+
+    model_config = ConfigDict(extra="allow")
+
+    used: int
+    """Deliveries today."""
+
+    limit: Optional[int] = None
+    """Deliveries a day the plan allows. ``None`` when the plan has no ceiling."""
+
+    remaining: Optional[int] = None
+    """Deliveries left today, never below zero. ``None`` when there is no ceiling."""
+
+    unlimited: bool = False
+    """True when the plan has no daily ceiling."""
+
+    resets_at: datetime
+    """When the budget resets (UTC)."""
+
+    resets_at_note: Optional[str] = None
+    """Present only while something is paused, to say that the reset time is
+    the budget's and not the pause's."""
+
+
+class WebhookPausedSubscriptions(BaseModel):
+    """Paused rules on the account. Always present, so zero needs no special case."""
+
+    model_config = ConfigDict(extra="allow")
+
+    count: int = 0
+    """How many rules are paused and delivering nothing."""
+
+    earliest_paused_at: Optional[datetime] = None
+    """Start of the oldest pause still in force."""
+
+    reasons: list[str] = Field(default_factory=list)
+    """Distinct causes across the paused rules."""
+
+    message: Optional[str] = None
+    """What is paused and what clears it. Present only when something is paused."""
+
+
+class WebhookLimits(BaseModel):
+    """What the plan allows for webhooks and what is in use, from ``limits()``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    plan: str
+    """The plan webhook decisions are priced at (for example ``"pro"``)."""
+
+    plan_label: Optional[str] = None
+    """The plan's display name."""
+
+    included: bool
+    """Whether the plan has webhook delivery at all. False on Free."""
+
+    preview_included: bool
+    """Whether the estimate and the dry-run are available. True on every plan."""
+
+    endpoints: WebhookLimitUsage
+    """Endpoint cap and usage."""
+
+    subscriptions: WebhookLimitUsage
+    """Subscription cap and usage."""
+
+    watched_addresses: WebhookLimitUsage
+    """Watched wallet cap and usage."""
+
+    deliveries_per_day: WebhookDeliveryBudget
+    """Today's delivery budget."""
+
+    paused_subscriptions: WebhookPausedSubscriptions
+    """Paused rules, reported next to the budget because a paused rule does not
+    restart when the budget resets."""
+
+    notice: Optional[str] = None
+    """Why the caps are zero, and what to do about it. Present only on a plan
+    without webhook delivery."""
+
+
+class WebhookPreviewWindow(BaseModel):
+    """The window a preview vouches for.
+
+    It can start later than the one asked for when a scan reached its row cap.
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    from_: datetime = Field(alias="from")
+    """Start of the window the answer covers. Named ``from_`` because ``from``
+    is a Python keyword."""
+
+    to: datetime
+    """End of the window, which is the moment of the request."""
+
+
+class WebhookPreviewOccurrence(BaseModel):
+    """One occurrence a preview says would have been delivered."""
+
+    model_config = ConfigDict(extra="allow")
+
+    observed_at_estimate: datetime
+    """The occurrence's own timestamp. A real delivery's ``observed_at`` is this
+    plus the time it takes to see the occurrence."""
+
+    data: dict[str, Any] = Field(default_factory=dict)
+    """The occurrence body, the same ``data`` a delivery would carry."""
+
+
+class WebhookDryRun(BaseModel):
+    """Which occurrences a would-be subscription would have delivered, from ``dry_run()``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    event_type: str
+    """Event type that was evaluated."""
+
+    window: WebhookPreviewWindow
+    """The window the answer covers."""
+
+    matched: int = 0
+    """Occurrences that matched inside the window, before ``limit`` is applied."""
+
+    truncated: bool = False
+    """True when fewer occurrences are returned than matched, or a scan hit its
+    row cap and the window was narrowed."""
+
+    occurrences: list[WebhookPreviewOccurrence] = Field(default_factory=list)
+    """Matches, newest first, at most ``limit``."""
+
+
+class WebhookEstimateDayCount(BaseModel):
+    """One 24 hour bin of an estimate."""
+
+    model_config = ConfigDict(extra="allow")
+
+    date: date
+    """UTC date the bin ends on."""
+
+    count: int
+    """Occurrences that would have been delivered in the bin."""
+
+
+class WebhookEstimateRung(BaseModel):
+    """The daily rate the same configuration would have had at another threshold."""
+
+    model_config = ConfigDict(extra="allow")
+
+    value: float
+    """Threshold on the primary metric."""
+
+    per_day: float
+    """Deliveries a day at that threshold, everything else unchanged."""
+
+
+class WebhookEstimateDistribution(BaseModel):
+    """Quantiles of the primary metric over the matched occurrences."""
+
+    model_config = ConfigDict(extra="allow")
+
+    n: int
+    """Occurrences the quantiles are computed over."""
+
+    p50: float
+    """Median."""
+
+    p90: float
+    """90th percentile."""
+
+    p99: float
+    """99th percentile."""
+
+    max: float
+    """Largest value seen."""
+
+
+class WebhookEstimateBasis(BaseModel):
+    """How an estimate was produced."""
+
+    model_config = ConfigDict(extra="allow")
+
+    mode: str
+    """``"exact"`` counted every occurrence, ``"sampled"`` scaled the counts
+    from a capped scan (the note says by how much), and ``"replayed"`` re-ran a
+    windowed rule over history at your own parameters."""
+
+    note: Optional[str] = None
+    """What qualifies the numbers, when anything does."""
+
+
+class WebhookEstimate(BaseModel):
+    """How often a would-be subscription would have fired, from ``estimate()``.
+
+    Compare ``per_day_p50`` and ``per_day_max`` with the plan's daily delivery
+    budget before turning a rule on.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    event_type: str
+    """Event type that was evaluated."""
+
+    window: WebhookPreviewWindow
+    """The window the answer covers."""
+
+    days: int
+    """Days covered. Shorter than requested when the event type caps its own window."""
+
+    total: int
+    """Occurrences that would have been delivered across the window."""
+
+    per_day: list[WebhookEstimateDayCount] = Field(default_factory=list)
+    """One entry per day, oldest first, zero filled."""
+
+    per_day_p50: float = 0.0
+    """Median deliveries a day."""
+
+    per_day_max: int = 0
+    """Busiest day in the window."""
+
+    primary_metric: Optional[str] = None
+    """The metric the ladder and the distribution are about. ``None`` when the type has none."""
+
+    ladder: list[WebhookEstimateRung] = Field(default_factory=list)
+    """Daily rates at other thresholds, ascending. Empty without a primary metric."""
+
+    distribution: Optional[WebhookEstimateDistribution] = None
+    """Quantiles of the primary metric. ``None`` without a primary metric or a match."""
+
+    sample: list[WebhookPreviewOccurrence] = Field(default_factory=list)
+    """A sample of matches, newest first, in the dry-run's shape."""
+
+    basis: WebhookEstimateBasis
+    """How the estimate was produced."""

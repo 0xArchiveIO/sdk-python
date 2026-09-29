@@ -27,6 +27,7 @@ from .positions import (
 from .spot import SpotPairsResource, SpotTwapResource
 from .trades import TradesResource
 from .web3 import Web3Resource
+from .webhooks import WebhooksResource
 
 __all__ = [
     "OrderBookResource",
@@ -57,4 +58,5 @@ __all__ = [
     "HyperliquidPositionsResource",
     "LighterPositionsResource",
     "LighterAccountsResource",
+    "WebhooksResource",
 ]

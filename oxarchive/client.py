@@ -15,6 +15,7 @@ from .resources import (
     OpenInterestResource,
     DataQualityResource,
     Web3Resource,
+    WebhooksResource,
 )
 
 DEFAULT_BASE_URL = "https://api.0xarchive.io"
@@ -42,6 +43,9 @@ class Client:
     Account positions: `client.hyperliquid.positions`,
     `client.hyperliquid.hip3.positions`, `client.lighter.positions` and
     `client.rh_lighter.positions`.
+
+    Cross-venue: `client.data_quality`, and `client.webhooks` (push delivery;
+    verify deliveries with :class:`~oxarchive.WebhookVerifier`).
 
     Example:
         >>> from oxarchive import Client
@@ -142,6 +146,11 @@ class Client:
         # Web3 wallet-based authentication
         self.web3 = Web3Resource(self._http)
         """Wallet-based auth: get API keys via SIWE signature"""
+
+        # Webhooks (push delivery). Delivery needs a paid plan; the estimate
+        # and dry-run previews are available on every plan.
+        self.webhooks = WebhooksResource(self._http)
+        """Webhook endpoints, subscriptions, watched wallets, deliveries and limits"""
 
         # Legacy resource namespaces (deprecated - use client.hyperliquid.* instead)
         # These will be removed in v2.0
