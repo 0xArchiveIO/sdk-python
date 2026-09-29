@@ -1125,9 +1125,9 @@ Notes:
 - orderbook_full, hip3_orderbook_full: full-depth L2 books (every price level)
   for Hyperliquid core and HIP-3, aggregated from the order-level book. Live
   subscriptions open with an ``l4_snapshot`` of the whole book, followed by
-  ``l4_batch`` messages of changed levels. The server currently answers a
-  replay request on these channels with an error; stored full-depth history
-  is served by REST ``l2_orderbook.history()`` and ``l2_orderbook.diffs()``.
+  ``l4_batch`` messages of changed levels. Live-only: replay is rejected with
+  ``ValueError``; stored full-depth history is served by REST
+  ``l2_orderbook.history()`` and ``l2_orderbook.diffs()``.
 - hip4_trades: HIP-4 outcome-market fills (realtime + replay).
 - hip4_orderbook, hip4_open_interest: stored replay only; live bridges paused.
 - hip4_l4_diffs, hip4_l4_orders: HIP-4 L4 order-level data (live-only).

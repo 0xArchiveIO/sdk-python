@@ -168,9 +168,10 @@ deployments in the SDK, mainnet (`client.lighter`) and Robinhood Chain
   `unsubscribe_*` counterparts, and `FULL_DEPTH_L2_CHANNELS` in
   `oxarchive.websocket`. A subscription opens with an `l4_snapshot` of every
   price level, then `l4_batch` messages of changed levels, delivered to
-  `on_l4_snapshot()` and `on_l4_batch()`. The server currently answers a
-  replay request on these channels with an error; stored full-depth history
-  is on REST `l2_orderbook.history()` and `diffs()`.
+  `on_l4_snapshot()` and `on_l4_batch()`. They are live-only: `replay()`
+  and `multi_replay()` reject them with `ValueError`
+  (`FULL_DEPTH_LIVE_ONLY_ERROR`) before anything is sent. Stored full-depth
+  history is on REST `l2_orderbook.history()` and `diffs()`.
 
 ### Changed
 - `WsChannel` includes the five `rh_lighter_*` channels, `orderbook_full` and

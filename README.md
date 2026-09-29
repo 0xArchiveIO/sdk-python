@@ -1929,7 +1929,7 @@ Hyperliquid `open_interest` and `funding` also stream live, in addition to histo
 
 ### Full-Depth L2 Book
 
-`orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3) stream every price level of the book, not just the top 20, aggregated from the order-level book. A subscription opens with an `l4_snapshot` of the whole book, followed by `l4_batch` messages of changed levels. Receive them with `on_l4_snapshot` and `on_l4_batch`; the `channel` argument tells them apart from the L4 channels.
+`orderbook_full` (Hyperliquid core) and `hip3_orderbook_full` (HIP-3) stream every price level of the book, not just the top 20, aggregated from the order-level book. A subscription opens with an `l4_snapshot` of the whole book, followed by `l4_batch` messages of changed levels. Receive them with `on_l4_snapshot` and `on_l4_batch`; the `channel` argument tells them apart from the L4 channels. These channels are live-only; stored full-depth history is on REST `l2_orderbook.history()` and `l2_orderbook.diffs()`.
 
 ```python
 book = {"B": {}, "A": {}}
@@ -2196,7 +2196,7 @@ ws = OxArchiveWs(WsOptions(
 | `all_tickers` | All market tickers | No | Yes | No |
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes |
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes |
-| `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | No (see below) |
+| `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | No |
 
 Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. Their sequence is `l4_snapshot` followed by ordered `l4_batch` events. HIP-3, HIP-4, and Hyperliquid Spot L4 remain live-only.
 
@@ -2214,9 +2214,9 @@ Only Hyperliquid core `l4_diffs` and `l4_orders` support historical L4 replay. T
 | `hip3_liquidations` | HIP-3 liquidation events (2025-12-22+) | Yes | Yes | Yes |
 | `hip3_l4_diffs` | HIP-3 L4 orderbook diffs | Yes | Yes | No |
 | `hip3_l4_orders` | HIP-3 order lifecycle events | Yes | Yes | No |
-| `hip3_orderbook_full` | HIP-3 full-depth L2 order book: every price level, then changed levels | Yes | Yes | No (see below) |
+| `hip3_orderbook_full` | HIP-3 full-depth L2 order book: every price level, then changed levels | Yes | Yes | No |
 
-> **Note:** The server currently answers a replay request on `orderbook_full` or `hip3_orderbook_full` with an error. Stored full-depth history is served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
+> **Note:** `orderbook_full` and `hip3_orderbook_full` are live-only; `replay()` and `multi_replay()` reject them with `ValueError` before anything is sent. Stored full-depth history is served over REST by `l2_orderbook.history()` and `l2_orderbook.diffs()`.
 
 > **Note:** HIP-3 coins are case-sensitive (e.g., `km:US500`, `xyz:XYZ100`). Do not uppercase them.
 

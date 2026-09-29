@@ -184,8 +184,15 @@ L4_LIVE_ONLY_CHANNELS: frozenset[str] = frozenset(
 
 FULL_DEPTH_L2_CHANNELS: frozenset[str] = frozenset({"orderbook_full", "hip3_orderbook_full"})
 """Full-depth L2 book channels (Hyperliquid core and HIP-3), aggregated from
-the order-level book. A subscription opens with an ``l4_snapshot`` of every
-price level, followed by ``l4_batch`` messages of changed levels."""
+the order-level book. Live subscriptions only: a subscription opens with an
+``l4_snapshot`` of every price level, followed by ``l4_batch`` messages of
+changed levels."""
+
+FULL_DEPTH_LIVE_ONLY_ERROR = (
+    "orderbook_full and hip3_orderbook_full support live subscriptions only. "
+    "Stored full-depth history is served over REST by l2_orderbook.history() "
+    "and l2_orderbook.diffs()."
+)
 
 L4_LIVE_ONLY_ERROR = (
     "HIP-3, HIP-4, and Hyperliquid Spot L4 channels support live subscriptions only. "
@@ -207,9 +214,15 @@ def _bulk_stream_deprecation(name: str) -> str:
 
 
 def _validate_historical_l4_channel(channel: WsChannel) -> None:
-    """Reject historical operations for L4 channels that are live-only."""
+    """Reject historical operations for live-only channels, before anything is sent.
+
+    Covers the HIP-3, HIP-4 and Hyperliquid Spot L4 channels and the
+    full-depth L2 channels.
+    """
     if channel in L4_LIVE_ONLY_CHANNELS:
         raise ValueError(L4_LIVE_ONLY_ERROR)
+    if channel in FULL_DEPTH_L2_CHANNELS:
+        raise ValueError(FULL_DEPTH_LIVE_ONLY_ERROR)
 
 
 def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] = None) -> None:
@@ -803,6 +816,8 @@ class OxArchiveWs:
         are changed levels ``{"side", "px", "sz", "n", "bn"}``; a level whose
         ``sz`` is 0 has been removed. Receive them with :meth:`on_l4_snapshot`
         and :meth:`on_l4_batch`, applying batches in the order received.
+        Live only: stored full-depth history is served over REST by
+        ``l2_orderbook.history()`` and ``l2_orderbook.diffs()``.
         """
         self.subscribe("orderbook_full", coin)
 
@@ -1077,10 +1092,12 @@ class OxArchiveWs:
 
         Hyperliquid core ``l4_diffs`` and ``l4_orders`` replay as one typed
         ``l4_snapshot`` followed by ordered ``l4_batch`` messages. HIP-3,
-        HIP-4, and Hyperliquid Spot L4 channels are live-only and are rejected
-        here. All six ``lighter_*`` channels and all five ``rh_lighter_*``
-        channels (Lighter on Robinhood Chain; ``rh_lighter_candles`` is
-        replay-only) support bounded historical replay. Replay rows keep their
+        HIP-4, and Hyperliquid Spot L4 channels and the full-depth L2 channels
+        (``orderbook_full``, ``hip3_orderbook_full``) are live-only and are
+        rejected here with ``ValueError`` before anything is sent. All six
+        ``lighter_*`` channels and all five ``rh_lighter_*`` channels (Lighter
+        on Robinhood Chain; ``rh_lighter_candles`` is replay-only) support
+        bounded historical replay. Replay rows keep their
         historical shapes, which differ from the live Lighter messages.
 
         Args:

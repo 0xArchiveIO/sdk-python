@@ -14,7 +14,12 @@ import pytest
 from websockets.protocol import State as WsState
 
 from oxarchive.types import WsChannel, WsL4Batch, WsL4Snapshot, WsSubscribed
-from oxarchive.websocket import FULL_DEPTH_L2_CHANNELS, OxArchiveWs, WsOptions
+from oxarchive.websocket import (
+    FULL_DEPTH_L2_CHANNELS,
+    FULL_DEPTH_LIVE_ONLY_ERROR,
+    OxArchiveWs,
+    WsOptions,
+)
 
 SUBSCRIBED: dict[str, Any] = {
     "type": "subscribed",
@@ -155,7 +160,7 @@ def test_full_depth_frames_are_typed_and_reach_the_l4_handlers() -> None:
     assert records[1]["sz"] == 0.0  # a removed level
 
 
-def test_full_depth_replay_request_is_sent_unchanged() -> None:
+def _offline_client() -> tuple[OxArchiveWs, list[dict[str, Any]]]:
     ws = OxArchiveWs(WsOptions(api_key="test-key"))
     sent: list[dict[str, Any]] = []
 
@@ -163,13 +168,42 @@ def test_full_depth_replay_request_is_sent_unchanged() -> None:
         sent.append(message)
 
     setattr(ws, "_send", fake_send)
+    return ws, sent
 
-    asyncio.run(ws.replay("orderbook_full", "BTC", start=1_757_000_000_000, speed=10))
+
+@pytest.mark.parametrize("channel", sorted(FULL_DEPTH_L2_CHANNELS))
+def test_full_depth_channels_are_live_only_for_replay(channel: str) -> None:
+    channel = cast(WsChannel, channel)
+    ws, sent = _offline_client()
+
+    with pytest.raises(ValueError) as caught:
+        asyncio.run(ws.replay(channel, "BTC", start=1_757_000_000_000, speed=10))
+
+    assert str(caught.value) == FULL_DEPTH_LIVE_ONLY_ERROR
+    assert "l2_orderbook.history()" in FULL_DEPTH_LIVE_ONLY_ERROR
+    assert sent == []
+
+
+@pytest.mark.parametrize("channel", sorted(FULL_DEPTH_L2_CHANNELS))
+def test_full_depth_channels_are_live_only_for_multi_replay(channel: str) -> None:
+    channel = cast(WsChannel, channel)
+    ws, sent = _offline_client()
+
+    with pytest.raises(ValueError, match="live subscriptions only"):
+        asyncio.run(ws.multi_replay(["orderbook", channel], "BTC", start=1_757_000_000_000))
+
+    assert sent == []
+
+
+def test_the_top_of_book_orderbook_still_replays() -> None:
+    ws, sent = _offline_client()
+
+    asyncio.run(ws.replay("orderbook", "BTC", start=1_757_000_000_000, speed=10))
 
     assert sent == [
         {
             "op": "replay",
-            "channel": "orderbook_full",
+            "channel": "orderbook",
             "symbol": "BTC",
             "start": 1_757_000_000_000,
             "speed": 10,
