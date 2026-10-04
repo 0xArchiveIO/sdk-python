@@ -17,8 +17,9 @@ class FundingResource:
         >>> # Get current funding rate
         >>> current = client.funding.current("BTC")
         >>>
-        >>> # Get funding rate history
-        >>> history = client.funding.history("ETH", start="2024-01-01", end="2024-01-07")
+        >>> # Get funding rate history for the last week
+        >>> now = datetime.now(timezone.utc)
+        >>> history = client.funding.history("ETH", start=now - timedelta(days=7), end=now)
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):

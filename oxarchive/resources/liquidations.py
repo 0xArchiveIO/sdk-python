@@ -129,7 +129,10 @@ class _LiquidationsBase:
             CursorResponse with liquidation volume buckets and next_cursor for pagination
 
         Example:
-            >>> result = client.hyperliquid.liquidations.volume("BTC", start="2025-06-01", end="2025-06-02")
+            >>> now = datetime.now(timezone.utc)
+            >>> result = client.hyperliquid.liquidations.volume(
+            ...     "BTC", start=now - timedelta(days=1), end=now
+            ... )
             >>> for bucket in result.data:
             ...     print(f"{bucket.timestamp}: ${bucket.total_usd:.0f} ({bucket.count} liquidations)")
         """
@@ -343,21 +346,17 @@ class LiquidationsResource(_LiquidationsBase):
 
     Retrieve historical liquidation events from Hyperliquid.
 
-    Note: Liquidation data is available from May 25, 2025 onwards.
+    Note: Liquidations are served from 2025-12-22.
 
     Example:
-        >>> # Get recent liquidations
-        >>> liquidations = client.hyperliquid.liquidations.history(
-        ...     "BTC",
-        ...     start="2025-06-01",
-        ...     end="2025-06-02"
-        ... )
+        >>> # Get the last day of liquidations
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(days=1)
+        >>> liquidations = client.hyperliquid.liquidations.history("BTC", start=start, end=end)
         >>>
         >>> # Get liquidations for a specific user
         >>> user_liquidations = client.hyperliquid.liquidations.by_user(
-        ...     "0x1234...",
-        ...     start="2025-06-01",
-        ...     end="2025-06-02"
+        ...     "0x1234...", start=start, end=end
         ... )
     """
 
@@ -477,7 +476,8 @@ class Hip3LiquidationsResource(_LiquidationsBase):
     ``by_user``. Symbols keep their builder prefix and case.
 
     Example:
+        >>> now = datetime.now(timezone.utc)
         >>> liqs = client.hyperliquid.hip3.liquidations.history(
-        ...     "xyz:XYZ100", start="2026-09-01", end="2026-09-02"
+        ...     "xyz:XYZ100", start=now - timedelta(days=7), end=now
         ... )
     """

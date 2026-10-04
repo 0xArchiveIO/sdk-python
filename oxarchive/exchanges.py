@@ -91,7 +91,7 @@ class HyperliquidClient:
         base_path = "/v1/hyperliquid"
 
         self.orderbook = OrderBookResource(http, base_path)
-        """Order book data (L2 snapshots from April 2023)"""
+        """Order book data (L2 snapshots from 2023-04-15)"""
 
         # Hyperliquid uses hourly S3 backfill (not live ingestion), so the
         # backend does not expose ``/v1/hyperliquid/trades/{symbol}/recent``.
@@ -143,7 +143,7 @@ class HyperliquidClient:
         """HIP-3 builder-deployed perpetuals (trades from 2025-10-13)"""
 
         self.hip4 = Hip4Client(http)
-        """HIP-4 outcome markets (May 2026+)"""
+        """HIP-4 outcome markets (from 2026-05-02)"""
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
@@ -360,7 +360,8 @@ class Hip3Client:
     def __init__(self, http: HttpClient):
         self._http = http
         base_path = "/v1/hyperliquid/hip3"
-        coin_transform = lambda c: c  # noqa: E731 — HIP-3 coins are case-sensitive (e.g. "xyz:XYZ100")
+        # HIP-3 coins are case-sensitive (e.g. "xyz:XYZ100"), so they pass through unchanged.
+        coin_transform = lambda c: c  # noqa: E731
 
         self.instruments = Hip3InstrumentsResource(http, base_path, coin_transform=coin_transform)
         """HIP-3 instruments with latest market data"""
@@ -418,7 +419,7 @@ class Hip3Client:
         Get data freshness for a symbol across all data types.
 
         Args:
-            symbol: Symbol (case-sensitive, e.g. 'km:US500')
+            symbol: Symbol (case-sensitive, e.g. 'xyz:TSLA')
 
         Returns:
             CoinFreshness with per-data-type lag information
@@ -438,7 +439,7 @@ class Hip3Client:
         Get combined market summary for a symbol.
 
         Args:
-            symbol: Symbol (case-sensitive, e.g. 'km:US500')
+            symbol: Symbol (case-sensitive, e.g. 'xyz:TSLA')
 
         Returns:
             CoinSummary with all market metrics
@@ -468,7 +469,7 @@ class Hip3Client:
         Get mark/oracle price history for a symbol.
 
         Args:
-            symbol: Symbol (case-sensitive, e.g. 'km:US500')
+            symbol: Symbol (case-sensitive, e.g. 'xyz:TSLA')
             start: Start timestamp (ISO or Unix ms)
             end: End timestamp (ISO or Unix ms)
             interval: Aggregation interval (e.g. '1h', '4h', '1d')
@@ -536,7 +537,7 @@ def _hip4_encode(symbol: Union[str, int]) -> str:
     requirement, and because the namespace is already ``/v1/hyperliquid/hip4``
     so the ``#`` is redundant.
 
-    Note: WebSocket subscribes still use the raw ``#N`` form in the JSON body —
+    Note: WebSocket subscribes still use the raw ``#N`` form in the JSON body;
     only the REST path is normalized here.
     """
     symbol_text = str(symbol)
@@ -566,8 +567,10 @@ class Hip4Client:
     bare form is the recommended primary in examples. WebSocket ``subscribe``
     payloads still use the raw ``#N`` form (passed through as-is in JSON).
 
-    Note: HIP-4 has candles and outcome-side open interest from May 2, 2026.
-    Raw OI updates arrive at roughly 10-second cadence. HIP-4 has no funding,
+    Note: HIP-4 serves L4 and order history from 2026-05-02 07:47 UTC, trades
+    and candles from 2026-05-02 08:00 UTC, and the order book and outcome-side
+    open interest from 2026-05-02 16:51 UTC. Raw OI updates arrive at roughly
+    10-second cadence. HIP-4 has no funding,
     no liquidations, and no oracle feed for outcomes.
 
     Example:
@@ -1117,9 +1120,8 @@ class RhLighterClient(_LighterDeploymentClient):
 
     Coverage: trades and liquidations from the venue launch,
     2026-06-26 20:10:26 UTC; order book, open interest and funding from
-    2026-08-22 18:43 UTC; account positions from 2026-06-26. Candles are
-    served once enabled for this deployment (from 2026-06-26); until then the
-    candles route answers with an error. Trades follow the same finalization
+    2026-08-22 18:43 UTC; candles from 2026-06-26 20:10 UTC; account positions
+    from 2026-06-26. Trades follow the same finalization
     contract as mainnet Lighter: ``trades.list()`` is canonical up to
     ``meta.finalized_through`` and ``trades.recent()`` is the preliminary tier.
 
@@ -1150,10 +1152,11 @@ class SpotClient:
     ``HYPE-USDC``, ``PURR-USDC``); the server resolves dashed to wire format
     (``PURR/USDC`` or ``@107``) internally.
 
-    Spot has no funding, no open interest, or liquidations. Candle history is
-    served from ``2025-03-22T10:50:22Z``; L4 and order history from
-    2026-03-10; the order book from 2026-05-05. Candle pages are capped at
-    1,000 rows.
+    Spot has no funding, no open interest, or liquidations. Candles are served
+    from 2025-03-22 10:50 UTC and trades from 2025-03-22 10:50:22 UTC; the
+    order book from 2026-05-05 19:56 UTC; L4 from 2026-05-05 22:57 UTC
+    (PURR-USDC from 2026-03-11 01:03 UTC), with REST order history reaching
+    back further. Candle pages are capped at 1,000 rows.
 
     Example:
         >>> client = oxarchive.Client(api_key="...")
@@ -1176,15 +1179,17 @@ class SpotClient:
         """Trade/fill history (from 2025-03-22), including ``recent()``."""
 
         self.candles = SpotCandlesResource(http, base_path)
-        """OHLCV candle history (from 2025-03-22T10:50:22Z; max 1,000 rows)."""
+        """OHLCV candle history (from 2025-03-22 10:50 UTC; max 1,000 rows)."""
 
         self.orders = SpotOrdersResource(http, base_path)
-        """L4 order lifecycle history (from 2026-03-10). Spot serves
-        ``history()`` only: no flow, TP/SL or trigger levels."""
+        """L4 order lifecycle history (``client.symbols.list()`` has each
+        pair's first date). Spot serves ``history()`` only: no flow, TP/SL or
+        trigger levels."""
 
         self.l4_orderbook = L4OrderBookResource(http, base_path)
         """L4 order-level orderbook: full reconstruction, raw diffs,
-        and checkpoint history (from 2026-03-10)."""
+        and checkpoint history (from 2026-05-05 22:57 UTC; PURR-USDC from
+        2026-03-11 01:03 UTC)."""
 
         self.twap = SpotTwapResource(http, base_path)
         """TWAP status records by pair or by user wallet."""

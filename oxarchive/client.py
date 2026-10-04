@@ -32,12 +32,11 @@ class Client:
     Two venues: Hyperliquid and Lighter. Lighter has two deployments: mainnet
     and Robinhood Chain.
 
-    - `client.hyperliquid` - Hyperliquid perpetuals (April 2023+)
+    - `client.hyperliquid` - Hyperliquid perpetuals (order book from 2023-04-15)
       - `client.hyperliquid.hip3` - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace
       - `client.hyperliquid.hip4` - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace
     - `client.spot` - Hyperliquid spot pairs (trades and candles from 2025-03-22,
-      L4 and order history from 2026-03-10, order book from 2026-05-05; no
-      funding, OI, or liquidations)
+      order book and L4 from 2026-05-05; no funding, OI, or liquidations)
     - `client.lighter` - Lighter mainnet
     - `client.rh_lighter` - Lighter on Robinhood Chain (USDG-quoted perps and
       spot; trades and liquidations from 2026-06-26; order book, OI and
@@ -76,10 +75,14 @@ class Client:
         >>> positions = client.hyperliquid.positions.get("0x...")
         >>>
         >>> # Hyperliquid HIP-3 data
-        >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
+        >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("xyz:TSLA")
         >>>
-        >>> # Get historical snapshots
-        >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
+        >>> # Order book history for the last hour
+        >>> from datetime import datetime, timedelta, timezone
+        >>> now = datetime.now(timezone.utc)
+        >>> history = client.hyperliquid.orderbook.history(
+        ...     "ETH", start=now - timedelta(hours=1), end=now
+        ... )
         >>>
         >>> # List all instruments
         >>> instruments = client.hyperliquid.instruments.list()
@@ -133,21 +136,24 @@ class Client:
 
         # Exchange-specific clients (recommended)
         self.hyperliquid = HyperliquidClient(self._http)
-        """Hyperliquid exchange data (orderbook, trades, funding, OI from April 2023)"""
+        """Hyperliquid exchange data. Order book from 2023-04-15, trades from
+        2023-04-15 03:31 UTC, funding and open interest from 2023-05-20 02:50 UTC;
+        ``client.capabilities()`` lists every dataset's first instant."""
 
         self.spot = SpotClient(self._http)
-        """Hyperliquid spot pairs. Trades and candles from 2025-03-22; L4 and order
-        history from 2026-03-10; order book from 2026-05-05. No funding, OI, or
-        liquidations."""
+        """Hyperliquid spot pairs. Trades and candles from 2025-03-22; order book
+        and L4 from 2026-05-05 (PURR-USDC L4 from 2026-03-11). No funding, OI,
+        or liquidations."""
 
         self.lighter = LighterClient(self._http)
-        """Lighter mainnet data. Trade history begins January 17, 2025;
-        exact starts vary by market and data type."""
+        """Lighter mainnet data. Trades from 2025-01-17; exact starts vary by
+        market and data type (``client.symbols.list()``)."""
 
         self.rh_lighter = RhLighterClient(self._http)
         """Lighter on Robinhood Chain data (``/v1/rh-lighter``). Trades and
-        liquidations from 2026-06-26 20:10:26 UTC; order book, open interest
-        and funding from 2026-08-22 18:43 UTC. Same resources as ``client.lighter``
+        liquidations from 2026-06-26 20:10:26 UTC; candles from 2026-06-26
+        20:10 UTC; order book, open interest and funding from 2026-08-22
+        18:43 UTC. Same resources as ``client.lighter``
         except the L3 order book and the L1 account resolver."""
 
         # Data quality monitoring (cross-exchange)

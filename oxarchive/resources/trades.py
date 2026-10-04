@@ -23,14 +23,16 @@ class TradesResource:
     paging, so a full page holds ``limit`` matching trades.
 
     Example:
-        >>> # Get trade history with cursor-based pagination (recommended)
-        >>> result = client.hyperliquid.trades.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get the last hour of trades with cursor-based pagination (recommended)
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(hours=1)
+        >>> result = client.hyperliquid.trades.history("BTC", start=start, end=end)
         >>> trades = result.data
         >>>
         >>> # Get all pages
         >>> while result.has_more:
         ...     result = client.hyperliquid.trades.history(
-        ...         "BTC", start="2024-01-01", end="2024-01-02", cursor=result.next_cursor
+        ...         "BTC", start=start, end=end, cursor=result.next_cursor
         ...     )
         ...     trades.extend(result.data)
         >>>

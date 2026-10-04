@@ -17,11 +17,13 @@ class L2OrderBookResource:
         >>> # Get current full-depth L2 orderbook
         >>> snapshot = client.hyperliquid.l2_orderbook.get("BTC")
         >>>
-        >>> # Get L2 orderbook at a historical timestamp
-        >>> snapshot = client.hyperliquid.l2_orderbook.get("BTC", timestamp=1711900800000)
+        >>> # Get L2 orderbook an hour ago (served from 2026-03-11 01:03 UTC)
+        >>> now = datetime.now(timezone.utc)
+        >>> hour_ago = now - timedelta(hours=1)
+        >>> snapshot = client.hyperliquid.l2_orderbook.get("BTC", timestamp=hour_ago)
         >>>
         >>> # Get L2 orderbook history
-        >>> history = client.hyperliquid.l2_orderbook.history("BTC", start="2026-03-21", end="2026-03-22")
+        >>> history = client.hyperliquid.l2_orderbook.history("BTC", start=hour_ago, end=now)
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):

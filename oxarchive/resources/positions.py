@@ -248,11 +248,12 @@ class HyperliquidPositionsResource(_PositionsBase):
         >>> print(now.meta.as_of, now.meta.quality)
         >>>
         >>> # State at an instant (an exact hour serves the hourly snapshot)
-        >>> then = client.hyperliquid.positions.get("0xabc...", timestamp="2026-09-01T12:00:00Z")
+        >>> hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        >>> then = client.hyperliquid.positions.get("0xabc...", timestamp=hour - timedelta(hours=1))
         >>>
         >>> # Every change in a window, following cursors
         >>> for leg in client.hyperliquid.positions.iterate_changes(
-        ...     "0xabc...", start="2026-09-01", end="2026-09-02"
+        ...     "0xabc...", start=hour - timedelta(days=1), end=hour
         ... ):
         ...     print(leg.timestamp, leg.event_type, leg.start_position, leg.end_position)
     """

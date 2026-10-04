@@ -295,15 +295,17 @@ class OrdersResource(_OrderFlowResource):
     L4 order history, flow, TP/SL and trigger levels (Hyperliquid core and HIP-3).
 
     Example:
-        >>> # Get order history
-        >>> result = client.hyperliquid.orders.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get the last hour of order history
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(hours=1)
+        >>> result = client.hyperliquid.orders.history("BTC", start=start, end=end)
         >>> orders = result.data
         >>>
         >>> # Get order flow aggregation
-        >>> flow = client.hyperliquid.orders.flow("BTC", start="2024-01-01", end="2024-01-02")
+        >>> flow = client.hyperliquid.orders.flow("BTC", start=start, end=end)
         >>>
         >>> # Get TP/SL history
-        >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start="2024-01-01", end="2024-01-02")
+        >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start=start, end=end)
     """
 
     def trigger_levels(
@@ -451,7 +453,8 @@ _UNSUPPORTED_SPOT_HISTORY = {
 
 class SpotOrdersResource(_OrdersBase):
     """
-    Hyperliquid spot L4 order lifecycle history (live from 2026-05-05).
+    Hyperliquid spot L4 order lifecycle history (``client.symbols.list()`` has
+    each pair's first date).
 
     Spot serves order history only: there is no flow, TP/SL or trigger-level
     route, and the history route takes no user, status, order-type or

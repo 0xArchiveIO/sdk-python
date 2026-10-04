@@ -145,8 +145,8 @@ class Hip3InstrumentsResource:
         >>> instruments = client.hyperliquid.hip3.instruments.list()
         >>>
         >>> # Get specific instrument
-        >>> us500 = client.hyperliquid.hip3.instruments.get("km:US500")
-        >>> print(f"Mark price: {us500.mark_price}")
+        >>> tsla = client.hyperliquid.hip3.instruments.get("xyz:TSLA")
+        >>> print(f"Mark price: {tsla.mark_price}")
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1/hyperliquid/hip3", coin_transform=None):
@@ -174,7 +174,7 @@ class Hip3InstrumentsResource:
         Get a specific HIP-3 instrument by coin name.
 
         Args:
-            coin: The coin name (e.g., 'km:US500', 'xyz:XYZ100'). Case-sensitive.
+            coin: The coin name (e.g., 'xyz:TSLA', 'xyz:XYZ100'). Case-sensitive.
 
         Returns:
             HIP-3 instrument details with latest market data

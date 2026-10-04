@@ -66,7 +66,9 @@ T_END = 1790726400000  # 2026-09-30T00:00:00Z
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _page(data: Any, *, has_more: bool, next_cursor: Optional[str] = None, **meta: Any) -> dict[str, Any]:
+def _page(
+    data: Any, *, has_more: bool, next_cursor: Optional[str] = None, **meta: Any
+) -> dict[str, Any]:
     body = envelope(data, next_cursor=next_cursor, **meta)
     body["meta"]["has_more"] = has_more
     return body

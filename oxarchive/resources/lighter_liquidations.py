@@ -34,7 +34,10 @@ class LighterLiquidationsResource:
     ``source == "ws"`` and the venue's raw JSON in ``raw_json``.
 
     Example:
-        >>> page = client.lighter.liquidations.history("BTC", start="2026-09-01", end="2026-09-02")
+        >>> now = datetime.now(timezone.utc)
+        >>> page = client.lighter.liquidations.history(
+        ...     "BTC", start=now - timedelta(days=1), end=now
+        ... )
         >>> for liq in page.data:
         ...     print(liq.timestamp, liq.price, liq.size, liq.usd_amount)
         >>>

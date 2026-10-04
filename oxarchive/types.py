@@ -349,7 +349,7 @@ class Hip3Instrument(_ApiRecord):
     """
 
     coin: str
-    """Full coin name (e.g., km:US500, xyz:XYZ100)."""
+    """Full coin name (e.g., xyz:TSLA, xyz:XYZ100)."""
 
     namespace: str
     """Builder namespace (e.g., km, xyz)."""
@@ -386,7 +386,8 @@ class Hip4SideSpec(BaseModel):
     """Public asset id: 100_000_000 + 10*outcome_id + side."""
 
     display_title: Optional[str] = None
-    """Human-readable per-side title, as the API returns it: the outcome's question followed by the side name."""
+    """Human-readable per-side title, as the API returns it: the outcome's
+    question followed by the side name."""
 
     slug: Optional[str] = None
     """Per-side URL slug mirroring HL's URL pattern (e.g. 'btc-above-78213-yes-may-04-0600')."""
@@ -2624,7 +2625,7 @@ class ResponseMeta(BaseModel):
 
     symbol: Optional[str] = None
     """On per-symbol routes, the canonical public symbol the response is for
-    (for example ``BTC``, ``km:US500``, ``HYPE-USDC``, ``#0``)."""
+    (for example ``BTC``, ``xyz:TSLA``, ``HYPE-USDC``, ``#0``)."""
 
     venue: Optional[str] = None
     """On per-symbol routes, the venue that served it: ``"hyperliquid"``,
@@ -3273,7 +3274,7 @@ class Hip3OracleDiscoveryBounds(_ApiRecord):
     """
 
     symbol: str
-    """HIP-3 symbol (for example ``km:US500``)."""
+    """HIP-3 symbol (for example ``xyz:TSLA``)."""
 
     reference_price: float
     """External price when available, otherwise the mark price."""
@@ -3312,7 +3313,7 @@ class Hip3OracleExternalPrice(_ApiRecord):
     """Latest deployer-pushed external price and mark price for a HIP-3 market."""
 
     symbol: str
-    """HIP-3 symbol (for example ``km:US500``)."""
+    """HIP-3 symbol (for example ``xyz:TSLA``)."""
 
     external_price: Optional[float] = None
     """Externally derived reference price, when available."""
@@ -3486,7 +3487,7 @@ class SymbolEntry(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     symbol: str
-    """Symbol as the venue's routes take it (for example ``BTC``, ``km:US500``,
+    """Symbol as the venue's routes take it (for example ``BTC``, ``xyz:TSLA``,
     ``HYPE-USDC``, ``#0``)."""
 
     exchange: str

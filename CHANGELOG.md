@@ -14,6 +14,35 @@ codes, `has_more` on every paged response, the symbol and venue of every
 per-symbol response, `client.capabilities()`, and replay for every L4 and
 full-depth channel.
 
+### Upgrading from 1.7
+
+The last release on PyPI before this one is 1.7.0; versions 1.7.1 to 1.11.0
+were not published, and their changes are listed below. These are the
+changes that can break code written against 1.7.0:
+
+- Lighter `funding_rate` is a fractional, non-annualized rate, no longer a
+  percent (1.10.0, Breaking). Remove any division by 100.
+- Times without a time zone are read as UTC on every method, not as the
+  machine's local time (this release, Fixed).
+- Methods that called routes the API does not serve are removed, with their
+  async versions: `client.hyperliquid.hip4.l2_orderbook`,
+  `client.spot.orders.flow()` and `tpsl()`, and
+  `client.hyperliquid.hip3.liquidations.by_user()` (this release, Removed).
+- Parameters the API never applied raise `TypeError` instead of being
+  ignored, such as `user` or `status` on `client.spot.orders.history()`
+  (this release, Changed).
+- WebSocket: `subscribe()` raises `ValueError` for a channel without live
+  data (`candles`, `hip3_candles`, `hip4_orderbook`, `hip4_open_interest`,
+  `spot_twap`), `replay()` raises it for a channel without replay, and
+  Lighter replay messages have the live shapes (this release). `stream()`,
+  `multi_stream()` and `stream_stop()` are deprecated because the server no
+  longer streams bulk data (1.11.0, Deprecated).
+- In an L4 snapshot from `l4_orderbook.get()`, each resting order's
+  `timestamp` is an RFC 3339 string, with `timestamp_ms` beside it (this
+  release, Added).
+- `SpotPair` and `SpotTwapStatus` have the fields the API returns (1.8.0,
+  Fixed).
+
 ### Added
 - API version 2026-10-01. Every REST request, sync and async, sends
   `0xArchive-Version: 2026-10-01` (`oxarchive.API_VERSION`,
@@ -112,9 +141,8 @@ full-depth channel.
   `positions`, and `get_freshness()`, `get_summary()`, `get_price_history()`.
   Markets are USDG-quoted: perps use uppercase symbols (`BTC`), spot markets
   dashed symbols (`AAPL-USDG`). Trades and liquidations start at the venue
-  launch, 2026-06-26 20:10:26 UTC; order book, open interest and funding
-  start 2026-08-22 18:43 UTC. Candles are served from 2026-06-26 once enabled
-  for this deployment.
+  launch, 2026-06-26 20:10:26 UTC; candles start 2026-06-26 20:10 UTC; order
+  book, open interest and funding start 2026-08-22 18:43 UTC.
 - Lighter liquidations on both deployments: `client.lighter.liquidations` and
   `client.rh_lighter.liquidations` with `history()` and `volume()` (and async
   `ahistory()` / `avolume()`), typed as `LighterLiquidation` and
@@ -376,15 +404,26 @@ full-depth channel.
   metadata, capabilities and error codes; the trades, orders, L2, L3, L4 and
   WebSocket replay sections describe the filters and replays above. The
   channel tables mirror `/v1/capabilities`.
-- The README's spot coverage row lists each dataset's first date: L4 and
-  order history from 2026-03-10 (L4 replay from 2026-03-11 01:03 UTC), order
-  book from 2026-05-05, TWAP from May 2026. It said all of them started in
-  May 2026.
-- The README's HIP-3 coverage row lists each dataset's first date, replacing
-  "February 2026+": trades and oracle prices from 2025-10-13, candles and
-  liquidations from 2025-12-22, order book, funding and open interest from
-  2026-02-16, L4 and order history from 2026-03-10. Hyperliquid liquidations
-  are listed from 2025-12-22 (was "May 2025+").
+- The README's coverage table gives each dataset's first served instant on
+  every venue, as `/v1/capabilities` reports it, and the docstrings give the
+  same dates. It replaces month-only dates (Hyperliquid "April 2023+", HIP-3
+  "February 2026+", HIP-4 "May 2026+", spot TWAP "May 2026"), lists
+  Hyperliquid liquidations from 2025-12-22 (was "May 2025+"), and corrects
+  the spot L4 start (2026-05-05 22:57 UTC; PURR-USDC from 2026-03-11 01:03
+  UTC) and the spot candle start (2025-03-22 10:50 UTC).
+- The Quick Start runs as pasted on any plan: it reads an active HIP-3
+  market (`xyz:TSLA`), finds a real wallet for the positions call instead of
+  a placeholder address, and reads the last hour of order book history.
+- Examples read recent windows (the last hour, day or week), which every
+  plan can reach, instead of fixed dates. Several of those dates fell before
+  the dataset's coverage (candles, the Lighter order book, L2, L3 and L4,
+  order history and liquidations) or outside the Free plan's 30-day history.
+  HIP-4 examples find an open outcome instead of a settled one.
+- The Lighter tick-level example uses `orderbook.history_tick()`.
+  `orderbook.history()` returns snapshots and cannot parse tick data, and its
+  docstring now says so.
+- Market counts are no longer pinned; `client.rh_lighter.instruments.list()`
+  and `client.spot.pairs.list()` return the current sets.
 - The HIP-3 coin table is removed, since builders list and delist markets;
   call `client.hyperliquid.hip3.instruments.list()` for the current set.
 - Documentation links point at docs.0xarchive.io.

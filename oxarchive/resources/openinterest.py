@@ -27,8 +27,9 @@ class _OpenInterestResourceBase(Generic[RecordT]):
         >>> # Get current open interest
         >>> current = client.open_interest.current("BTC")
         >>>
-        >>> # Get open interest history
-        >>> history = client.open_interest.history("ETH", start="2024-01-01", end="2024-01-07")
+        >>> # Get open interest history for the last week
+        >>> now = datetime.now(timezone.utc)
+        >>> history = client.open_interest.history("ETH", start=now - timedelta(days=7), end=now)
     """
 
     def __init__(

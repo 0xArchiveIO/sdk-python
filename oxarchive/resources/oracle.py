@@ -10,12 +10,12 @@ class Hip3OracleResource:
     """
     HIP-3 oracle reads: the deployer-pushed external price and the discovery bounds.
 
-    Symbols keep their builder prefix and case (for example ``km:US500``).
+    Symbols keep their builder prefix and case (for example ``xyz:TSLA``).
 
     Example:
-        >>> price = client.hyperliquid.hip3.oracle.external_price("km:US500")
+        >>> price = client.hyperliquid.hip3.oracle.external_price("xyz:TSLA")
         >>> print(price.external_price, price.mark_price)
-        >>> bounds = client.hyperliquid.hip3.oracle.discovery_bounds("km:US500")
+        >>> bounds = client.hyperliquid.hip3.oracle.discovery_bounds("xyz:TSLA")
         >>> print(bounds.lower_bound, bounds.upper_bound)
     """
 

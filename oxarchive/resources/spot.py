@@ -6,9 +6,9 @@ format (``PURR/USDC`` or ``@107``) internally, so SDK callers always pass
 the dashed form.
 
 Spot has no funding, no open interest, or liquidations. Candle history is served
-from ``2025-03-22T10:50:22Z`` with 1,000-row pages; trades go back to
-2025-03-22. L4 and order history are served from 2026-03-10 and the order book
-from 2026-05-05.
+from 2025-03-22 10:50 UTC with 1,000-row pages and trades from 2025-03-22
+10:50:22 UTC; the order book from 2026-05-05 19:56 UTC and L4 from 2026-05-05
+22:57 UTC (PURR-USDC from 2026-03-11 01:03 UTC).
 """
 
 from __future__ import annotations

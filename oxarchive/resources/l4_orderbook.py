@@ -24,11 +24,13 @@ class L4OrderBookResource:
         >>> # Get current L4 orderbook snapshot
         >>> snapshot = client.hyperliquid.l4_orderbook.get("BTC")
         >>>
-        >>> # Get L4 orderbook diffs
-        >>> diffs = client.hyperliquid.l4_orderbook.diffs("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get L4 orderbook diffs for the last hour
+        >>> now = datetime.now(timezone.utc)
+        >>> hour_ago = now - timedelta(hours=1)
+        >>> diffs = client.hyperliquid.l4_orderbook.diffs("BTC", start=hour_ago, end=now)
         >>>
-        >>> # Get L4 orderbook history
-        >>> history = client.hyperliquid.l4_orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get L4 orderbook history (checkpoints)
+        >>> history = client.hyperliquid.l4_orderbook.history("BTC", start=hour_ago, end=now)
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):

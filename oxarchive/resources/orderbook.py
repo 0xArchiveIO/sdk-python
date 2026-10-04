@@ -117,8 +117,10 @@ class OrderBookResource:
                 venue: Hyperliquid core, HIP-3, HIP-4, spot and Lighter)
             granularity: Data resolution for the Lighter order book (Lighter
                 mainnet and Robinhood Chain only).
-                Options: 'checkpoint' (1min, default), '30s', '10s', '1s', 'tick'.
-                Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x, tick=20x.
+                Options: 'checkpoint' (1min, default), '30s', '10s', '1s'.
+                Credit multipliers: checkpoint=1x, 30s=2x, 10s=3x, 1s=10x.
+                Tick-level data (20x) is a checkpoint plus raw deltas, not
+                snapshots: use :meth:`history_tick` for it.
 
         Returns:
             CursorResponse with order book snapshots and next_cursor for pagination

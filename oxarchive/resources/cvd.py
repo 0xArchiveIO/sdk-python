@@ -109,7 +109,7 @@ class CvdResource:
 
         Args:
             symbol: Symbol (for example ``BTC``; HIP-3 symbols keep their
-                builder prefix and case, for example ``km:US500``).
+                builder prefix and case, for example ``xyz:TSLA``).
             start: Window start. A time without a time zone is UTC.
             end: Window end (default: now).
             interval: Bucket width: ``1m``, ``5m``, ``15m``, ``30m``, ``1h``

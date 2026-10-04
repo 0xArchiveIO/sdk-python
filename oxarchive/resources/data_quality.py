@@ -163,7 +163,7 @@ class DataQualityResource:
             exchange: Venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot',
                 'lighter' or 'rh-lighter' (Lighter on Robinhood Chain)
             symbol: Symbol exactly as the venue's routes take it: 'BTC', a
-                case-sensitive HIP-3 coin such as 'km:US500', a spot pair such as
+                case-sensitive HIP-3 coin such as 'xyz:TSLA', a spot pair such as
                 'HYPE-USDC', or a HIP-4 coin such as '#0'. It is sent as one
                 URL-encoded path segment and is not re-cased.
             from_time: Start of gap detection window (default: now - 30 days).
@@ -357,7 +357,7 @@ class DataQualityResource:
             SlaResponse with SLA targets, actual metrics, and compliance status.
 
         Example:
-            >>> sla = client.data_quality.sla(year=2026, month=1)
+            >>> sla = client.data_quality.sla(year=2026, month=9)
             >>> print(f"Period: {sla.period}")
             >>> print(f"Uptime: {sla.actual.uptime}% ({sla.actual.uptime_status})")
             >>> print(f"Completeness: {sla.actual.data_completeness.overall}%")

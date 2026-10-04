@@ -1408,7 +1408,7 @@ class OxArchiveWs:
         Args:
             channels: List of channels to replay together (e.g.,
                 ``["orderbook", "trades", "funding"]``).
-            coin: Trading pair (e.g., ``'BTC'``, ``'ETH'``, ``'km:US500'``).
+            coin: Trading pair (e.g., ``'BTC'``, ``'ETH'``, ``'xyz:TSLA'``).
             start: Start timestamp (Unix ms).
             end: End timestamp (Unix ms, defaults to now).
             speed: Playback speed multiplier (1 = real-time, 10 = 10x faster).

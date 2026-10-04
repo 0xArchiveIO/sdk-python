@@ -379,13 +379,16 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "2026-05-02" in readme
     assert "~10s" in readme
     assert "250 orders per side" in readme
-    assert "March 5, 2026" in readme
+    assert "2026-03-05 03:33 UTC" in readme
     assert "raw ~1 min" not in readme
     assert "no funding, no liquidations, and no candles" not in readme
     assert "no funding / liquidations / candles" not in types
     # HIP-4 order book and open interest replay but do not stream live (capabilities).
     assert "live bridges paused" not in types
-    assert "Replay only: ``candles``, ``hip3_candles``, ``hip4_orderbook``, ``hip4_open_interest``" in " ".join(types.split())
+    replay_only = (
+        "Replay only: ``candles``, ``hip3_candles``, ``hip4_orderbook``, ``hip4_open_interest``"
+    )
+    assert replay_only in " ".join(types.split())
     assert "250 orders per side" in l3_resource
     assert "price levels per side" not in l3_resource
     assert "self.candles = CandlesResource" in exchanges
@@ -393,7 +396,7 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "HIP-3 and Lighter candle pages accept up to 10,000 rows" in readme
     assert "Candle pagination cursors are numeric timestamp strings" in readme
     assert "client.spot.candles.history" in readme
-    assert "2025-03-22T10:50:22Z" in readme
+    assert "2025-03-22 10:50 UTC" in readme
     assert "1m/5m/15m/30m/1h/4h/1d/1w" in readme
     assert "returns 501" not in readme
     assert "SpotCandlesResource" in exchanges

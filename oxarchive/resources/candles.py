@@ -183,7 +183,7 @@ class Hip4CandlesResource(CandlesResource):
 class SpotCandlesResource(CandlesResource):
     """Hyperliquid Spot OHLCV candles with a 1,000-row page cap.
 
-    Spot candle coverage starts at ``2025-03-22T10:50:22Z``. Supported intervals
+    Spot candle coverage starts at 2025-03-22 10:50 UTC. Supported intervals
     are ``1m``, ``5m``, ``15m``, ``30m``, ``1h``, ``4h``, ``1d``, and ``1w``.
     """
 
