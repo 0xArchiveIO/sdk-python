@@ -383,9 +383,9 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "raw ~1 min" not in readme
     assert "no funding, no liquidations, and no candles" not in readme
     assert "no funding / liquidations / candles" not in types
-    # HIP-4 order book and open interest stream live and replay (capabilities).
+    # HIP-4 order book and open interest replay but do not stream live (capabilities).
     assert "live bridges paused" not in types
-    assert "``hip4_orderbook``, ``hip4_trades``, ``hip4_open_interest``" in types
+    assert "Replay only: ``candles``, ``hip3_candles``, ``hip4_orderbook``, ``hip4_open_interest``" in " ".join(types.split())
     assert "250 orders per side" in l3_resource
     assert "price levels per side" not in l3_resource
     assert "self.candles = CandlesResource" in exchanges

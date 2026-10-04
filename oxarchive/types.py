@@ -295,7 +295,7 @@ class Trade(BaseModel):
     """HIP-3 deployer fee share on this fill (in quote currency). Negative for the maker side (rebate), positive for the taker side. Present only on HIP-3 fills."""
 
     priority_gas: Optional[float] = None
-    """Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builder_fee and deployer_fee — paid to the network, not to a builder or deployer. Present only when the order paid for priority."""
+    """Priority fee burned in HYPE (not USDC) for write priority on the Hyperliquid validator queue. Independent of builder_fee and deployer_fee: paid to the network, not to a builder or deployer. Present only when the order paid for priority."""
 
     cloid: Optional[str] = None
     """Client order ID."""
@@ -386,7 +386,7 @@ class Hip4SideSpec(BaseModel):
     """Public asset id: 100_000_000 + 10*outcome_id + side."""
 
     display_title: Optional[str] = None
-    """Human-readable per-side title (e.g. 'BTC above 78,213 on May 4 at 06:00 UTC? — Yes')."""
+    """Human-readable per-side title, as the API returns it: the outcome's question followed by the side name."""
 
     slug: Optional[str] = None
     """Per-side URL slug mirroring HL's URL pattern (e.g. 'btc-above-78213-yes-may-04-0600')."""
@@ -1280,15 +1280,17 @@ Which channels stream live and which replay is listed per channel in
 
 - Live and replay: ``orderbook``, ``trades``, ``liquidations``,
   ``open_interest``, ``funding`` and their ``hip3_*`` counterparts;
-  ``hip4_orderbook``, ``hip4_trades``, ``hip4_open_interest``; the four live
-  ``lighter_*`` and ``rh_lighter_*`` channels; every L4 channel
-  (``l4_diffs``, ``l4_orders`` and the ``hip3_``, ``hip4_`` and ``spot_``
-  versions); and the full-depth L2 channels ``orderbook_full`` and
-  ``hip3_orderbook_full``.
-- Replay only: ``candles``, ``hip3_candles``, ``lighter_candles``,
-  ``lighter_l3_orderbook`` and ``rh_lighter_candles``.
-- Live only: ``ticker``, ``all_tickers``, ``spot_orderbook``, ``spot_trades``
-  and ``spot_twap``.
+  ``hip4_trades``; the four live ``lighter_*`` and ``rh_lighter_*`` channels;
+  every L4 channel (``l4_diffs``, ``l4_orders`` and the ``hip3_``, ``hip4_``
+  and ``spot_`` versions); and the full-depth L2 channels ``orderbook_full``
+  and ``hip3_orderbook_full``.
+- Replay only: ``candles``, ``hip3_candles``, ``hip4_orderbook``,
+  ``hip4_open_interest``, ``lighter_candles``, ``lighter_l3_orderbook`` and
+  ``rh_lighter_candles``.
+- Live only: ``ticker``, ``all_tickers``, ``spot_orderbook`` and
+  ``spot_trades``.
+- Neither: ``spot_twap``. Spot TWAP statuses are served over REST only
+  (``client.spot.twap``); subscribing raises ``ValueError``.
 
 L4 and full-depth replay is bulk: it is single-channel only, ``speed`` is
 ignored and ``replay.seek`` is refused. It opens with one ``l4_snapshot`` from

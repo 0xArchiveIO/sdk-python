@@ -146,6 +146,10 @@ def _replay_only(venue: str, datatype: str) -> WsChannelSpec:
     return WsChannelSpec(venue, datatype, live=False, replay=True)
 
 
+def _rest_only(venue: str, datatype: str) -> WsChannelSpec:
+    return WsChannelSpec(venue, datatype, live=False, replay=False)
+
+
 WS_CHANNELS: Mapping[str, WsChannelSpec] = MappingProxyType(
     {
         # Hyperliquid core
@@ -171,17 +175,17 @@ WS_CHANNELS: Mapping[str, WsChannelSpec] = MappingProxyType(
         "hip3_open_interest": _both("hip3", "oi"),
         "hip3_liquidations": _both("hip3", "liquidations"),
         # HIP-4
-        "hip4_orderbook": _both("hip4", "l2_orderbook"),
+        "hip4_orderbook": _replay_only("hip4", "l2_orderbook"),
         "hip4_l4_diffs": _both("hip4", "l4_diffs", bulk=True),
         "hip4_l4_orders": _both("hip4", "l4_orders", bulk=True),
         "hip4_trades": _both("hip4", "trades"),
-        "hip4_open_interest": _both("hip4", "oi"),
+        "hip4_open_interest": _replay_only("hip4", "oi"),
         # Hyperliquid spot
         "spot_orderbook": _live_only("spot", "l2_orderbook"),
         "spot_l4_diffs": _both("spot", "l4_diffs", bulk=True),
         "spot_l4_orders": _both("spot", "l4_orders", bulk=True),
         "spot_trades": _live_only("spot", "trades"),
-        "spot_twap": _live_only("spot", "twap"),
+        "spot_twap": _rest_only("spot", "twap"),
         # Lighter
         "lighter_orderbook": _both("lighter", "l2_orderbook"),
         "lighter_l3_orderbook": _replay_only("lighter", "l3_orderbook"),
@@ -202,7 +206,12 @@ WS_CHANNELS: Mapping[str, WsChannelSpec] = MappingProxyType(
 each row). The SDK refuses, before sending, a live subscription to a channel
 whose ``live`` is false, a replay of a channel whose ``replay`` is false, and a
 bulk-replay channel inside :meth:`OxArchiveWs.multi_replay`. A channel missing
-from this table is sent as given and the server decides."""
+from this table is sent as given and the server decides.
+
+``hip4_orderbook`` and ``hip4_open_interest`` replay but do not stream live.
+``spot_twap`` neither streams nor replays: capabilities lists spot TWAP as REST
+only (``client.spot.twap``), and it is kept here so that subscribing to it
+fails with that explanation instead of waiting for messages that never come."""
 
 LIVE_CHANNELS: frozenset[str] = frozenset(c for c, spec in WS_CHANNELS.items() if spec.live)
 """Channels a subscription streams live."""
@@ -334,6 +343,13 @@ NOT_LIVE_ERROR = (
 )
 """Raised by :meth:`OxArchiveWs.subscribe` for a replay-only channel."""
 
+REST_ONLY_ERROR = (
+    "{channel} does not support historical replay or live subscriptions; its data "
+    "is served over REST. client.capabilities() lists what each channel offers."
+)
+"""Raised by :meth:`OxArchiveWs.subscribe` and :meth:`OxArchiveWs.replay` for a
+channel that neither streams nor replays (``spot_twap``)."""
+
 
 # Large dataset downloads: the S3 Parquet bulk export.
 _BULK_EXPORT_URL = "https://0xarchive.io/data"
@@ -359,7 +375,8 @@ def _validate_replay_channel(channel: WsChannel, *, multi: bool = False) -> None
     if spec is None:
         return
     if not spec.replay:
-        raise ValueError(NOT_REPLAYABLE_ERROR.format(channel=channel))
+        error = NOT_REPLAYABLE_ERROR if spec.live else REST_ONLY_ERROR
+        raise ValueError(error.format(channel=channel))
     if multi and spec.bulk_replay:
         raise ValueError(BULK_REPLAY_MULTI_CHANNEL_ERROR.format(channel=channel))
 
@@ -367,9 +384,10 @@ def _validate_replay_channel(channel: WsChannel, *, multi: bool = False) -> None
 def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] = None) -> None:
     """Reject live subscriptions the server would refuse, before any state changes.
 
-    Replay-only channels (:data:`WS_CHANNELS` entries whose ``live`` is false:
-    ``candles``, ``hip3_candles``, ``lighter_candles``,
-    ``lighter_l3_orderbook`` and ``rh_lighter_candles``) are refused, and
+    Channels without live data (:data:`WS_CHANNELS` entries whose ``live`` is
+    false: ``candles``, ``hip3_candles``, ``hip4_orderbook``,
+    ``hip4_open_interest``, ``lighter_candles``, ``lighter_l3_orderbook``,
+    ``rh_lighter_candles`` and ``spot_twap``) are refused, and
     ``interval_ms`` is accepted only on ``lighter_orderbook`` and
     ``rh_lighter_orderbook``, as an integer between
     ``LIGHTER_BOOK_INTERVAL_MIN_MS`` and ``LIGHTER_BOOK_INTERVAL_MAX_MS``.
@@ -380,7 +398,8 @@ def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] =
         raise ValueError(RH_LIGHTER_SUBSCRIPTION_ERROR)
     spec = WS_CHANNELS.get(channel)
     if spec is not None and not spec.live:
-        raise ValueError(NOT_LIVE_ERROR.format(channel=channel))
+        error = NOT_LIVE_ERROR if spec.replay else REST_ONLY_ERROR
+        raise ValueError(error.format(channel=channel))
     if interval_ms is None:
         return
     if channel not in LIGHTER_BOOK_CHANNELS:
@@ -883,9 +902,11 @@ class OxArchiveWs:
                 second. Each book sent is one metered message.
 
         Raises:
-            ValueError: If ``channel`` is replay-only in :data:`WS_CHANNELS`
-                (``candles``, ``hip3_candles``, ``lighter_candles``,
-                ``lighter_l3_orderbook`` or ``rh_lighter_candles``), or if
+            ValueError: If ``channel`` has no live data in :data:`WS_CHANNELS`
+                (``candles``, ``hip3_candles``, ``hip4_orderbook``,
+                ``hip4_open_interest``, ``lighter_candles``,
+                ``lighter_l3_orderbook``, ``rh_lighter_candles`` or
+                ``spot_twap``), or if
                 ``interval_ms`` is passed for another channel than
                 ``lighter_orderbook`` or ``rh_lighter_orderbook``, is not an
                 integer, or is out of range.
@@ -906,7 +927,7 @@ class OxArchiveWs:
         """Subscribe asynchronously to a supported live channel.
 
         Takes the same arguments as :meth:`subscribe` and refuses the same
-        replay-only channels.
+        channels.
         """
         _validate_live_subscription(channel, interval_ms)
         self._remember_subscription(channel, coin, interval_ms)
@@ -1025,9 +1046,11 @@ class OxArchiveWs:
     def subscribe_hip4_orderbook(self, coin: str) -> None:
         """Subscribe to the live HIP-4 L2 book for a per-side coin.
 
-        ``coin`` should be the on-chain ``#N`` form (e.g. ``"#0"``). The raw
-        ``#`` is sent in the JSON body; only the REST path strips it. Stored
-        history replays on the same channel.
+        The channel does not stream live (``/v1/capabilities``), so this
+        raises ``ValueError`` before anything is sent. Replay its stored
+        history with ``replay("hip4_orderbook", coin, ...)``, read the current
+        book with ``client.hyperliquid.hip4.orderbook.get()``, or follow the
+        book live on ``hip4_l4_diffs``.
         """
         self.subscribe("hip4_orderbook", coin)
 
@@ -1046,7 +1069,10 @@ class OxArchiveWs:
     def subscribe_hip4_open_interest(self, coin: str) -> None:
         """Subscribe to live HIP-4 per-side open interest for a coin.
 
-        Stored history replays on the same channel.
+        The channel does not stream live (``/v1/capabilities``), so this
+        raises ``ValueError`` before anything is sent. Replay its stored
+        history with ``replay("hip4_open_interest", coin, ...)`` or read it
+        with ``client.hyperliquid.hip4.open_interest``.
         """
         self.subscribe("hip4_open_interest", coin)
 
@@ -1117,7 +1143,12 @@ class OxArchiveWs:
         self.unsubscribe("spot_l4_orders", coin)
 
     def subscribe_spot_twap(self, coin: str) -> None:
-        """Subscribe to live spot TWAP status updates for a pair."""
+        """Subscribe to live spot TWAP status updates for a pair.
+
+        Spot TWAP statuses are served over REST only (``/v1/capabilities``),
+        so this raises ``ValueError`` before anything is sent. Read them with
+        ``client.spot.twap.history()`` or ``client.spot.twap.by_user()``.
+        """
         self.subscribe("spot_twap", coin)
 
     def unsubscribe_spot_twap(self, coin: str) -> None:
@@ -1274,9 +1305,9 @@ class OxArchiveWs:
         """Start historical replay with timing preserved.
 
         Every channel whose :data:`WS_CHANNELS` entry has ``replay`` replays;
-        the live-only channels (``ticker``, ``all_tickers``,
-        ``spot_orderbook``, ``spot_trades``, ``spot_twap``) are refused here
-        with ``ValueError`` before anything is sent.
+        the others (``ticker``, ``all_tickers``, ``spot_orderbook``,
+        ``spot_trades`` and ``spot_twap``) are refused here with
+        ``ValueError`` before anything is sent.
 
         L4 channels (``l4_diffs``, ``l4_orders`` and the ``hip3_``, ``hip4_``
         and ``spot_`` versions) and the full-depth L2 channels

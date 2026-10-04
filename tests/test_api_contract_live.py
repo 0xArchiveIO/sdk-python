@@ -75,6 +75,7 @@ def test_capabilities_match_the_websocket_channel_table(client: Client) -> None:
     rows = client.capabilities()
     assert rows and all(row.venue and row.datatype for row in rows)
     served = {}
+    by_datatype = {(row.venue, row.datatype): row for row in rows}
     for row in rows:
         for channel in row.ws_channels:
             served[channel] = (row.venue, row.live, row.replay)
@@ -82,6 +83,12 @@ def test_capabilities_match_the_websocket_channel_table(client: Client) -> None:
     for channel, (venue, live, replay) in served.items():
         spec = WS_CHANNELS[channel]
         assert (spec.venue, spec.live, spec.replay) == (venue, live, replay), channel
+    # A channel no row names must be one its datatype's row says neither
+    # streams nor replays (spot TWAP is served over REST only).
+    for channel, spec in WS_CHANNELS.items():
+        if channel not in served:
+            row = by_datatype[(spec.venue, spec.datatype)]
+            assert not (spec.live or spec.replay or row.live or row.replay), channel
 
 
 @pytest.mark.parametrize(
@@ -100,7 +107,6 @@ def test_trades_side_filters_on_hyperliquid_venues(
         assert {t.side for t in trades.recent(symbol, limit=20, side="sell")} <= {"A"}
 
 
-@pytest.mark.xfail(reason="the API answered side filters on Lighter with 500 on 2026-09-29", strict=False)
 @pytest.mark.parametrize("deployment", ["lighter", "rh_lighter"])
 def test_trades_side_filters_on_lighter(client: Client, deployment: str) -> None:
     trades = getattr(client, deployment).trades

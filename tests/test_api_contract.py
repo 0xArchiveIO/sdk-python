@@ -1080,7 +1080,7 @@ def test_l3_history_granularity_stays_refused() -> None:
 # ===========================================================================
 
 # ``ws_channels``, ``live`` and ``replay`` of every row of GET /v1/capabilities
-# that names a channel, as served on 2026-09-29.
+# that names a channel, as served on 2026-10-04.
 CAPABILITY_CHANNELS: dict[str, tuple[str, bool, bool]] = {
     "orderbook": ("hyperliquid", True, True),
     "orderbook_full": ("hyperliquid", True, True),
@@ -1102,16 +1102,15 @@ CAPABILITY_CHANNELS: dict[str, tuple[str, bool, bool]] = {
     "hip3_funding": ("hip3", True, True),
     "hip3_open_interest": ("hip3", True, True),
     "hip3_liquidations": ("hip3", True, True),
-    "hip4_orderbook": ("hip4", True, True),
+    "hip4_orderbook": ("hip4", False, True),
     "hip4_l4_diffs": ("hip4", True, True),
     "hip4_l4_orders": ("hip4", True, True),
     "hip4_trades": ("hip4", True, True),
-    "hip4_open_interest": ("hip4", True, True),
+    "hip4_open_interest": ("hip4", False, True),
     "spot_orderbook": ("spot", True, False),
     "spot_l4_diffs": ("spot", True, True),
     "spot_l4_orders": ("spot", True, True),
     "spot_trades": ("spot", True, False),
-    "spot_twap": ("spot", True, False),
     "lighter_orderbook": ("lighter", True, True),
     "lighter_l3_orderbook": ("lighter", False, True),
     "lighter_trades": ("lighter", True, True),
@@ -1126,9 +1125,17 @@ CAPABILITY_CHANNELS: dict[str, tuple[str, bool, bool]] = {
 }
 
 
+# Channels the SDK names that no capabilities row lists, with the ``live`` and
+# ``replay`` of their datatype's row: spot TWAP is served over REST only.
+REST_ONLY_CHANNELS: dict[str, tuple[str, bool, bool]] = {
+    "spot_twap": ("spot", False, False),
+}
+
+
 def test_channel_table_mirrors_capabilities() -> None:
-    assert set(WS_CHANNELS) == set(CAPABILITY_CHANNELS) == set(get_args(WsChannel))
-    for channel, (venue, live, replay) in CAPABILITY_CHANNELS.items():
+    assert set(WS_CHANNELS) == set(CAPABILITY_CHANNELS) | set(REST_ONLY_CHANNELS)
+    assert set(WS_CHANNELS) == set(get_args(WsChannel))
+    for channel, (venue, live, replay) in {**CAPABILITY_CHANNELS, **REST_ONLY_CHANNELS}.items():
         spec = WS_CHANNELS[channel]
         assert (spec.venue, spec.live, spec.replay) == (venue, live, replay), channel
 
@@ -1202,6 +1209,32 @@ def test_live_channels_subscribe_and_replayable_channels_multi_replay() -> None:
     for channel in sorted(LIVE_CHANNELS):
         ws.subscribe(cast(WsChannel, channel), None if channel == "all_tickers" else "BTC")
     assert len(ws._subscriptions) == len(LIVE_CHANNELS)
+
+
+@pytest.mark.parametrize("channel", ["hip4_orderbook", "hip4_open_interest"])
+def test_hip4_book_and_open_interest_replay_but_do_not_stream(channel: str) -> None:
+    ws, recorder = _offline()
+
+    with pytest.raises(ValueError, match="supports replay, not live subscriptions"):
+        ws.subscribe(cast(WsChannel, channel), "#82260")
+    asyncio.run(ws.replay(cast(WsChannel, channel), "#82260", start=T_START, end=T_END))
+
+    assert ws._subscriptions == set()
+    assert [m["channel"] for m in recorder.sent] == [channel]
+
+
+def test_spot_twap_neither_streams_nor_replays() -> None:
+    ws, recorder = _offline()
+
+    for call in (
+        lambda: ws.subscribe_spot_twap("HYPE-USDC"),
+        lambda: asyncio.run(ws.subscribe_async("spot_twap", "HYPE-USDC")),
+        lambda: asyncio.run(ws.replay("spot_twap", "HYPE-USDC", start=T_START)),
+    ):
+        with pytest.raises(ValueError, match="served over REST"):
+            call()
+
+    assert ws._subscriptions == set() and recorder.sent == []
 
 
 def test_a_channel_missing_from_the_table_is_left_to_the_server() -> None:

@@ -2335,22 +2335,31 @@ Bulk replays open with an `l4_snapshot` and continue with ordered `l4_batch` mes
 
 | Channel | Description | Requires Coin | Live Subscription | Historical Replay |
 |---------|-------------|---------------|-------------------|-------------------|
-| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | Yes | Yes |
+| `hip4_orderbook` | HIP-4 L2 order book snapshots | Yes | No | Yes |
 | `hip4_trades` | HIP-4 trade/fill updates | Yes | Yes | Yes |
-| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | Yes | Yes |
+| `hip4_open_interest` | HIP-4 per-side OI ticks | Yes | No | Yes |
 | `hip4_l4_diffs` | HIP-4 L4 orderbook diffs | Yes | Yes | Yes (bulk) |
 | `hip4_l4_orders` | HIP-4 order lifecycle events | Yes | Yes | Yes (bulk) |
 
-HIP-4 has no funding or liquidation channels, and no candle channel: HIP-4 candles are served over REST. Subscribe with the raw ``#N`` coin form (e.g. ``"#0"``); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single ``outcome_settled`` frame and proactively unsubscribes the client from every ``hip4_*`` channel for that coin. Use :py:meth:`OxArchiveWs.on_outcome_settled` to handle the event:
+`hip4_orderbook` and `hip4_open_interest` replay stored history but do not stream live, so `subscribe()` raises `ValueError` for them before sending. For the live book, subscribe to `hip4_l4_diffs`; for the current book and open interest, use `client.hyperliquid.hip4.orderbook` and `client.hyperliquid.hip4.open_interest` over REST.
+
+HIP-4 has no funding or liquidation channels, and no candle channel: HIP-4 candles are served over REST. Subscribe with the raw `#N` coin form (`N = 10 * outcome_id + side`, where side 0 is Yes and 1 is No); the SDK passes it through unmodified in the JSON body. When a market settles, the server pushes a single `outcome_settled` frame and proactively unsubscribes the client from every `hip4_*` channel for that coin. Use `OxArchiveWs.on_outcome_settled()` to handle the event:
 
 ```python
+# The Yes side of an open BTC price outcome
+coin = next(
+    s.symbol for s in client.symbols.list()
+    if s.exchange == "hip4" and not s.is_settled
+    and (s.slug or "").startswith("btc-above-") and "-yes-" in s.slug
+)
+
 def on_settled(msg):
     print(f"Outcome {msg.outcome_id} side {msg.side} settled at {msg.settlement_value}")
     # Server has already auto-unsubscribed; the SDK mirrors that locally.
 
 ws.on_outcome_settled(on_settled)
-ws.subscribe_hip4_orderbook("#0")
-ws.subscribe_hip4_trades("#0")
+ws.subscribe_hip4_trades(coin)
+ws.subscribe_hip4_l4_diffs(coin)
 ```
 
 #### Hyperliquid Spot Channels
@@ -2359,11 +2368,11 @@ ws.subscribe_hip4_trades("#0")
 |---------|-------------|---------------|-------------------|-------------------|
 | `spot_orderbook` | Spot L2 order book snapshots | Yes | Yes | No |
 | `spot_trades` | Spot trade/fill updates | Yes | Yes | No |
-| `spot_twap` | Spot TWAP status updates | Yes | Yes | No |
+| `spot_twap` | Spot TWAP status updates (served over REST only: `client.spot.twap`) | Yes | No | No |
 | `spot_l4_diffs` | Spot L4 orderbook diffs | Yes | Yes | Yes (bulk) |
 | `spot_l4_orders` | Spot L4 order lifecycle events | Yes | Yes | Yes (bulk) |
 
-> **Note:** Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format internally. The existing `on_orderbook` and `on_trades` typed callbacks fire for `spot_orderbook` and `spot_trades`.
+> **Note:** Spot symbols are dashed canonical (`HYPE-USDC`, `PURR-USDC`); the server resolves dashed to wire format internally. The existing `on_orderbook` and `on_trades` typed callbacks fire for `spot_orderbook` and `spot_trades`. Spot TWAP statuses do not stream: `subscribe_spot_twap()` raises `ValueError` before sending; read them with `client.spot.twap.history()` or `client.spot.twap.by_user()`.
 
 ```python
 ws = OxArchiveWs(WsOptions(api_key="ox_..."))

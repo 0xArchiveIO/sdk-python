@@ -91,10 +91,13 @@ full-depth channel.
   datatype, `live`, `replay`, `bulk_replay`), mirroring `/v1/capabilities`,
   with `LIVE_CHANNELS`, `REPLAY_CHANNELS`, `BULK_REPLAY_CHANNELS` and
   `L4_REPLAY_CHANNELS`. `subscribe()` refuses a channel without live data
-  (now also `candles` and `hip3_candles`), `replay()` a channel without
+  (now also `candles`, `hip3_candles`, `hip4_orderbook`,
+  `hip4_open_interest` and `spot_twap`), `replay()` a channel without
   replay (`ticker`, `all_tickers`, `spot_orderbook`, `spot_trades`,
   `spot_twap`), and `multi_replay()` also the bulk channels, each with
-  `ValueError` before anything is sent.
+  `ValueError` before anything is sent. `spot_twap` is listed with neither
+  live nor replay, since `/v1/capabilities` lists spot TWAP as REST only;
+  its error (`REST_ONLY_ERROR`) says so.
 - `OxArchiveWs.on_replay_data()`: every replayed record with its channel,
   `(channel, coin, timestamp, record)`. Lighter and Robinhood Chain records
   are decoded with the live parsers (`OrderBook`, `list[Trade]`,
@@ -276,9 +279,16 @@ full-depth channel.
   `L4_LIVE_ONLY_CHANNELS` is empty and `L4_LIVE_ONLY_ERROR` is no longer
   raised; both are deprecated and kept so imports keep working.
 - Docstrings and the README list live and replay per channel as
-  `/v1/capabilities` does: `hip3_open_interest`, `hip3_funding`,
-  `hip4_orderbook` and `hip4_open_interest` stream live as well as replay,
-  and `hip3_candles` is replay-only.
+  `/v1/capabilities` does: `hip3_open_interest` and `hip3_funding` stream
+  live as well as replay; `hip3_candles`, `hip4_orderbook` and
+  `hip4_open_interest` are replay-only; `spot_twap` neither streams nor
+  replays.
+- `subscribe_hip4_orderbook()`, `subscribe_hip4_open_interest()` and
+  `subscribe_spot_twap()` raise `ValueError` before anything is sent. The
+  server accepts these subscriptions but sends no data on them: HIP-4 order
+  book and open interest replay only (follow the live HIP-4 book on
+  `hip4_l4_diffs`), and spot TWAP statuses are served over REST only
+  (`client.spot.twap`).
 - `WsChannel` includes the five `rh_lighter_*` channels, `orderbook_full` and
   `hip3_orderbook_full`. Before, the acknowledgement, snapshot and batch
   messages of the two full-depth channels failed to parse.
