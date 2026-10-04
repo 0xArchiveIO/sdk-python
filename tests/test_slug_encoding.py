@@ -2,7 +2,7 @@
 
 import asyncio
 
-from tests._mock_api import envelope, mock_client
+from _mock_api import envelope, mock_client
 
 SLUG = "june-fed-rate-change-no change: #2/3"
 ENCODED = "/v1/hyperliquid/hip4/outcomes/by-slug/june-fed-rate-change-no%20change%3A%20%232%2F3"

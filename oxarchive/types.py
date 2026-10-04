@@ -2987,13 +2987,13 @@ class SymbolDataTypeCoverage(BaseModel):
     completeness: float
     """24-hour completeness percentage (0-100)."""
 
-    historical_coverage: float | None = None
+    historical_coverage: Optional[float] = None
     """Historical coverage percentage (0-100) based on hours with data / total hours."""
 
     gaps: list[CoverageGap]
     """Detected data gaps within the requested time window."""
 
-    cadence: DataCadence | None = None
+    cadence: Optional[DataCadence] = None
     """Empirical data cadence (present when sufficient data exists)."""
 
 

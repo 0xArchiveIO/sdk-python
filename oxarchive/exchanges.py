@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import quote
 
 from ._time import to_unix_ms
@@ -527,7 +527,7 @@ class Hip3Client:
         )
 
 
-def _hip4_encode(symbol: str | int) -> str:
+def _hip4_encode(symbol: Union[str, int]) -> str:
     """Normalize a HIP-4 coin symbol for REST paths.
 
     The backend now accepts the bare numeric form (``/hip4/orderbook/0``) and

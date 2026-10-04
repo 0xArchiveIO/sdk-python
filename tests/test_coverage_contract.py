@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 import pytest
 
@@ -22,8 +22,8 @@ from oxarchive.types import (
 
 
 class FakeHttp:
-    def __init__(self, response: dict[str, Any] | None = None) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+    def __init__(self, response: Optional[dict[str, Any]] = None) -> None:
+        self.calls: list[tuple[str, Optional[dict[str, Any]]]] = []
         self.response = response or {
             "data": [
                 {
@@ -38,11 +38,11 @@ class FakeHttp:
             "meta": {"next_cursor": "1777708800000"},
         }
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self.calls.append((path, params))
         return self.response
 
-    async def aget(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def aget(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         return self.get(path, params)
 
 
@@ -52,13 +52,13 @@ class PathReached(RuntimeError):
 
 class PathOnlyHttp:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+        self.calls: list[tuple[str, Optional[dict[str, Any]]]] = []
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self.calls.append((path, params))
         raise PathReached(path)
 
-    async def aget(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def aget(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self.calls.append((path, params))
         raise PathReached(path)
 
@@ -518,7 +518,7 @@ def test_g1_to_g4_public_copy_has_current_contracts() -> None:
     assert "l4_snapshot" in types and "replay is bulk" in types
 
 
-def _breadth_snapshot(*, value_pct: float | None = 20.93) -> dict[str, Any]:
+def _breadth_snapshot(*, value_pct: Optional[float] = 20.93) -> dict[str, Any]:
     return {
         "session_date": "2026-08-28",
         "calculated_at": "2026-08-28T20:54:00Z",
@@ -650,7 +650,7 @@ def test_hip3_breadth_supports_async_methods_and_null_is_not_zero() -> None:
     assert http.calls[-1][1]["cursor"] == "1788036840000"
 
 
-def _flow_page(next_cursor: str | None) -> dict[str, Any]:
+def _flow_page(next_cursor: Optional[str]) -> dict[str, Any]:
     return {
         "data": [{"timestamp": "2026-07-13T16:39:00Z", "limit_orders_placed": 3}],
         "meta": {"count": 1, "request_id": "flow", "next_cursor": next_cursor},

@@ -262,6 +262,8 @@ full-depth channel.
   `on_l4_batch()`. Stored full-depth history is also on REST
   `l2_orderbook.history()` and `diffs()`.
 - `client.lighter.l3_orderbook.get()` and `history()` take `account`.
+- The package ships a `py.typed` marker (PEP 561), so type checkers read its
+  annotations. The `Typing :: Typed` classifier was already declared.
 
 ### Changed
 - The venue is named "Lighter" throughout docstrings, messages and the
@@ -322,6 +324,11 @@ full-depth channel.
   `OrdersResource`, and Hyperliquid core keeps `LiquidationsResource`.
 
 ### Fixed
+- `import oxarchive` raised `TypeError` on Python 3.9, which the package
+  declares as supported. Two fields of `SymbolDataTypeCoverage`
+  (`historical_coverage` and `cadence`) used the `X | None` annotation
+  syntax, which Python 3.9 cannot evaluate. They use `Optional` now, and the
+  test suite passes on Python 3.9.
 - `hip4.outcomes.get_by_slug()` URL-encodes the slug. Slugs with spaces,
   colons, `#` or `/` reached the wrong route before.
 - `trades.list()` and `alist()` send `cursor` back exactly as the API
