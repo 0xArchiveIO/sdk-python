@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from ..http import HttpClient
-from ..types import Hip3OracleDiscoveryBounds, Hip3OracleExternalPrice
+from ..types import Hip3OracleDiscoveryBounds, Hip3OracleExternalPrice, _record
 
 
 class Hip3OracleResource:
     """
     HIP-3 oracle reads: the deployer-pushed external price and the discovery bounds.
 
-    Symbols keep their builder prefix and case (for example ``km:US500``).
+    Symbols keep their builder prefix and case (for example ``xyz:TSLA``).
 
     Example:
-        >>> price = client.hyperliquid.hip3.oracle.external_price("km:US500")
+        >>> price = client.hyperliquid.hip3.oracle.external_price("xyz:TSLA")
         >>> print(price.external_price, price.mark_price)
-        >>> bounds = client.hyperliquid.hip3.oracle.discovery_bounds("km:US500")
+        >>> bounds = client.hyperliquid.hip3.oracle.discovery_bounds("xyz:TSLA")
         >>> print(bounds.lower_bound, bounds.upper_bound)
     """
 
@@ -37,12 +37,12 @@ class Hip3OracleResource:
             symbol: HIP-3 symbol with its builder prefix (case-sensitive).
         """
         data = self._http.get(f"{self._base_path}/oracle/discovery-bounds/{symbol}")
-        return Hip3OracleDiscoveryBounds.model_validate(data["data"])
+        return _record(Hip3OracleDiscoveryBounds, data)
 
     async def adiscovery_bounds(self, symbol: str) -> Hip3OracleDiscoveryBounds:
         """Async version of :meth:`discovery_bounds`."""
         data = await self._http.aget(f"{self._base_path}/oracle/discovery-bounds/{symbol}")
-        return Hip3OracleDiscoveryBounds.model_validate(data["data"])
+        return _record(Hip3OracleDiscoveryBounds, data)
 
     def external_price(self, symbol: str) -> Hip3OracleExternalPrice:
         """
@@ -52,9 +52,9 @@ class Hip3OracleResource:
             symbol: HIP-3 symbol with its builder prefix (case-sensitive).
         """
         data = self._http.get(f"{self._base_path}/oracle/external-price/{symbol}")
-        return Hip3OracleExternalPrice.model_validate(data["data"])
+        return _record(Hip3OracleExternalPrice, data)
 
     async def aexternal_price(self, symbol: str) -> Hip3OracleExternalPrice:
         """Async version of :meth:`external_price`."""
         data = await self._http.aget(f"{self._base_path}/oracle/external-price/{symbol}")
-        return Hip3OracleExternalPrice.model_validate(data["data"])
+        return _record(Hip3OracleExternalPrice, data)

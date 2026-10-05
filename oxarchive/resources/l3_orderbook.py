@@ -7,19 +7,23 @@ from typing import Optional
 from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, Timestamp
+from ..types import CursorResponse, ResponseMeta, Timestamp
 
 _UNSUPPORTED_HISTORY = {
     "depth": (
         "history returns every resting order of each snapshot, up to 250 per side. "
         "depth applies to get() only."
     ),
+    "granularity": (
+        "the L3 history route takes no granularity. granularity applies to "
+        "orderbook.history() on Lighter."
+    ),
 }
 
 
 class L3OrderBookResource:
     """
-    L3 order book resource (Lighter.xyz only).
+    L3 order book resource (Lighter only).
 
     Provides individual order-level orderbook data.
 
@@ -141,6 +145,7 @@ class L3OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -170,6 +175,7 @@ class L3OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod

@@ -3,11 +3,11 @@ oxarchive - Official Python SDK for 0xarchive
 
 Historical Market Data API for two venues, Hyperliquid and Lighter. Lighter has
 two deployments: mainnet and Robinhood Chain.
-- Hyperliquid (perpetuals data from April 2023)
+- Hyperliquid core perpetuals (order book from 2023-04-15)
 - Hyperliquid HIP-3 builder perps under the Hyperliquid namespace at /v1/hyperliquid/hip3 and client.hyperliquid.hip3
 - Hyperliquid HIP-4 outcome markets under the Hyperliquid namespace at /v1/hyperliquid/hip4 and client.hyperliquid.hip4
 - Hyperliquid spot pairs under /v1/hyperliquid/spot and client.spot (trades and candles
-  from 2025-03-22, candle floor 2025-03-22T10:50:22Z, rest live from 2026-05-05)
+  from 2025-03-22; order book and L4 from 2026-05-05)
 - Lighter mainnet at /v1/lighter and client.lighter
 - Lighter on Robinhood Chain at /v1/rh-lighter and client.rh_lighter (USDG-quoted;
   trades and liquidations from 2026-06-26; order book, open interest and
@@ -15,6 +15,11 @@ two deployments: mainnet and Robinhood Chain.
 - Account positions on client.hyperliquid.positions, client.hyperliquid.hip3.positions,
   client.lighter.positions and client.rh_lighter.positions
 - Webhooks on client.webhooks, with WebhookVerifier to verify deliveries
+- What each venue serves, per datatype, and from when, on client.capabilities()
+
+Every request selects API version 2026-10-01 (the ``0xArchive-Version``
+header, and ``version`` on WebSocket connections). Errors raise
+OxArchiveError, whose ``error_code`` is one of ERROR_CODES.
 
 Example:
     >>> from oxarchive import Client
@@ -25,23 +30,28 @@ Example:
     >>> hl_orderbook = client.hyperliquid.orderbook.get("BTC")
     >>> print(f"BTC mid price: {hl_orderbook.mid_price}")
     >>>
-    >>> # Lighter.xyz data
+    >>> # Lighter data
     >>> lighter_orderbook = client.lighter.orderbook.get("BTC")
     >>>
     >>> # Lighter on Robinhood Chain
     >>> rh_orderbook = client.rh_lighter.orderbook.get("AAPL-USDG")
     >>>
     >>> # Hyperliquid HIP-3 data
-    >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("km:US500")
+    >>> hip3_orderbook = client.hyperliquid.hip3.orderbook.get("xyz:TSLA")
     >>>
     >>> # Hyperliquid spot data (dashed canonical symbols)
     >>> spot_orderbook = client.spot.orderbook.get("HYPE-USDC")
     >>>
-    >>> # Get historical snapshots
-    >>> history = client.hyperliquid.orderbook.history("ETH", start="2024-01-01", end="2024-01-02")
+    >>> # Order book history for the last hour
+    >>> from datetime import datetime, timedelta, timezone
+    >>> now = datetime.now(timezone.utc)
+    >>> history = client.hyperliquid.orderbook.history(
+    ...     "ETH", start=now - timedelta(hours=1), end=now
+    ... )
 """
 
 from .client import Client
+from .http import API_VERSION, API_VERSION_HEADER
 from .exchanges import (
     HyperliquidClient,
     Hip3Client,
@@ -51,6 +61,7 @@ from .exchanges import (
     SpotClient,
 )
 from .resources.orderbook import LighterGranularity
+from .resources.trades import TradeSide
 from .orderbook_reconstructor import (
     OrderBookReconstructor,
     OrderbookDelta,
@@ -112,6 +123,13 @@ from .types import (
     OxArchiveError,
     CursorResponse,
     ResponseMeta,
+    # API contract: error codes, venues and capabilities
+    ErrorCode,
+    ERROR_CODES,
+    WEBSOCKET_ERROR_CODES,
+    Venue,
+    VENUES,
+    Capability,
     # Cumulative volume delta, HIP-3 oracle, HIP-4 questions
     CvdBucket,
     CvdInterval,
@@ -210,18 +228,29 @@ from .types import (
 
 # WebSocket client (optional import - requires websockets package)
 try:
-    from .websocket import OxArchiveWs, WsOptions
+    from .websocket import (
+        WS_CHANNELS,
+        OxArchiveWs,
+        WsChannelSpec,
+        WsOptions,
+        decode_lighter_payload,
+    )
     _HAS_WEBSOCKET = True
 except ImportError:
     _HAS_WEBSOCKET = False
     OxArchiveWs = None  # type: ignore
     WsOptions = None  # type: ignore
+    WsChannelSpec = None  # type: ignore
+    WS_CHANNELS = None  # type: ignore
+    decode_lighter_payload = None  # type: ignore
 
 __version__ = "1.12.0"
 
 __all__ = [
     # Client
     "Client",
+    "API_VERSION",
+    "API_VERSION_HEADER",
     # Exchange Clients
     "HyperliquidClient",
     "Hip3Client",
@@ -232,6 +261,9 @@ __all__ = [
     # WebSocket Client
     "OxArchiveWs",
     "WsOptions",
+    "WsChannelSpec",
+    "WS_CHANNELS",
+    "decode_lighter_payload",
     # Orderbook Reconstructor (Lighter)
     "OrderBookReconstructor",
     "OrderbookDelta",
@@ -283,6 +315,14 @@ __all__ = [
     "OxArchiveError",
     "CursorResponse",
     "ResponseMeta",
+    # API Contract
+    "ErrorCode",
+    "ERROR_CODES",
+    "WEBSOCKET_ERROR_CODES",
+    "Venue",
+    "VENUES",
+    "Capability",
+    "TradeSide",
     # Cumulative Volume Delta, HIP-3 Oracle, HIP-4 Questions
     "CvdBucket",
     "CvdInterval",

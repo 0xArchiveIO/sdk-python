@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 import pytest
 
@@ -22,8 +22,8 @@ from oxarchive.types import (
 
 
 class FakeHttp:
-    def __init__(self, response: dict[str, Any] | None = None) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+    def __init__(self, response: Optional[dict[str, Any]] = None) -> None:
+        self.calls: list[tuple[str, Optional[dict[str, Any]]]] = []
         self.response = response or {
             "data": [
                 {
@@ -38,11 +38,11 @@ class FakeHttp:
             "meta": {"next_cursor": "1777708800000"},
         }
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self.calls.append((path, params))
         return self.response
 
-    async def aget(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def aget(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         return self.get(path, params)
 
 
@@ -52,13 +52,13 @@ class PathReached(RuntimeError):
 
 class PathOnlyHttp:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, Any] | None]] = []
+        self.calls: list[tuple[str, Optional[dict[str, Any]]]] = []
 
-    def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self.calls.append((path, params))
         raise PathReached(path)
 
-    async def aget(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def aget(self, path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         self.calls.append((path, params))
         raise PathReached(path)
 
@@ -379,11 +379,16 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "2026-05-02" in readme
     assert "~10s" in readme
     assert "250 orders per side" in readme
-    assert "March 5, 2026" in readme
+    assert "2026-03-05 03:33 UTC" in readme
     assert "raw ~1 min" not in readme
     assert "no funding, no liquidations, and no candles" not in readme
     assert "no funding / liquidations / candles" not in types
-    assert "stored replay only; live bridges paused" in types
+    # HIP-4 order book and open interest replay but do not stream live (capabilities).
+    assert "live bridges paused" not in types
+    replay_only = (
+        "Replay only: ``candles``, ``hip3_candles``, ``hip4_orderbook``, ``hip4_open_interest``"
+    )
+    assert replay_only in " ".join(types.split())
     assert "250 orders per side" in l3_resource
     assert "price levels per side" not in l3_resource
     assert "self.candles = CandlesResource" in exchanges
@@ -391,7 +396,7 @@ def test_public_copy_keeps_family_specific_coverage() -> None:
     assert "HIP-3 and Lighter candle pages accept up to 10,000 rows" in readme
     assert "Candle pagination cursors are numeric timestamp strings" in readme
     assert "client.spot.candles.history" in readme
-    assert "2025-03-22T10:50:22Z" in readme
+    assert "2025-03-22 10:50 UTC" in readme
     assert "1m/5m/15m/30m/1h/4h/1d/1w" in readme
     assert "returns 501" not in readme
     assert "SpotCandlesResource" in exchanges
@@ -513,10 +518,10 @@ def test_g1_to_g4_public_copy_has_current_contracts() -> None:
     assert "fractional" in changelog and "non-annualized" in changelog
     assert "45-minute" not in changelog
     assert "l4_snapshot" in websocket and "ordered" in websocket
-    assert "l4_snapshot" in types and "live-only" in types
+    assert "l4_snapshot" in types and "replay is bulk" in types
 
 
-def _breadth_snapshot(*, value_pct: float | None = 20.93) -> dict[str, Any]:
+def _breadth_snapshot(*, value_pct: Optional[float] = 20.93) -> dict[str, Any]:
     return {
         "session_date": "2026-08-28",
         "calculated_at": "2026-08-28T20:54:00Z",
@@ -648,7 +653,7 @@ def test_hip3_breadth_supports_async_methods_and_null_is_not_zero() -> None:
     assert http.calls[-1][1]["cursor"] == "1788036840000"
 
 
-def _flow_page(next_cursor: str | None) -> dict[str, Any]:
+def _flow_page(next_cursor: Optional[str]) -> dict[str, Any]:
     return {
         "data": [{"timestamp": "2026-07-13T16:39:00Z", "limit_orders_placed": 3}],
         "meta": {"count": 1, "request_id": "flow", "next_cursor": next_cursor},

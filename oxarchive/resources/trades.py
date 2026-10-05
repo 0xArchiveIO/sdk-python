@@ -2,34 +2,44 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
-from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, OxArchiveError, ResponseMeta, Trade, Timestamp
+from ..types import CursorResponse, OxArchiveError, ResponseMeta, Timestamp, Trade
 
-
-_UNSUPPORTED_LIST = {
-    "side": "the API does not filter trades by side. Filter the returned trades on Trade.side.",
-}
+TradeSide = Literal["buy", "sell"]
+"""Trade side filter: ``"buy"`` keeps rows with ``side == "B"``, ``"sell"`` keeps
+rows with ``side == "A"``."""
 
 
 class TradesResource:
     """
     Trades API resource.
 
+    ``history()`` pages the trade tape of a window (``list()`` is the same
+    method under its earlier name); ``recent()`` returns the latest trades.
+    Both take ``side="buy"`` or ``side="sell"``, which the API applies before
+    paging, so a full page holds ``limit`` matching trades.
+
     Example:
-        >>> # Get trade history with cursor-based pagination (recommended)
-        >>> result = client.hyperliquid.trades.list("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get the last hour of trades with cursor-based pagination (recommended)
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(hours=1)
+        >>> result = client.hyperliquid.trades.history("BTC", start=start, end=end)
         >>> trades = result.data
         >>>
         >>> # Get all pages
-        >>> while result.next_cursor:
-        ...     result = client.hyperliquid.trades.list("BTC", start="2024-01-01", end="2024-01-02", cursor=result.next_cursor)
+        >>> while result.has_more:
+        ...     result = client.hyperliquid.trades.history(
+        ...         "BTC", start=start, end=end, cursor=result.next_cursor
+        ...     )
         ...     trades.extend(result.data)
         >>>
-        >>> # Get recent trades (Lighter only - has real-time data)
+        >>> # Only buys
+        >>> buys = client.hyperliquid.trades.history("BTC", start=..., end=..., side="buy")
+        >>>
+        >>> # Get recent trades (HIP-3, HIP-4, spot and Lighter)
         >>> recent = client.lighter.trades.recent("BTC")
     """
 
@@ -73,13 +83,14 @@ class TradesResource:
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
+        side: Optional[TradeSide] = None,
         **kwargs,
     ) -> CursorResponse[list[Trade]]:
         """
         Get trade history for a symbol using cursor-based pagination.
 
-        Uses cursor-based pagination by default, which is more efficient for large datasets.
-        Use the next_cursor from the response as the cursor parameter to get the next page.
+        Also available as :meth:`history`. While ``has_more`` is true, pass
+        ``next_cursor`` back as ``cursor`` with the other arguments unchanged.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
@@ -87,6 +98,9 @@ class TradesResource:
             end: End timestamp (required)
             cursor: The previous response's next_cursor, passed back unchanged
             limit: Maximum number of results (default: 100, max: 1000)
+            side: ``"buy"`` or ``"sell"`` to keep only that side (``side ==
+                "B"`` or ``"A"``). The API filters before paging, and the
+                cursor pages the filtered tape.
 
         Returns:
             CursorResponse with trades and next_cursor for pagination. On
@@ -100,14 +114,13 @@ class TradesResource:
             >>> trades = result.data
             >>>
             >>> # Subsequent pages
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.trades.list(
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
             ...     trades.extend(result.data)
         """
         symbol = self._resolve_symbol(symbol, kwargs)
-        reject_unsupported("list", kwargs, _UNSUPPORTED_LIST)
         data = self._http.get(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}",
             params={
@@ -115,6 +128,7 @@ class TradesResource:
                 "end": self._convert_timestamp(end),
                 "cursor": self._cursor(cursor),
                 "limit": limit,
+                "side": side,
             },
         )
         return CursorResponse(
@@ -131,15 +145,13 @@ class TradesResource:
         end: Timestamp,
         cursor: Optional[Timestamp] = None,
         limit: Optional[int] = None,
+        side: Optional[TradeSide] = None,
         **kwargs,
     ) -> CursorResponse[list[Trade]]:
         """
-        Async version of list().
-
-        Uses cursor-based pagination by default.
+        Async version of list() (also available as :meth:`ahistory`).
         """
         symbol = self._resolve_symbol(symbol, kwargs)
-        reject_unsupported("alist", kwargs, _UNSUPPORTED_LIST)
         data = await self._http.aget(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}",
             params={
@@ -147,6 +159,7 @@ class TradesResource:
                 "end": self._convert_timestamp(end),
                 "cursor": self._cursor(cursor),
                 "limit": limit,
+                "side": side,
             },
         )
         return CursorResponse(
@@ -155,21 +168,39 @@ class TradesResource:
             meta=ResponseMeta.model_validate(data.get("meta") or {}),
         )
 
-    def recent(self, symbol: str, limit: Optional[int] = None, **kwargs) -> list[Trade]:
+    history = list
+    """Trade history for a window, one page at a time: the same method as
+    :meth:`list`, under the name every paged series uses."""
+
+    ahistory = alist
+    """Async version of :meth:`history` (the same method as :meth:`alist`)."""
+
+    def recent(
+        self,
+        symbol: str,
+        limit: Optional[int] = None,
+        *,
+        side: Optional[TradeSide] = None,
+        **kwargs,
+    ) -> list[Trade]:
         """
         Get most recent trades for a symbol.
 
-        Note: This method is available for Lighter (``client.lighter.trades.recent()``
-        and ``client.rh_lighter.trades.recent()``, the preliminary tier),
-        HIP-3 (``client.hyperliquid.hip3.trades.recent()``), and HIP-4
-        (``client.hyperliquid.hip4.trades.recent()``), all of which have
-        real-time data ingestion. Hyperliquid uses hourly S3 backfill so this
-        endpoint is not exposed for the bare Hyperliquid namespace; calling
-        ``client.hyperliquid.trades.recent()`` raises :class:`OxArchiveError`.
+        Note: This method is available for HIP-3
+        (``client.hyperliquid.hip3.trades.recent()``), HIP-4
+        (``client.hyperliquid.hip4.trades.recent()``), Hyperliquid spot
+        (``client.spot.trades.recent()``) and Lighter
+        (``client.lighter.trades.recent()`` and
+        ``client.rh_lighter.trades.recent()``, the preliminary tier). The API
+        does not serve it for Hyperliquid core, so
+        ``client.hyperliquid.trades.recent()`` raises :class:`OxArchiveError`
+        with ``error_code == "unsupported_for_venue"`` before sending; use
+        ``client.hyperliquid.trades.history()`` there.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
             limit: Number of trades to return (default: 100)
+            side: ``"buy"`` or ``"sell"`` to keep only that side.
 
         Returns:
             List of recent trades. The response meta is not returned: on
@@ -177,39 +208,46 @@ class TradesResource:
         """
         if not self._allow_recent:
             raise OxArchiveError(
-                "trades.recent() is not available for Hyperliquid (hourly S3 "
-                "backfill). Use client.hyperliquid.trades.list(symbol, "
-                "start=..., end=...) for trade history, or "
-                "client.lighter.trades.recent() / "
-                "client.hyperliquid.hip3.trades.recent() / "
-                "client.hyperliquid.hip4.trades.recent() for venues with "
-                "real-time data.",
+                "trades.recent() is not offered for Hyperliquid core. Use "
+                "client.hyperliquid.trades.history(symbol, start=..., end=...) "
+                "for trade history, or recent() on "
+                "client.hyperliquid.hip3.trades, client.hyperliquid.hip4.trades, "
+                "client.spot.trades, client.lighter.trades or "
+                "client.rh_lighter.trades.",
                 404,
+                error_code="unsupported_for_venue",
             )
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}/recent",
-            params={"limit": limit},
+            params={"limit": limit, "side": side},
         )
         return [Trade.model_validate(item) for item in data["data"]]
 
-    async def arecent(self, symbol: str, limit: Optional[int] = None, **kwargs) -> list[Trade]:
+    async def arecent(
+        self,
+        symbol: str,
+        limit: Optional[int] = None,
+        *,
+        side: Optional[TradeSide] = None,
+        **kwargs,
+    ) -> list[Trade]:
         """Async version of recent()."""
         if not self._allow_recent:
             raise OxArchiveError(
-                "trades.recent() is not available for Hyperliquid (hourly S3 "
-                "backfill). Use client.hyperliquid.trades.alist(symbol, "
-                "start=..., end=...) for trade history, or "
-                "client.lighter.trades.arecent() / "
-                "client.hyperliquid.hip3.trades.arecent() / "
-                "client.hyperliquid.hip4.trades.arecent() for venues with "
-                "real-time data.",
+                "trades.arecent() is not offered for Hyperliquid core. Use "
+                "client.hyperliquid.trades.ahistory(symbol, start=..., end=...) "
+                "for trade history, or arecent() on "
+                "client.hyperliquid.hip3.trades, client.hyperliquid.hip4.trades, "
+                "client.spot.trades, client.lighter.trades or "
+                "client.rh_lighter.trades.",
                 404,
+                error_code="unsupported_for_venue",
             )
         symbol = self._resolve_symbol(symbol, kwargs)
         data = await self._http.aget(
             f"{self._base_path}/trades/{self._coin_transform(symbol)}/recent",
-            params={"limit": limit},
+            params={"limit": limit, "side": side},
         )
         return [Trade.model_validate(item) for item in data["data"]]
 

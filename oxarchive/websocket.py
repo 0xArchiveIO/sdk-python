@@ -13,6 +13,10 @@ Examples:
         >>> ws.on_orderbook(lambda coin, ob: print(f"{coin}: {ob.mid_price}"))
         >>> ws.subscribe_orderbook("BTC")
 
+    Every connection selects API version ``2026-10-01`` (the ``version``
+    connection parameter): error messages carry ``error_code``, and Lighter
+    replay rows have the same shapes as the live messages.
+
     Live Lighter data (books default to one per second):
         >>> ws.on_lighter_orderbook(lambda coin, ob: print(f"Lighter {coin}: {ob.mid_price}"))
         >>> ws.subscribe_lighter_orderbook("BTC", interval_ms=250)
@@ -23,7 +27,7 @@ Examples:
         >>> ws.subscribe_rh_lighter_orderbook("AAPL-USDG")
         >>> ws.subscribe_rh_lighter_trades("BTC")
 
-    Historical replay (like Tardis.dev):
+    Historical replay:
         >>> ws = OxArchiveWs(WsOptions(api_key="ox_..."))
         >>> await ws.connect()
         >>> ws.on_historical_data(lambda coin, ts, data: print(f"{ts}: {data}"))
@@ -47,7 +51,9 @@ import json
 import logging
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional, Set, Union
+from types import MappingProxyType
+from typing import Any, Callable, Literal, Mapping, Optional, Set, Union
+from urllib.parse import urlencode
 
 try:
     from websockets.asyncio.client import connect as ws_connect, ClientConnection
@@ -59,6 +65,7 @@ except ImportError:
         "Install with: pip install oxarchive[websocket]"
     )
 
+from .http import API_VERSION
 from .types import (
     LighterLiveTrade,
     LighterMarketContext,
@@ -101,6 +108,122 @@ DEFAULT_WS_URL = "wss://api.0xarchive.io/ws"
 DEFAULT_PING_INTERVAL = 30
 DEFAULT_RECONNECT_DELAY = 1.0
 DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
+
+
+@dataclass(frozen=True)
+class WsChannelSpec:
+    """What one WebSocket channel offers, as ``GET /v1/capabilities`` lists it.
+
+    Attributes:
+        venue: The venue (``"hyperliquid"``, ``"hip3"``, ``"hip4"``,
+            ``"spot"``, ``"lighter"`` or ``"rh-lighter"``).
+        datatype: The capabilities datatype the channel carries.
+        live: A subscription streams it live.
+        replay: A replay serves its history.
+        bulk_replay: The replay is bulk: single-channel only (not part of a
+            multi-channel replay), ``speed`` is ignored and ``replay.seek`` is
+            refused. It opens with an ``l4_snapshot`` from the nearest
+            checkpoint at or before ``start`` and continues with ordered
+            ``l4_batch`` messages.
+    """
+
+    venue: str
+    datatype: str
+    live: bool
+    replay: bool
+    bulk_replay: bool = False
+
+
+def _both(venue: str, datatype: str, *, bulk: bool = False) -> WsChannelSpec:
+    return WsChannelSpec(venue, datatype, live=True, replay=True, bulk_replay=bulk)
+
+
+def _live_only(venue: str, datatype: str) -> WsChannelSpec:
+    return WsChannelSpec(venue, datatype, live=True, replay=False)
+
+
+def _replay_only(venue: str, datatype: str) -> WsChannelSpec:
+    return WsChannelSpec(venue, datatype, live=False, replay=True)
+
+
+def _rest_only(venue: str, datatype: str) -> WsChannelSpec:
+    return WsChannelSpec(venue, datatype, live=False, replay=False)
+
+
+WS_CHANNELS: Mapping[str, WsChannelSpec] = MappingProxyType(
+    {
+        # Hyperliquid core
+        "orderbook": _both("hyperliquid", "l2_orderbook"),
+        "orderbook_full": _both("hyperliquid", "l2_full_depth", bulk=True),
+        "l4_diffs": _both("hyperliquid", "l4_diffs", bulk=True),
+        "l4_orders": _both("hyperliquid", "l4_orders", bulk=True),
+        "trades": _both("hyperliquid", "trades"),
+        "candles": _replay_only("hyperliquid", "candles"),
+        "funding": _both("hyperliquid", "funding"),
+        "open_interest": _both("hyperliquid", "oi"),
+        "liquidations": _both("hyperliquid", "liquidations"),
+        "ticker": _live_only("hyperliquid", "ticker"),
+        "all_tickers": _live_only("hyperliquid", "ticker"),
+        # HIP-3
+        "hip3_orderbook": _both("hip3", "l2_orderbook"),
+        "hip3_orderbook_full": _both("hip3", "l2_full_depth", bulk=True),
+        "hip3_l4_diffs": _both("hip3", "l4_diffs", bulk=True),
+        "hip3_l4_orders": _both("hip3", "l4_orders", bulk=True),
+        "hip3_trades": _both("hip3", "trades"),
+        "hip3_candles": _replay_only("hip3", "candles"),
+        "hip3_funding": _both("hip3", "funding"),
+        "hip3_open_interest": _both("hip3", "oi"),
+        "hip3_liquidations": _both("hip3", "liquidations"),
+        # HIP-4
+        "hip4_orderbook": _replay_only("hip4", "l2_orderbook"),
+        "hip4_l4_diffs": _both("hip4", "l4_diffs", bulk=True),
+        "hip4_l4_orders": _both("hip4", "l4_orders", bulk=True),
+        "hip4_trades": _both("hip4", "trades"),
+        "hip4_open_interest": _replay_only("hip4", "oi"),
+        # Hyperliquid spot
+        "spot_orderbook": _live_only("spot", "l2_orderbook"),
+        "spot_l4_diffs": _both("spot", "l4_diffs", bulk=True),
+        "spot_l4_orders": _both("spot", "l4_orders", bulk=True),
+        "spot_trades": _live_only("spot", "trades"),
+        "spot_twap": _rest_only("spot", "twap"),
+        # Lighter
+        "lighter_orderbook": _both("lighter", "l2_orderbook"),
+        "lighter_l3_orderbook": _replay_only("lighter", "l3_orderbook"),
+        "lighter_trades": _both("lighter", "trades"),
+        "lighter_candles": _replay_only("lighter", "candles"),
+        "lighter_funding": _both("lighter", "funding"),
+        "lighter_open_interest": _both("lighter", "oi"),
+        # Lighter on Robinhood Chain
+        "rh_lighter_orderbook": _both("rh-lighter", "l2_orderbook"),
+        "rh_lighter_trades": _both("rh-lighter", "trades"),
+        "rh_lighter_candles": _replay_only("rh-lighter", "candles"),
+        "rh_lighter_funding": _both("rh-lighter", "funding"),
+        "rh_lighter_open_interest": _both("rh-lighter", "oi"),
+    }
+)
+"""Every WebSocket channel and what it offers, mirroring ``GET /v1/capabilities``
+(``client.capabilities()``, the ``ws_channels``, ``live`` and ``replay`` of
+each row). The SDK refuses, before sending, a live subscription to a channel
+whose ``live`` is false, a replay of a channel whose ``replay`` is false, and a
+bulk-replay channel inside :meth:`OxArchiveWs.multi_replay`. A channel missing
+from this table is sent as given and the server decides.
+
+``hip4_orderbook`` and ``hip4_open_interest`` replay but do not stream live.
+``spot_twap`` neither streams nor replays: capabilities lists spot TWAP as REST
+only (``client.spot.twap``), and it is kept here so that subscribing to it
+fails with that explanation instead of waiting for messages that never come."""
+
+LIVE_CHANNELS: frozenset[str] = frozenset(c for c, spec in WS_CHANNELS.items() if spec.live)
+"""Channels a subscription streams live."""
+
+REPLAY_CHANNELS: frozenset[str] = frozenset(c for c, spec in WS_CHANNELS.items() if spec.replay)
+"""Channels a replay serves."""
+
+BULK_REPLAY_CHANNELS: frozenset[str] = frozenset(
+    c for c, spec in WS_CHANNELS.items() if spec.bulk_replay
+)
+"""Channels whose replay is bulk: single-channel only, ``speed`` ignored,
+``replay.seek`` refused (every L4 channel and both full-depth L2 channels)."""
 
 LIGHTER_LIVE_CHANNELS: frozenset[str] = frozenset(
     {
@@ -168,10 +291,13 @@ LIGHTER_BOOK_INTERVAL_DEFAULT_MS = 1000
 """Book interval the server uses when ``interval_ms`` is left out."""
 
 CORE_L4_REPLAY_CHANNELS: frozenset[str] = frozenset({"l4_diffs", "l4_orders"})
-"""Hyperliquid core L4 channels whose replay starts with a snapshot."""
+"""Hyperliquid core L4 channels. Every L4 channel now replays; see
+:data:`L4_REPLAY_CHANNELS`."""
 
-L4_LIVE_ONLY_CHANNELS: frozenset[str] = frozenset(
+L4_REPLAY_CHANNELS: frozenset[str] = frozenset(
     {
+        "l4_diffs",
+        "l4_orders",
         "hip3_l4_diffs",
         "hip3_l4_orders",
         "hip4_l4_diffs",
@@ -180,24 +306,49 @@ L4_LIVE_ONLY_CHANNELS: frozenset[str] = frozenset(
         "spot_l4_orders",
     }
 )
-"""HIP-3, HIP-4, and Hyperliquid Spot L4 channels without replay support."""
+"""L4 channels (Hyperliquid core, HIP-3, HIP-4 and spot). Each streams live
+and replays: a replay opens with one ``l4_snapshot`` and continues with ordered
+``l4_batch`` messages."""
+
+L4_LIVE_ONLY_CHANNELS: frozenset[str] = frozenset()
+"""Deprecated and empty: every L4 channel now replays (:data:`L4_REPLAY_CHANNELS`)."""
+
+L4_LIVE_ONLY_ERROR = (
+    "Deprecated: every L4 channel now supports historical replay. "
+    "This message is no longer raised."
+)
+"""Deprecated: no longer raised."""
 
 FULL_DEPTH_L2_CHANNELS: frozenset[str] = frozenset({"orderbook_full", "hip3_orderbook_full"})
 """Full-depth L2 book channels (Hyperliquid core and HIP-3), aggregated from
-the order-level book. Live subscriptions only: a subscription opens with an
+the order-level book. A live subscription or a replay opens with an
 ``l4_snapshot`` of every price level, followed by ``l4_batch`` messages of
 changed levels."""
 
-FULL_DEPTH_LIVE_ONLY_ERROR = (
-    "orderbook_full and hip3_orderbook_full support live subscriptions only. "
-    "Stored full-depth history is served over REST by l2_orderbook.history() "
-    "and l2_orderbook.diffs()."
+BULK_REPLAY_MULTI_CHANNEL_ERROR = (
+    "{channel} replays on its own: L4 and full-depth replay is single-channel only. "
+    "Call replay() for it, separately from the other channels."
 )
+"""Raised by :meth:`OxArchiveWs.multi_replay` for a bulk-replay channel."""
 
-L4_LIVE_ONLY_ERROR = (
-    "HIP-3, HIP-4, and Hyperliquid Spot L4 channels support live subscriptions only. "
-    "Use subscribe for current streams."
+NOT_REPLAYABLE_ERROR = (
+    "{channel} does not support historical replay; it streams live only. "
+    "client.capabilities() lists what each channel offers."
 )
+"""Raised by :meth:`OxArchiveWs.replay` for a channel without replay."""
+
+NOT_LIVE_ERROR = (
+    "{channel} supports replay, not live subscriptions. "
+    "Use REST for current data or a replay request for stored history."
+)
+"""Raised by :meth:`OxArchiveWs.subscribe` for a replay-only channel."""
+
+REST_ONLY_ERROR = (
+    "{channel} does not support historical replay or live subscriptions; its data "
+    "is served over REST. client.capabilities() lists what each channel offers."
+)
+"""Raised by :meth:`OxArchiveWs.subscribe` and :meth:`OxArchiveWs.replay` for a
+channel that neither streams nor replays (``spot_twap``)."""
 
 
 # Large dataset downloads: the S3 Parquet bulk export.
@@ -213,30 +364,42 @@ def _bulk_stream_deprecation(name: str) -> str:
     )
 
 
-def _validate_historical_l4_channel(channel: WsChannel) -> None:
-    """Reject historical operations for live-only channels, before anything is sent.
+def _validate_replay_channel(channel: WsChannel, *, multi: bool = False) -> None:
+    """Reject replays :data:`WS_CHANNELS` says the server refuses, before anything is sent.
 
-    Covers the HIP-3, HIP-4 and Hyperliquid Spot L4 channels and the
-    full-depth L2 channels.
+    A channel without replay is refused, and so is a bulk-replay channel
+    (L4 and full depth) inside a multi-channel replay. A channel the table
+    does not list is left to the server.
     """
-    if channel in L4_LIVE_ONLY_CHANNELS:
-        raise ValueError(L4_LIVE_ONLY_ERROR)
-    if channel in FULL_DEPTH_L2_CHANNELS:
-        raise ValueError(FULL_DEPTH_LIVE_ONLY_ERROR)
+    spec = WS_CHANNELS.get(channel)
+    if spec is None:
+        return
+    if not spec.replay:
+        error = NOT_REPLAYABLE_ERROR if spec.live else REST_ONLY_ERROR
+        raise ValueError(error.format(channel=channel))
+    if multi and spec.bulk_replay:
+        raise ValueError(BULK_REPLAY_MULTI_CHANNEL_ERROR.format(channel=channel))
 
 
 def _validate_live_subscription(channel: WsChannel, interval_ms: Optional[int] = None) -> None:
     """Reject live subscriptions the server would refuse, before any state changes.
 
-    ``lighter_candles``, ``lighter_l3_orderbook`` and ``rh_lighter_candles``
-    are replay-only, and ``interval_ms`` is accepted only on
-    ``lighter_orderbook`` and ``rh_lighter_orderbook``, as an integer between
+    Channels without live data (:data:`WS_CHANNELS` entries whose ``live`` is
+    false: ``candles``, ``hip3_candles``, ``hip4_orderbook``,
+    ``hip4_open_interest``, ``lighter_candles``, ``lighter_l3_orderbook``,
+    ``rh_lighter_candles`` and ``spot_twap``) are refused, and
+    ``interval_ms`` is accepted only on ``lighter_orderbook`` and
+    ``rh_lighter_orderbook``, as an integer between
     ``LIGHTER_BOOK_INTERVAL_MIN_MS`` and ``LIGHTER_BOOK_INTERVAL_MAX_MS``.
     """
     if channel in LIGHTER_REPLAY_ONLY_CHANNELS:
         raise ValueError(LIGHTER_SUBSCRIPTION_ERROR)
     if channel in RH_LIGHTER_REPLAY_ONLY_CHANNELS:
         raise ValueError(RH_LIGHTER_SUBSCRIPTION_ERROR)
+    spec = WS_CHANNELS.get(channel)
+    if spec is not None and not spec.live:
+        error = NOT_LIVE_ERROR if spec.replay else REST_ONLY_ERROR
+        raise ValueError(error.format(channel=channel))
     if interval_ms is None:
         return
     if channel not in LIGHTER_BOOK_CHANNELS:
@@ -312,7 +475,8 @@ StateHandler = Callable[[WsConnectionState], None]
 ErrorHandler = Callable[[Exception], None]
 
 # Replay handlers
-HistoricalDataHandler = Callable[[str, int, dict], None]
+HistoricalDataHandler = Callable[[str, int, Any], None]  # coin, timestamp, data
+ReplayDataHandler = Callable[[WsChannel, str, int, Any], None]  # channel, coin, timestamp, record
 HistoricalTickDataHandler = Callable[[str, dict, list[OrderbookDelta]], None]  # coin, checkpoint, deltas
 ReplaySnapshotHandler = Callable[[WsChannel, str, int, dict], None]  # channel, coin, timestamp, data
 ReplayStartHandler = Callable[[WsChannel, str, int, int, float], None]  # channel, coin, start, end, speed
@@ -441,6 +605,36 @@ def _transform_lighter_market_context(coin: str, raw: Any) -> LighterMarketConte
     return LighterMarketContextUpdate.model_validate(
         {"coin": raw.get("coin") or coin, "ctx": raw.get("ctx") or {}}
     )
+
+
+def decode_lighter_payload(channel: str, coin: str, data: Any) -> Any:
+    """Decode a Lighter or Lighter on Robinhood Chain payload with the live parsers.
+
+    Live and replayed messages of these channels share one shape, so the same
+    decoding applies to ``data`` from a live message, a ``historical_data``
+    message and a ``replay_snapshot``:
+
+    - ``lighter_orderbook``, ``rh_lighter_orderbook``: :class:`OrderBook`
+    - ``lighter_trades``, ``rh_lighter_trades``: ``list[Trade]``, one per leg
+    - ``lighter_open_interest``, ``lighter_funding`` and their
+      ``rh_lighter_*`` counterparts: :class:`LighterMarketContextUpdate`
+
+    Any other channel's payload (``lighter_candles``,
+    ``lighter_l3_orderbook``, ``rh_lighter_candles`` and every non-Lighter
+    channel) is returned unchanged.
+    """
+    if channel in ("lighter_orderbook", "rh_lighter_orderbook") and isinstance(data, dict):
+        return _transform_orderbook(coin, data)
+    if channel in ("lighter_trades", "rh_lighter_trades"):
+        return _transform_lighter_trades(coin, data)
+    if channel in (
+        "lighter_open_interest",
+        "lighter_funding",
+        "rh_lighter_open_interest",
+        "rh_lighter_funding",
+    ) and isinstance(data, dict):
+        return _transform_lighter_market_context(coin, data)
+    return data
 
 
 def _transform_liquidation(coin: str, raw: dict) -> Liquidation:
@@ -605,6 +799,7 @@ class OxArchiveWs:
 
         # Replay handlers (Option B)
         self._on_historical_data: Optional[HistoricalDataHandler] = None
+        self._on_replay_data: Optional[ReplayDataHandler] = None
         self._on_historical_tick_data: Optional[HistoricalTickDataHandler] = None
         self._on_replay_snapshot: Optional[ReplaySnapshotHandler] = None
         self._on_replay_start: Optional[ReplayStartHandler] = None
@@ -638,7 +833,7 @@ class OxArchiveWs:
         """Internal connect method."""
         self._set_state("connecting")
 
-        url = f"{self.options.ws_url}?apiKey={self.options.api_key}"
+        url = self._connection_url()
 
         try:
             # Increase max_size to 50MB for large Lighter orderbook data with high granularity
@@ -665,6 +860,12 @@ class OxArchiveWs:
                 await self._schedule_reconnect()
             else:
                 self._set_state("disconnected")
+
+    def _connection_url(self) -> str:
+        """The connection URL: ``ws_url`` plus the API key and the API version."""
+        separator = "&" if "?" in self.options.ws_url else "?"
+        query = urlencode({"apiKey": self.options.api_key, "version": API_VERSION})
+        return f"{self.options.ws_url}{separator}{query}"
 
     async def disconnect(self) -> None:
         """Disconnect from the WebSocket server."""
@@ -701,10 +902,14 @@ class OxArchiveWs:
                 second. Each book sent is one metered message.
 
         Raises:
-            ValueError: If ``channel`` is ``lighter_candles``,
-                ``lighter_l3_orderbook`` or ``rh_lighter_candles``
-                (replay-only), or if ``interval_ms`` is passed for another
-                channel, is not an integer, or is out of range.
+            ValueError: If ``channel`` has no live data in :data:`WS_CHANNELS`
+                (``candles``, ``hip3_candles``, ``hip4_orderbook``,
+                ``hip4_open_interest``, ``lighter_candles``,
+                ``lighter_l3_orderbook``, ``rh_lighter_candles`` or
+                ``spot_twap``), or if
+                ``interval_ms`` is passed for another channel than
+                ``lighter_orderbook`` or ``rh_lighter_orderbook``, is not an
+                integer, or is out of range.
         """
         _validate_live_subscription(channel, interval_ms)
         self._remember_subscription(channel, coin, interval_ms)
@@ -721,9 +926,8 @@ class OxArchiveWs:
     ) -> None:
         """Subscribe asynchronously to a supported live channel.
 
-        Takes the same arguments as :meth:`subscribe`. ``lighter_candles``,
-        ``lighter_l3_orderbook`` and ``rh_lighter_candles`` are replay-only;
-        use REST for current data or :meth:`replay` for stored history.
+        Takes the same arguments as :meth:`subscribe` and refuses the same
+        channels.
         """
         _validate_live_subscription(channel, interval_ms)
         self._remember_subscription(channel, coin, interval_ms)
@@ -816,7 +1020,8 @@ class OxArchiveWs:
         are changed levels ``{"side", "px", "sz", "n", "bn"}``; a level whose
         ``sz`` is 0 has been removed. Receive them with :meth:`on_l4_snapshot`
         and :meth:`on_l4_batch`, applying batches in the order received.
-        Live only: stored full-depth history is served over REST by
+        Stored history replays over the same messages
+        (``replay("orderbook_full", ...)``) and is also served over REST by
         ``l2_orderbook.history()`` and ``l2_orderbook.diffs()``.
         """
         self.subscribe("orderbook_full", coin)
@@ -839,17 +1044,18 @@ class OxArchiveWs:
     # -- HIP-4 outcome markets -----------------------------------------------
 
     def subscribe_hip4_orderbook(self, coin: str) -> None:
-        """Subscribe to HIP-4 L2 replay for a per-side coin.
+        """Subscribe to the live HIP-4 L2 book for a per-side coin.
 
-        Live delivery is paused. Use REST for current books and WebSocket replay
-        for stored history. ``coin`` should be the on-chain ``#N`` form (e.g.
-        ``"#0"``). The raw ``#`` is sent in the JSON body; only the REST path
-        strips it.
+        The channel does not stream live (``/v1/capabilities``), so this
+        raises ``ValueError`` before anything is sent. Replay its stored
+        history with ``replay("hip4_orderbook", coin, ...)``, read the current
+        book with ``client.hyperliquid.hip4.orderbook.get()``, or follow the
+        book live on ``hip4_l4_diffs``.
         """
         self.subscribe("hip4_orderbook", coin)
 
     def unsubscribe_hip4_orderbook(self, coin: str) -> None:
-        """Unsubscribe from HIP-4 L2 orderbook replay for a per-side coin."""
+        """Unsubscribe from the live HIP-4 L2 book for a per-side coin."""
         self.unsubscribe("hip4_orderbook", coin)
 
     def subscribe_hip4_trades(self, coin: str) -> None:
@@ -861,9 +1067,12 @@ class OxArchiveWs:
         self.unsubscribe("hip4_trades", coin)
 
     def subscribe_hip4_open_interest(self, coin: str) -> None:
-        """Subscribe to HIP-4 OI; live delivery is paused.
+        """Subscribe to live HIP-4 per-side open interest for a coin.
 
-        Use REST for current OI and WebSocket replay for stored history.
+        The channel does not stream live (``/v1/capabilities``), so this
+        raises ``ValueError`` before anything is sent. Replay its stored
+        history with ``replay("hip4_open_interest", coin, ...)`` or read it
+        with ``client.hyperliquid.hip4.open_interest``.
         """
         self.subscribe("hip4_open_interest", coin)
 
@@ -872,7 +1081,7 @@ class OxArchiveWs:
         self.unsubscribe("hip4_open_interest", coin)
 
     def subscribe_hip4_l4_diffs(self, coin: str) -> None:
-        """Subscribe to HIP-4 L4 orderbook diffs (realtime only).
+        """Subscribe to live HIP-4 L4 orderbook diffs (history replays too).
 
         On subscribe the server first pushes an ``l4_snapshot`` followed by a
         stream of ``l4_batch`` messages.
@@ -884,7 +1093,7 @@ class OxArchiveWs:
         self.unsubscribe("hip4_l4_diffs", coin)
 
     def subscribe_hip4_l4_orders(self, coin: str) -> None:
-        """Subscribe to HIP-4 L4 order lifecycle events (realtime only)."""
+        """Subscribe to live HIP-4 L4 order lifecycle events (history replays too)."""
         self.subscribe("hip4_l4_orders", coin)
 
     def unsubscribe_hip4_l4_orders(self, coin: str) -> None:
@@ -914,7 +1123,7 @@ class OxArchiveWs:
         self.unsubscribe("spot_trades", coin)
 
     def subscribe_spot_l4_diffs(self, coin: str) -> None:
-        """Subscribe to spot L4 orderbook diffs (realtime only).
+        """Subscribe to live spot L4 orderbook diffs (history replays too).
 
         On subscribe the server first pushes an initial L4 snapshot followed
         by a stream of batched diff messages.
@@ -926,7 +1135,7 @@ class OxArchiveWs:
         self.unsubscribe("spot_l4_diffs", coin)
 
     def subscribe_spot_l4_orders(self, coin: str) -> None:
-        """Subscribe to spot L4 order lifecycle events (realtime only)."""
+        """Subscribe to live spot L4 order lifecycle events (history replays too)."""
         self.subscribe("spot_l4_orders", coin)
 
     def unsubscribe_spot_l4_orders(self, coin: str) -> None:
@@ -934,14 +1143,19 @@ class OxArchiveWs:
         self.unsubscribe("spot_l4_orders", coin)
 
     def subscribe_spot_twap(self, coin: str) -> None:
-        """Subscribe to live spot TWAP status updates for a pair."""
+        """Subscribe to live spot TWAP status updates for a pair.
+
+        Spot TWAP statuses are served over REST only (``/v1/capabilities``),
+        so this raises ``ValueError`` before anything is sent. Read them with
+        ``client.spot.twap.history()`` or ``client.spot.twap.by_user()``.
+        """
         self.subscribe("spot_twap", coin)
 
     def unsubscribe_spot_twap(self, coin: str) -> None:
         """Unsubscribe from live spot TWAP status updates for a pair."""
         self.unsubscribe("spot_twap", coin)
 
-    # -- Lighter.xyz (live) ---------------------------------------------------
+    # -- Lighter (live) ---------------------------------------------------
 
     def subscribe_lighter_orderbook(self, coin: str, interval_ms: Optional[int] = None) -> None:
         """Subscribe to live Lighter L2 books for a market.
@@ -1090,15 +1304,25 @@ class OxArchiveWs:
     ) -> None:
         """Start historical replay with timing preserved.
 
-        Hyperliquid core ``l4_diffs`` and ``l4_orders`` replay as one typed
-        ``l4_snapshot`` followed by ordered ``l4_batch`` messages. HIP-3,
-        HIP-4, and Hyperliquid Spot L4 channels and the full-depth L2 channels
-        (``orderbook_full``, ``hip3_orderbook_full``) are live-only and are
-        rejected here with ``ValueError`` before anything is sent. All six
-        ``lighter_*`` channels and all five ``rh_lighter_*`` channels (Lighter
-        on Robinhood Chain; ``rh_lighter_candles`` is replay-only) support
-        bounded historical replay. Replay rows keep their
-        historical shapes, which differ from the live Lighter messages.
+        Every channel whose :data:`WS_CHANNELS` entry has ``replay`` replays;
+        the others (``ticker``, ``all_tickers``, ``spot_orderbook``,
+        ``spot_trades`` and ``spot_twap``) are refused here with
+        ``ValueError`` before anything is sent.
+
+        L4 channels (``l4_diffs``, ``l4_orders`` and the ``hip3_``, ``hip4_``
+        and ``spot_`` versions) and the full-depth L2 channels
+        (``orderbook_full``, ``hip3_orderbook_full``) replay in bulk: one
+        ``l4_snapshot`` from the nearest checkpoint at or before ``start``,
+        then ordered ``l4_batch`` messages until ``end``, as fast as the
+        connection takes them (``speed`` is ignored and :meth:`replay_seek` is
+        refused). Full-depth batches carry changed price levels, like the live
+        channel. Receive them with :meth:`on_l4_snapshot` and
+        :meth:`on_l4_batch`.
+
+        Every other replay arrives on :meth:`on_historical_data` and
+        :meth:`on_replay_data`. Lighter and Robinhood Chain replay rows have
+        the same shapes as the live messages (a list with one trade leg on the
+        trade channels); :meth:`on_replay_data` decodes them.
 
         Args:
             channel: Data channel to replay
@@ -1111,10 +1335,13 @@ class OxArchiveWs:
 
         Example:
             >>> await ws.replay("orderbook", "BTC", start=time.time()*1000 - 86400000, speed=10)
-            >>> await ws.replay("l4_diffs", "BTC", start=..., speed=10)
+            >>> await ws.replay("hip3_l4_diffs", "xyz:TSLA", start=..., end=...)
             >>> await ws.replay("candles", "BTC", start=..., speed=10, interval="15m")
+
+        Raises:
+            ValueError: If ``channel`` does not replay (see :data:`WS_CHANNELS`).
         """
-        _validate_historical_l4_channel(channel)
+        _validate_replay_channel(channel)
         msg = {
             "op": "replay",
             "channel": channel,
@@ -1140,6 +1367,11 @@ class OxArchiveWs:
 
     async def replay_seek(self, timestamp: int) -> None:
         """Seek to a specific timestamp in the replay.
+
+        Not available on the bulk L4 and full-depth replays: the server answers
+        with a :class:`~oxarchive.types.WsError` whose ``error_code`` is
+        ``"unsupported_for_venue"``. Restart the replay at the new start
+        instead.
 
         Args:
             timestamp: Unix timestamp in milliseconds
@@ -1170,13 +1402,20 @@ class OxArchiveWs:
         ``channel`` field on each ``historical_data`` message indicates which
         channel the record belongs to.
 
+        All channels must belong to one venue. The bulk L4 and full-depth
+        channels replay on their own (see :meth:`replay`) and are refused here.
+
         Args:
             channels: List of channels to replay together (e.g.,
                 ``["orderbook", "trades", "funding"]``).
-            coin: Trading pair (e.g., ``'BTC'``, ``'ETH'``, ``'km:US500'``).
+            coin: Trading pair (e.g., ``'BTC'``, ``'ETH'``, ``'xyz:TSLA'``).
             start: Start timestamp (Unix ms).
             end: End timestamp (Unix ms, defaults to now).
             speed: Playback speed multiplier (1 = real-time, 10 = 10x faster).
+
+        Raises:
+            ValueError: If a channel does not replay, or replays only on its
+                own (see :data:`WS_CHANNELS`).
 
         Example:
             >>> await ws.multi_replay(
@@ -1187,7 +1426,7 @@ class OxArchiveWs:
             ... )
         """
         for channel in channels:
-            _validate_historical_l4_channel(channel)
+            _validate_replay_channel(channel, multi=True)
 
         msg: dict[str, Any] = {
             "op": "replay",
@@ -1236,7 +1475,6 @@ class OxArchiveWs:
             interval: Candle interval for candles channel ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w')
         """
         warnings.warn(_bulk_stream_deprecation("stream"), DeprecationWarning, stacklevel=2)
-        _validate_historical_l4_channel(channel)
         msg = {
             "op": "stream",
             "channel": channel,
@@ -1295,9 +1533,6 @@ class OxArchiveWs:
             batch_size: Records per batch message.
         """
         warnings.warn(_bulk_stream_deprecation("multi_stream"), DeprecationWarning, stacklevel=2)
-        for channel in channels:
-            _validate_historical_l4_channel(channel)
-
         msg: dict[str, Any] = {
             "op": "stream",
             "channels": channels,
@@ -1439,14 +1674,38 @@ class OxArchiveWs:
     def on_historical_data(self, handler: HistoricalDataHandler) -> None:
         """Set handler for historical data points (replay mode).
 
-        Handler receives: (coin, timestamp, data)
+        Handler receives: (coin, timestamp, data). ``data`` is the record as
+        sent, in the channel's live shape: an object, or on ``lighter_trades``
+        and ``rh_lighter_trades`` a list with one trade leg. Use
+        :meth:`on_replay_data` to also receive the channel and decoded Lighter
+        records.
         """
         self._on_historical_data = handler
+
+    def on_replay_data(self, handler: ReplayDataHandler) -> None:
+        """Set a handler for replayed records, with the channel they belong to.
+
+        Receives ``(channel, coin, timestamp, record)`` for every
+        ``historical_data`` message, alongside :meth:`on_historical_data`.
+        Lighter and Robinhood Chain records are decoded with the live parsers
+        (see :func:`decode_lighter_payload`): an :class:`OrderBook` on the book
+        channels, a ``list[Trade]`` on the trade channels and a
+        :class:`LighterMarketContextUpdate` on open interest and funding. Other
+        channels' records are passed through as sent.
+
+        Example:
+            >>> def on_record(channel, coin, ts, record):
+            ...     if channel == "lighter_trades":
+            ...         for leg in record:
+            ...             print(ts, leg.side, leg.price, leg.account_index)
+            >>> ws.on_replay_data(on_record)
+        """
+        self._on_replay_data = handler
 
     def on_historical_tick_data(self, handler: HistoricalTickDataHandler) -> None:
         """Set handler for historical tick data (granularity='tick' mode).
 
-        This is for tick-level granularity on Lighter.xyz orderbook data.
+        This is for tick-level granularity on Lighter orderbook data.
         Receives a checkpoint (full orderbook) followed by incremental deltas.
 
         Handler receives: (coin, checkpoint, deltas)
@@ -1813,8 +2072,18 @@ class OxArchiveWs:
                     data["channel"], data["coin"], data["timestamp"], data["data"]
                 )
 
-            elif msg_type == "historical_data" and self._on_historical_data:
-                self._on_historical_data(data["coin"], data["timestamp"], data["data"])
+            elif msg_type == "historical_data":
+                if self._on_historical_data:
+                    self._on_historical_data(data["coin"], data["timestamp"], data["data"])
+                if self._on_replay_data:
+                    channel = data.get("channel")
+                    coin = data.get("coin", "")
+                    self._on_replay_data(
+                        channel,
+                        coin,
+                        data["timestamp"],
+                        decode_lighter_payload(channel, coin, data.get("data")),
+                    )
 
             elif msg_type == "historical_tick_data" and self._on_historical_tick_data:
                 msg = WsHistoricalTickData(**data)

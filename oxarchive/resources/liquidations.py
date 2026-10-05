@@ -12,7 +12,9 @@ from ..types import (
     LiquidationLevels,
     LiquidationLevelsHistoryItem,
     LiquidationVolume,
+    ResponseMeta,
     Timestamp,
+    _record,
 )
 
 
@@ -52,7 +54,7 @@ class _LiquidationsBase:
         Example:
             >>> result = client.hyperliquid.liquidations.history("BTC", start=start, end=end, limit=1000)
             >>> liquidations = result.data
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.hyperliquid.liquidations.history(
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
@@ -71,6 +73,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -97,6 +100,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def volume(
@@ -125,7 +129,10 @@ class _LiquidationsBase:
             CursorResponse with liquidation volume buckets and next_cursor for pagination
 
         Example:
-            >>> result = client.hyperliquid.liquidations.volume("BTC", start="2025-06-01", end="2025-06-02")
+            >>> now = datetime.now(timezone.utc)
+            >>> result = client.hyperliquid.liquidations.volume(
+            ...     "BTC", start=now - timedelta(days=1), end=now
+            ... )
             >>> for bucket in result.data:
             ...     print(f"{bucket.timestamp}: ${bucket.total_usd:.0f} ({bucket.count} liquidations)")
         """
@@ -143,6 +150,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def avolume(
@@ -171,6 +179,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationVolume.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -207,7 +216,7 @@ class _LiquidationsBase:
             f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels",
             params={"range_pct": range_pct, "buckets": buckets, "side": side, "at": at},
         )
-        return LiquidationLevels.model_validate(data["data"])
+        return _record(LiquidationLevels, data)
 
     async def alevels(
         self,
@@ -225,7 +234,7 @@ class _LiquidationsBase:
             f"{self._base_path}/liquidations/{self._coin_transform(symbol)}/levels",
             params={"range_pct": range_pct, "buckets": buckets, "side": side, "at": at},
         )
-        return LiquidationLevels.model_validate(data["data"])
+        return _record(LiquidationLevels, data)
 
     def levels_history(
         self,
@@ -276,6 +285,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def alevels_history(
@@ -310,6 +320,7 @@ class _LiquidationsBase:
         return CursorResponse(
             data=[LiquidationLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod
@@ -335,21 +346,17 @@ class LiquidationsResource(_LiquidationsBase):
 
     Retrieve historical liquidation events from Hyperliquid.
 
-    Note: Liquidation data is available from May 25, 2025 onwards.
+    Note: Liquidations are served from 2025-12-22.
 
     Example:
-        >>> # Get recent liquidations
-        >>> liquidations = client.hyperliquid.liquidations.history(
-        ...     "BTC",
-        ...     start="2025-06-01",
-        ...     end="2025-06-02"
-        ... )
+        >>> # Get the last day of liquidations
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(days=1)
+        >>> liquidations = client.hyperliquid.liquidations.history("BTC", start=start, end=end)
         >>>
         >>> # Get liquidations for a specific user
         >>> user_liquidations = client.hyperliquid.liquidations.by_user(
-        ...     "0x1234...",
-        ...     start="2025-06-01",
-        ...     end="2025-06-02"
+        ...     "0x1234...", start=start, end=end
         ... )
     """
 
@@ -412,6 +419,7 @@ class LiquidationsResource(_LiquidationsBase):
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aby_user(
@@ -456,6 +464,7 @@ class LiquidationsResource(_LiquidationsBase):
         return CursorResponse(
             data=[Liquidation.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -467,7 +476,8 @@ class Hip3LiquidationsResource(_LiquidationsBase):
     ``by_user``. Symbols keep their builder prefix and case.
 
     Example:
+        >>> now = datetime.now(timezone.utc)
         >>> liqs = client.hyperliquid.hip3.liquidations.history(
-        ...     "xyz:XYZ100", start="2026-09-01", end="2026-09-02"
+        ...     "xyz:XYZ100", start=now - timedelta(days=7), end=now
         ... )
     """

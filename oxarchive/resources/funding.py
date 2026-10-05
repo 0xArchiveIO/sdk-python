@@ -6,7 +6,7 @@ from typing import Optional
 
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, FundingRate, Timestamp
+from ..types import CursorResponse, FundingRate, ResponseMeta, Timestamp, _record
 
 
 class FundingResource:
@@ -17,8 +17,9 @@ class FundingResource:
         >>> # Get current funding rate
         >>> current = client.funding.current("BTC")
         >>>
-        >>> # Get funding rate history
-        >>> history = client.funding.history("ETH", start="2024-01-01", end="2024-01-07")
+        >>> # Get funding rate history for the last week
+        >>> now = datetime.now(timezone.utc)
+        >>> history = client.funding.history("ETH", start=now - timedelta(days=7), end=now)
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
@@ -58,7 +59,7 @@ class FundingResource:
         Example:
             >>> result = client.funding.history("BTC", start=start, end=end, limit=1000)
             >>> rates = result.data
-            >>> while result.next_cursor:
+            >>> while result.has_more:
             ...     result = client.funding.history(
             ...         "BTC", start=start, end=end, cursor=result.next_cursor, limit=1000
             ...     )
@@ -80,6 +81,7 @@ class FundingResource:
         return CursorResponse(
             data=[FundingRate.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -110,6 +112,7 @@ class FundingResource:
         return CursorResponse(
             data=[FundingRate.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def current(self, symbol: str, **kwargs) -> FundingRate:
@@ -124,7 +127,7 @@ class FundingResource:
         """
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(f"{self._base_path}/funding/{self._coin_transform(symbol)}/current")
-        return FundingRate.model_validate(data["data"])
+        return _record(FundingRate, data)
 
     async def acurrent(self, symbol: str, **kwargs) -> FundingRate:
         """Async version of current()."""
@@ -132,7 +135,7 @@ class FundingResource:
         data = await self._http.aget(
             f"{self._base_path}/funding/{self._coin_transform(symbol)}/current"
         )
-        return FundingRate.model_validate(data["data"])
+        return _record(FundingRate, data)
 
     @staticmethod
     def _resolve_symbol(symbol, kwargs):

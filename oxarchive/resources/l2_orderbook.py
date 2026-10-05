@@ -4,16 +4,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, Timestamp
-
-_UNSUPPORTED_HISTORY = {
-    "depth": (
-        "history returns every price level of each snapshot. depth applies to get() only."
-    ),
-}
+from ..types import CursorResponse, ResponseMeta, Timestamp
 
 
 class L2OrderBookResource:
@@ -24,11 +17,13 @@ class L2OrderBookResource:
         >>> # Get current full-depth L2 orderbook
         >>> snapshot = client.hyperliquid.l2_orderbook.get("BTC")
         >>>
-        >>> # Get L2 orderbook at a historical timestamp
-        >>> snapshot = client.hyperliquid.l2_orderbook.get("BTC", timestamp=1711900800000)
+        >>> # Get L2 orderbook an hour ago (served from 2026-03-11 01:03 UTC)
+        >>> now = datetime.now(timezone.utc)
+        >>> hour_ago = now - timedelta(hours=1)
+        >>> snapshot = client.hyperliquid.l2_orderbook.get("BTC", timestamp=hour_ago)
         >>>
         >>> # Get L2 orderbook history
-        >>> history = client.hyperliquid.l2_orderbook.history("BTC", start="2026-03-21", end="2026-03-22")
+        >>> history = client.hyperliquid.l2_orderbook.history("BTC", start=hour_ago, end=now)
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
@@ -94,6 +89,7 @@ class L2OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        depth: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """
@@ -105,12 +101,13 @@ class L2OrderBookResource:
             end: End timestamp (required)
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
+            depth: Price levels per side in each snapshot (omit for every
+                level the plan allows)
 
         Returns:
             CursorResponse with L2 orderbook checkpoints and next_cursor for pagination
         """
         symbol = self._resolve_symbol(symbol, kwargs)
-        reject_unsupported("history", kwargs, _UNSUPPORTED_HISTORY)
         data = self._http.get(
             f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/l2/history",
             params={
@@ -118,11 +115,13 @@ class L2OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
+                "depth": depth,
             },
         )
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -133,11 +132,11 @@ class L2OrderBookResource:
         end: Timestamp,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        depth: Optional[int] = None,
         **kwargs,
     ) -> CursorResponse:
         """Async version of history()."""
         symbol = self._resolve_symbol(symbol, kwargs)
-        reject_unsupported("ahistory", kwargs, _UNSUPPORTED_HISTORY)
         data = await self._http.aget(
             f"{self._base_path}/orderbook/{self._coin_transform(symbol)}/l2/history",
             params={
@@ -145,11 +144,13 @@ class L2OrderBookResource:
                 "end": self._convert_timestamp(end),
                 "cursor": cursor,
                 "limit": limit,
+                "depth": depth,
             },
         )
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def diffs(
@@ -188,6 +189,7 @@ class L2OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def adiffs(
@@ -214,6 +216,7 @@ class L2OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod

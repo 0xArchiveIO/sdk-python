@@ -9,9 +9,11 @@ from .._time import to_unix_ms
 from ..http import HttpClient
 from ..types import (
     CursorResponse,
+    ResponseMeta,
     Timestamp,
     TriggerLevels,
     TriggerLevelsHistoryItem,
+    _record,
 )
 
 
@@ -54,6 +56,7 @@ class _OrderFlowResource(_OrdersBase):
         user: Optional[str] = None,
         status: Optional[str] = None,
         order_type: Optional[str] = None,
+        triggered: Optional[bool] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
@@ -68,6 +71,9 @@ class _OrderFlowResource(_OrdersBase):
             user: Filter by user address
             status: Filter by order status
             order_type: Filter by order type
+            triggered: ``True`` keeps only orders whose trigger fired
+                (``status == "triggered"``); ``False`` excludes them. The
+                API filters before paging.
             cursor: Cursor from previous response's next_cursor
             limit: Maximum number of results
 
@@ -83,6 +89,7 @@ class _OrderFlowResource(_OrdersBase):
                 "user": user,
                 "status": status,
                 "order_type": order_type,
+                "triggered": triggered,
                 "cursor": cursor,
                 "limit": limit,
             },
@@ -90,6 +97,7 @@ class _OrderFlowResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -101,6 +109,7 @@ class _OrderFlowResource(_OrdersBase):
         user: Optional[str] = None,
         status: Optional[str] = None,
         order_type: Optional[str] = None,
+        triggered: Optional[bool] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
         **kwargs,
@@ -115,6 +124,7 @@ class _OrderFlowResource(_OrdersBase):
                 "user": user,
                 "status": status,
                 "order_type": order_type,
+                "triggered": triggered,
                 "cursor": cursor,
                 "limit": limit,
             },
@@ -122,6 +132,7 @@ class _OrderFlowResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def flow(
@@ -140,8 +151,9 @@ class _OrderFlowResource(_OrdersBase):
 
         Buckets are labelled by their open time in UTC, and buckets with no
         events are omitted. A page holds the oldest ``limit`` buckets of the
-        window. While ``next_cursor`` is set, pass it back as ``cursor`` with
-        the same ``start``, ``end`` and ``interval``; stop when it is None.
+        window. While ``has_more`` is true, pass ``next_cursor`` back as
+        ``cursor`` with the same ``start``, ``end`` and ``interval``; stop
+        when ``has_more`` is false.
 
         Args:
             symbol: The symbol (e.g., 'BTC', 'ETH')
@@ -169,6 +181,7 @@ class _OrderFlowResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def aflow(
@@ -197,6 +210,7 @@ class _OrderFlowResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def tpsl(
@@ -241,6 +255,7 @@ class _OrderFlowResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def atpsl(
@@ -271,6 +286,7 @@ class _OrderFlowResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -279,15 +295,17 @@ class OrdersResource(_OrderFlowResource):
     L4 order history, flow, TP/SL and trigger levels (Hyperliquid core and HIP-3).
 
     Example:
-        >>> # Get order history
-        >>> result = client.hyperliquid.orders.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get the last hour of order history
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(hours=1)
+        >>> result = client.hyperliquid.orders.history("BTC", start=start, end=end)
         >>> orders = result.data
         >>>
         >>> # Get order flow aggregation
-        >>> flow = client.hyperliquid.orders.flow("BTC", start="2024-01-01", end="2024-01-02")
+        >>> flow = client.hyperliquid.orders.flow("BTC", start=start, end=end)
         >>>
         >>> # Get TP/SL history
-        >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start="2024-01-01", end="2024-01-02")
+        >>> tpsl = client.hyperliquid.orders.tpsl("BTC", start=start, end=end)
     """
 
     def trigger_levels(
@@ -319,7 +337,7 @@ class OrdersResource(_OrderFlowResource):
             f"{self._base_path}/orders/{self._coin_transform(symbol)}/trigger-levels",
             params={"range_pct": range_pct, "buckets": buckets, "side": side},
         )
-        return TriggerLevels.model_validate(data["data"])
+        return _record(TriggerLevels, data)
 
     async def atrigger_levels(
         self,
@@ -336,7 +354,7 @@ class OrdersResource(_OrderFlowResource):
             f"{self._base_path}/orders/{self._coin_transform(symbol)}/trigger-levels",
             params={"range_pct": range_pct, "buckets": buckets, "side": side},
         )
-        return TriggerLevels.model_validate(data["data"])
+        return _record(TriggerLevels, data)
 
     def trigger_levels_history(
         self,
@@ -376,6 +394,7 @@ class OrdersResource(_OrderFlowResource):
         return CursorResponse(
             data=[TriggerLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def atrigger_levels_history(
@@ -410,6 +429,7 @@ class OrdersResource(_OrderFlowResource):
         return CursorResponse(
             data=[TriggerLevelsHistoryItem.model_validate(item) for item in data["data"]],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
 
@@ -427,20 +447,22 @@ class Hip4OrdersResource(_OrderFlowResource):
 
 _UNSUPPORTED_SPOT_HISTORY = {
     name: "the spot order history route does not filter by it. Filter the returned rows instead."
-    for name in ("user", "status", "order_type")
+    for name in ("user", "status", "order_type", "triggered")
 }
 
 
 class SpotOrdersResource(_OrdersBase):
     """
-    Hyperliquid spot L4 order lifecycle history (live from 2026-05-05).
+    Hyperliquid spot L4 order lifecycle history (``client.symbols.list()`` has
+    each pair's first date).
 
     Spot serves order history only: there is no flow, TP/SL or trigger-level
-    route, and the history route takes no user, status or order-type filter.
+    route, and the history route takes no user, status, order-type or
+    triggered filter.
 
     Example:
         >>> result = client.spot.orders.history("HYPE-USDC", start=..., end=...)
-        >>> while result.next_cursor:
+        >>> while result.has_more:
         ...     result = client.spot.orders.history(
         ...         "HYPE-USDC", start=..., end=..., cursor=result.next_cursor
         ...     )
@@ -483,6 +505,7 @@ class SpotOrdersResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -510,4 +533,5 @@ class SpotOrdersResource(_OrdersBase):
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )

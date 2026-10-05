@@ -345,7 +345,7 @@ def test_lighter_liquidations_history_and_volume(venue: str, root: str) -> None:
     ]
     row = history.data[0]
     assert isinstance(row, LighterLiquidation)
-    assert row.timestamp == 1782602083534 and row.trade_id == 5501
+    assert row.timestamp_ms == 1782602083534 and row.trade_id == 5501
     assert row.source == "bucket" and row.raw_json == ""
     live = history.data[1]
     assert live.source == "ws" and live.raw_json and live.raw_json.startswith("{")

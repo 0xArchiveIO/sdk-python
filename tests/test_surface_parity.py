@@ -79,7 +79,7 @@ def test_core_cvd_sends_the_window_and_parses_buckets_and_meta() -> None:
     ]
     assert isinstance(page, CursorResponse)
     assert all(isinstance(b, CvdBucket) for b in page.data)
-    assert page.data[0].timestamp == T_START
+    assert page.data[0].timestamp_ms == T_START
     assert page.data[1].delta == -50.5 and page.data[1].cumulative_delta == 736087.85
     assert page.next_cursor == str(T_START + 60000)
     assert isinstance(page.meta, ResponseMeta) and page.meta.notice == PAGE_NOTICE
@@ -166,7 +166,7 @@ def test_cvd_iterate_follows_cursors_with_unchanged_arguments() -> None:
         client.hyperliquid.cvd.iterate("BTC", start=T_START, end=T_END, interval="1m", limit=2)
     )
 
-    assert [b.timestamp for b in buckets] == [T_START + i * 60000 for i in range(4)]
+    assert [b.timestamp_ms for b in buckets] == [T_START + i * 60000 for i in range(4)]
     assert sum(b.delta for b in buckets) == 11.0
     base = {"start": str(T_START), "end": str(T_END), "interval": "1m", "limit": "2"}
     assert api.calls == [
@@ -233,7 +233,7 @@ def test_discovery_bounds_path_and_parsing() -> None:
     assert bounds.upper_bound == pytest.approx(
         bounds.reference_price * (1 + bounds.bound_fraction)
     )
-    assert bounds.block_number == 1164897235 and bounds.timestamp == 1790649576004
+    assert bounds.block_number == 1164897235 and bounds.timestamp_ms == 1790649576004
 
 
 def test_external_price_path_and_parsing_including_nulls() -> None:

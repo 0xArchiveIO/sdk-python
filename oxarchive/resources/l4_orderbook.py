@@ -7,7 +7,7 @@ from typing import Optional
 from .._params import reject_unsupported
 from .._time import to_unix_ms
 from ..http import HttpClient
-from ..types import CursorResponse, Timestamp
+from ..types import CursorResponse, ResponseMeta, Timestamp
 
 _UNSUPPORTED_HISTORY = {
     "depth": (
@@ -24,11 +24,13 @@ class L4OrderBookResource:
         >>> # Get current L4 orderbook snapshot
         >>> snapshot = client.hyperliquid.l4_orderbook.get("BTC")
         >>>
-        >>> # Get L4 orderbook diffs
-        >>> diffs = client.hyperliquid.l4_orderbook.diffs("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get L4 orderbook diffs for the last hour
+        >>> now = datetime.now(timezone.utc)
+        >>> hour_ago = now - timedelta(hours=1)
+        >>> diffs = client.hyperliquid.l4_orderbook.diffs("BTC", start=hour_ago, end=now)
         >>>
-        >>> # Get L4 orderbook history
-        >>> history = client.hyperliquid.l4_orderbook.history("BTC", start="2024-01-01", end="2024-01-02")
+        >>> # Get L4 orderbook history (checkpoints)
+        >>> history = client.hyperliquid.l4_orderbook.history("BTC", start=hour_ago, end=now)
     """
 
     def __init__(self, http: HttpClient, base_path: str = "/v1", coin_transform=str.upper):
@@ -122,6 +124,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def adiffs(
@@ -148,6 +151,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     def history(
@@ -187,6 +191,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     async def ahistory(
@@ -214,6 +219,7 @@ class L4OrderBookResource:
         return CursorResponse(
             data=data["data"],
             next_cursor=data.get("meta", {}).get("next_cursor"),
+            meta=ResponseMeta.of(data),
         )
 
     @staticmethod

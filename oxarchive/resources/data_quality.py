@@ -18,6 +18,7 @@ from ..types import (
     StatusResponse,
     SymbolCoverageResponse,
     Timestamp,
+    _outlier_record,
 )
 
 
@@ -71,12 +72,12 @@ class DataQualityResource:
             ...     print(f"{exchange}: {info.status}")
         """
         data = self._http.get(f"{self._base_path}/status")
-        return StatusResponse.model_validate(data)
+        return _outlier_record(StatusResponse, data)
 
     async def astatus(self) -> StatusResponse:
         """Async version of status()."""
         data = await self._http.aget(f"{self._base_path}/status")
-        return StatusResponse.model_validate(data)
+        return _outlier_record(StatusResponse, data)
 
     # =========================================================================
     # Coverage Endpoints
@@ -97,12 +98,29 @@ class DataQualityResource:
             ...         print(f"  {dtype}: {info.total_records} records")
         """
         data = self._http.get(f"{self._base_path}/coverage")
-        return CoverageResponse.model_validate(data)
+        return _outlier_record(CoverageResponse, data)
 
     async def acoverage(self) -> CoverageResponse:
         """Async version of coverage()."""
         data = await self._http.aget(f"{self._base_path}/coverage")
-        return CoverageResponse.model_validate(data)
+        return _outlier_record(CoverageResponse, data)
+
+    def status_coverage(self) -> CoverageResponse:
+        """
+        Get the public coverage summary served at ``/v1/status/coverage``.
+
+        The same payload as :meth:`coverage`, from the public route that needs
+        no API key (cached for five minutes). It is a coarse summary; for a
+        symbol and dataset window use ``client.symbols.list()`` or
+        :meth:`symbol_coverage`.
+        """
+        data = self._http.get("/v1/status/coverage")
+        return _outlier_record(CoverageResponse, data)
+
+    async def astatus_coverage(self) -> CoverageResponse:
+        """Async version of status_coverage()."""
+        data = await self._http.aget("/v1/status/coverage")
+        return _outlier_record(CoverageResponse, data)
 
     def exchange_coverage(self, exchange: str) -> ExchangeCoverage:
         """
@@ -120,12 +138,12 @@ class DataQualityResource:
             >>> print(f"Orderbook earliest: {hl.data_types['orderbook'].earliest}")
         """
         data = self._http.get(f"{self._base_path}/coverage/{exchange.lower()}")
-        return ExchangeCoverage.model_validate(data)
+        return _outlier_record(ExchangeCoverage, data)
 
     async def aexchange_coverage(self, exchange: str) -> ExchangeCoverage:
         """Async version of exchange_coverage()."""
         data = await self._http.aget(f"{self._base_path}/coverage/{exchange.lower()}")
-        return ExchangeCoverage.model_validate(data)
+        return _outlier_record(ExchangeCoverage, data)
 
     def symbol_coverage(
         self,
@@ -145,7 +163,7 @@ class DataQualityResource:
             exchange: Venue scope: 'hyperliquid', 'hip3', 'hip4', 'spot',
                 'lighter' or 'rh-lighter' (Lighter on Robinhood Chain)
             symbol: Symbol exactly as the venue's routes take it: 'BTC', a
-                case-sensitive HIP-3 coin such as 'km:US500', a spot pair such as
+                case-sensitive HIP-3 coin such as 'xyz:TSLA', a spot pair such as
                 'HYPE-USDC', or a HIP-4 coin such as '#0'. It is sent as one
                 URL-encoded path segment and is not re-cased.
             from_time: Start of gap detection window (default: now - 30 days).
@@ -181,7 +199,7 @@ class DataQualityResource:
                 "to": self._convert_timestamp(to_time),
             },
         )
-        return SymbolCoverageResponse.model_validate(data)
+        return _outlier_record(SymbolCoverageResponse, data)
 
     async def asymbol_coverage(
         self,
@@ -199,7 +217,7 @@ class DataQualityResource:
                 "to": self._convert_timestamp(to_time),
             },
         )
-        return SymbolCoverageResponse.model_validate(data)
+        return _outlier_record(SymbolCoverageResponse, data)
 
     # =========================================================================
     # Incidents Endpoints
@@ -244,7 +262,7 @@ class DataQualityResource:
                 "offset": offset,
             },
         )
-        return IncidentsResponse.model_validate(data)
+        return _outlier_record(IncidentsResponse, data)
 
     async def alist_incidents(
         self,
@@ -266,7 +284,7 @@ class DataQualityResource:
                 "offset": offset,
             },
         )
-        return IncidentsResponse.model_validate(data)
+        return _outlier_record(IncidentsResponse, data)
 
     def get_incident(self, incident_id: str) -> Incident:
         """
@@ -284,12 +302,12 @@ class DataQualityResource:
             >>> print(f"Root cause: {incident.root_cause}")
         """
         data = self._http.get(f"{self._base_path}/incidents/{incident_id}")
-        return Incident.model_validate(data)
+        return _outlier_record(Incident, data)
 
     async def aget_incident(self, incident_id: str) -> Incident:
         """Async version of get_incident()."""
         data = await self._http.aget(f"{self._base_path}/incidents/{incident_id}")
-        return Incident.model_validate(data)
+        return _outlier_record(Incident, data)
 
     # =========================================================================
     # Latency Endpoints
@@ -311,12 +329,12 @@ class DataQualityResource:
             ...     print(f"  OB lag: {metrics.data_freshness.orderbook_lag_ms}ms")
         """
         data = self._http.get(f"{self._base_path}/latency")
-        return LatencyResponse.model_validate(data)
+        return _outlier_record(LatencyResponse, data)
 
     async def alatency(self) -> LatencyResponse:
         """Async version of latency()."""
         data = await self._http.aget(f"{self._base_path}/latency")
-        return LatencyResponse.model_validate(data)
+        return _outlier_record(LatencyResponse, data)
 
     # =========================================================================
     # SLA Endpoints
@@ -339,7 +357,7 @@ class DataQualityResource:
             SlaResponse with SLA targets, actual metrics, and compliance status.
 
         Example:
-            >>> sla = client.data_quality.sla(year=2026, month=1)
+            >>> sla = client.data_quality.sla(year=2026, month=9)
             >>> print(f"Period: {sla.period}")
             >>> print(f"Uptime: {sla.actual.uptime}% ({sla.actual.uptime_status})")
             >>> print(f"Completeness: {sla.actual.data_completeness.overall}%")
@@ -352,7 +370,7 @@ class DataQualityResource:
                 "month": month,
             },
         )
-        return SlaResponse.model_validate(data)
+        return _outlier_record(SlaResponse, data)
 
     async def asla(
         self,
@@ -368,7 +386,7 @@ class DataQualityResource:
                 "month": month,
             },
         )
-        return SlaResponse.model_validate(data)
+        return _outlier_record(SlaResponse, data)
 
     # =========================================================================
     # Account Positions Freshness
