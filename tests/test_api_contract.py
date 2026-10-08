@@ -1145,7 +1145,7 @@ def test_channel_table_mirrors_capabilities() -> None:
 
 def test_only_mempool_names_an_endpoint_and_plans() -> None:
     # The mempool row of /v1/capabilities is the only one with ``ws_endpoint``
-    # and ``plans``; every other channel is on every endpoint and every plan.
+    # and ``plans``; every other channel is on the default endpoint and every plan.
     restricted = {
         channel: (spec.ws_endpoint, spec.plans)
         for channel, spec in WS_CHANNELS.items()

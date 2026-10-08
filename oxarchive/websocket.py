@@ -120,7 +120,8 @@ STREAM_WS_URL = "wss://stream.0xarchive.io/ws"
 """The only endpoint that serves ``mempool``, with the same API key and
 protocol as :data:`DEFAULT_WS_URL`. It serves a subset of the live channels;
 a channel it does not serve, and every replay, is answered with a
-:class:`~oxarchive.types.WsError` naming :data:`DEFAULT_WS_URL`. Use one
+:class:`~oxarchive.types.WsError` naming :data:`DEFAULT_WS_URL`. ``mempool``
+has no replay on any endpoint. Use one
 client per endpoint: ``WsOptions(api_key=..., ws_url=STREAM_WS_URL)``."""
 
 DEFAULT_PING_INTERVAL = 30
@@ -143,10 +144,10 @@ class WsChannelSpec:
             refused. It opens with an ``l4_snapshot`` from the nearest
             checkpoint at or before ``start`` and continues with ordered
             ``l4_batch`` messages.
-        ws_endpoint: The only WebSocket endpoint that serves the channel, when
-            that is not every endpoint (:data:`STREAM_WS_URL` for
-            ``mempool``). ``None`` means every endpoint, the client default
-            included.
+        ws_endpoint: The WebSocket endpoint that serves the channel, when it
+            is not the default endpoint (:data:`STREAM_WS_URL` for
+            ``mempool``). ``None`` means the default endpoint,
+            ``wss://api.0xarchive.io/ws``.
         plans: The plans that include the channel, when that is not every
             plan (``("pro", "scale", "enterprise")`` for ``mempool``). ``None``
             means every plan, Free included.
@@ -948,7 +949,7 @@ class OxArchiveWs:
             channel: Channel type
             coin: Coin symbol (required for coin-specific channels; optional
                 on ``mempool``, where leaving it out subscribes to every
-                pending transaction)
+                pending transaction our Hyperliquid node receives)
             interval_ms: ``lighter_orderbook`` and ``rh_lighter_orderbook``
                 only. Send the newest book at most once per this many
                 milliseconds (100 to 5000). Leave it out for one book a
@@ -1356,14 +1357,14 @@ class OxArchiveWs:
         as our Hyperliquid node receives them from its peers. Live only: there
         is no replay or history.
 
-        Without ``symbol``, every pending transaction. With one (``BTC``,
-        ``xyz:TSLA``, ``HYPE-USDC``, ``#49720``), only actions that reference
-        that market; an action that touches several markets reaches each of
-        their subscriptions whole. The unfiltered stream is several megabytes
-        a second before compression, and the server limits unfiltered
-        subscriptions: when they are at capacity, a subscribe without a
-        symbol is answered with ``rate_limited``. Subscribe with a symbol
-        where you can.
+        Without ``symbol``, every pending transaction our Hyperliquid node
+        receives. With one (``BTC``, ``xyz:TSLA``, ``HYPE-USDC``,
+        ``#49720``), only actions that reference that market; an action that
+        touches several markets reaches each of their subscriptions whole.
+        The unfiltered stream is several megabytes a second before
+        compression, and the server limits unfiltered subscriptions: when they
+        are at capacity, a subscribe without a symbol is answered with
+        ``rate_limited``. Subscribe with a symbol where you can.
 
         Messages arrive on :meth:`on_mempool` and, as
         :class:`~oxarchive.types.WsMempoolData`, on :meth:`on_message`.

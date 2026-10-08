@@ -2158,7 +2158,7 @@ Live trades are preliminary; `client.rh_lighter.trades.list()` serves the finali
 
 The `mempool` channel streams signed Hyperliquid transactions (orders, cancels, modifies, TWAPs, leverage changes, transfers and every other action type) as our Hyperliquid node receives them from its peers, before they are included in a block. It covers every Hyperliquid product: perps, HIP-3, HIP-4 and spot.
 
-- **Live only.** There is no replay, history, REST route or export; `replay()` raises `ValueError` for it before sending.
+- **Live only.** Pending transactions are never stored. There is no replay, history, REST route or export; `replay()` raises `ValueError` for it before sending.
 - **One endpoint.** It is served only at `wss://stream.0xarchive.io/ws` (`oxarchive.websocket.STREAM_WS_URL`), with the same API key and protocol. At `wss://api.0xarchive.io/ws`, the client default, a subscribe is answered with a `WsError` whose `error_code` is `endpoint_unsupported`. Use a separate client for the channels served at the default endpoint.
 - **Plans.** It is included with the Pro, Scale and Enterprise plans; on other plans a subscribe is answered with `error_code == "forbidden"`. Every other channel stays on every plan, Free included. Each data message is metered like any other WebSocket message.
 
@@ -2184,7 +2184,7 @@ async def main():
 
     ws.subscribe_mempool("BTC")       # actions that reference BTC
     ws.subscribe_mempool("xyz:TSLA")  # HIP-3; spot "HYPE-USDC", HIP-4 "#49720"
-    # ws.subscribe_mempool()          # every pending transaction (unfiltered)
+    # ws.subscribe_mempool()          # pending transactions our node receives (unfiltered)
 
     await asyncio.sleep(60)
     await ws.disconnect()
@@ -2192,7 +2192,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`symbol` is optional on this channel only. Without it you receive every pending transaction; with it, every action whose asset ids include that market, whole (an order batch that touches `BTC` and `ETH` reaches both subscriptions). Symbols are spelled as everywhere else: perps `BTC`, HIP-3 `xyz:TSLA`, spot `HYPE-USDC` (`HYPE/USDC` is also accepted) and HIP-4 `#49720`. An unknown symbol is answered with `invalid_symbol`. The `subscribed` acknowledgement carries the canonical symbol, or `None` for the unfiltered stream.
+`symbol` is optional on this channel only. Without it you receive every pending transaction our Hyperliquid node receives; with it, every action whose asset ids include that market, whole (an order batch that touches `BTC` and `ETH` reaches both subscriptions). Symbols are spelled as everywhere else: perps `BTC`, HIP-3 `xyz:TSLA`, spot `HYPE-USDC` (`HYPE/USDC` is also accepted) and HIP-4 `#49720`. An unknown symbol is answered with `invalid_symbol`. The `subscribed` acknowledgement carries the canonical symbol, or `None` for the unfiltered stream.
 
 The server sends one message per batch of transactions as it arrives. `on_mempool` receives the subscription's symbol (`None` when unfiltered) and one `MempoolItem` per signed action; `on_message` receives the whole message as `WsMempoolData`.
 

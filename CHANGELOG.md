@@ -15,9 +15,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `wss://stream.0xarchive.io/ws`, and included with the Pro, Scale and
   Enterprise plans. Every other channel stays on every plan.
 - `subscribe_mempool(symbol=None)` and `unsubscribe_mempool(symbol=None)`.
-  Without a symbol they cover every pending transaction; with one, only the
-  actions that reference that market. `mempool` is the only channel whose
-  symbol is optional.
+  Without a symbol they cover every pending transaction our Hyperliquid node
+  receives; with one, only the actions that reference that market.
+  `mempool` is the only channel whose symbol is optional.
 - `on_mempool()` handler, receiving `(symbol, [MempoolItem, ...])`, with
   `symbol` set to `None` on the unfiltered stream. Mempool messages reach
   `on_message()` as `WsMempoolData`.
@@ -28,8 +28,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `oxarchive.websocket.STREAM_WS_URL` (`wss://stream.0xarchive.io/ws`). Pass
   it as `WsOptions(ws_url=...)` for a client that subscribes to `mempool`.
 - `ws_endpoint` and `plans` on `WsChannelSpec` and `Capability`, mirroring
-  the fields `/v1/capabilities` sets on the `mempool` row only. `None` means
-  every endpoint and every plan.
+  the fields `/v1/capabilities` sets on the `mempool` row only. For
+  `ws_endpoint`, `None` means the default endpoint, `wss://api.0xarchive.io/ws`.
+  For `plans`, `None` means every plan.
 
 ## [1.12.0] - 2026-10-05
 

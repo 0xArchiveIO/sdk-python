@@ -1353,7 +1353,8 @@ class WsError(BaseModel):
     fell behind and messages were dropped: re-subscribe or restart the replay
     to resync), ``"endpoint_unsupported"`` (this endpoint does not serve the
     channel; the message names the one that does) or ``"forbidden"`` (the
-    channel is not included with your plan, as for ``mempool`` below Pro).
+    channel is not included with your plan, as for ``mempool`` on plans other
+    than Pro, Scale and Enterprise).
     """
 
     model_config = ConfigDict(extra="allow")
@@ -1506,7 +1507,7 @@ class WsMempoolData(BaseModel):
     symbol: Optional[str] = None
     """The subscription's symbol, or ``None`` on the unfiltered stream."""
     data: list[MempoolItem]
-    """One item per signed action, in the order received."""
+    """One item per signed action in the batch."""
 
 
 # =============================================================================
@@ -2956,9 +2957,9 @@ class Capability(BaseModel):
     """Anything else worth knowing, such as how its replay behaves."""
 
     ws_endpoint: Optional[str] = None
-    """The only WebSocket endpoint that serves its channels, when that is not
-    every endpoint (``"wss://stream.0xarchive.io/ws"`` for ``mempool``).
-    ``None`` means every endpoint."""
+    """The WebSocket endpoint that serves its channels, when it is not the
+    default endpoint (``"wss://stream.0xarchive.io/ws"`` for ``mempool``).
+    ``None`` means the default endpoint, ``wss://api.0xarchive.io/ws``."""
 
     plans: Optional[list[str]] = None
     """The plans that include it, when that is not every plan (``["pro",
