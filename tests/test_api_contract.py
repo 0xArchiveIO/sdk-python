@@ -1082,7 +1082,7 @@ def test_l3_history_granularity_stays_refused() -> None:
 # ===========================================================================
 
 # ``ws_channels``, ``live`` and ``replay`` of every row of GET /v1/capabilities
-# that names a channel, as served on 2026-10-04.
+# that names a channel, as served on 2026-10-04, plus the ``mempool`` row.
 CAPABILITY_CHANNELS: dict[str, tuple[str, bool, bool]] = {
     "orderbook": ("hyperliquid", True, True),
     "orderbook_full": ("hyperliquid", True, True),
@@ -1095,6 +1095,7 @@ CAPABILITY_CHANNELS: dict[str, tuple[str, bool, bool]] = {
     "liquidations": ("hyperliquid", True, True),
     "ticker": ("hyperliquid", True, False),
     "all_tickers": ("hyperliquid", True, False),
+    "mempool": ("hyperliquid", True, False),
     "hip3_orderbook": ("hip3", True, True),
     "hip3_orderbook_full": ("hip3", True, True),
     "hip3_l4_diffs": ("hip3", True, True),
@@ -1140,6 +1141,19 @@ def test_channel_table_mirrors_capabilities() -> None:
     for channel, (venue, live, replay) in {**CAPABILITY_CHANNELS, **REST_ONLY_CHANNELS}.items():
         spec = WS_CHANNELS[channel]
         assert (spec.venue, spec.live, spec.replay) == (venue, live, replay), channel
+
+
+def test_only_mempool_names_an_endpoint_and_plans() -> None:
+    # The mempool row of /v1/capabilities is the only one with ``ws_endpoint``
+    # and ``plans``; every other channel is on every endpoint and every plan.
+    restricted = {
+        channel: (spec.ws_endpoint, spec.plans)
+        for channel, spec in WS_CHANNELS.items()
+        if spec.ws_endpoint is not None or spec.plans is not None
+    }
+    assert restricted == {
+        "mempool": ("wss://stream.0xarchive.io/ws", ("pro", "scale", "enterprise"))
+    }
 
 
 def test_bulk_replay_channels_are_every_l4_and_full_depth_channel() -> None:

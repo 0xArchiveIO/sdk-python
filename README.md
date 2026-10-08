@@ -1852,7 +1852,7 @@ Every method has an async version prefixed with `a`: `await client.webhooks.aest
 
 Get API keys programmatically using an Ethereum wallet. No browser or email required.
 
-Free includes every market, route, schema, and served depth, with history limited to the most recent rolling 30 days and a maximum 30-day span per request or replay. Build and above keep the full retained archive. Plans gate capacity and Free's 30-day history window, not route families, schemas, or served depth. See [Pricing](https://www.0xarchive.io/pricing) for plan capacity.
+Free includes every market, route, schema, and served depth, with history limited to the most recent rolling 30 days and a maximum 30-day span per request or replay. Build and above keep the full retained archive. Plans gate capacity and Free's 30-day history window, not route families, schemas, or served depth. The one exception is the live `mempool` WebSocket channel, included with the Pro, Scale and Enterprise plans. See [Pricing](https://www.0xarchive.io/pricing) for plan capacity.
 
 #### Free Tier (SIWE)
 
@@ -1983,6 +1983,8 @@ The WebSocket client supports live subscriptions for supported Hyperliquid and L
 > Lighter supports live subscriptions on `lighter_orderbook`, `lighter_trades`, `lighter_open_interest`, and `lighter_funding` at `wss://api.0xarchive.io/ws` (the client default). `lighter_candles` and `lighter_l3_orderbook` remain replay-only. All six Lighter channels support historical replay, and replay messages have the same shapes as the live ones.
 
 > Lighter on Robinhood Chain supports live subscriptions on `rh_lighter_orderbook`, `rh_lighter_trades`, `rh_lighter_open_interest`, and `rh_lighter_funding` at `wss://api.0xarchive.io/ws` only, with the same message shapes as the mainnet Lighter channels. `rh_lighter_candles` is replay-only. All five channels support historical replay.
+
+> The `mempool` channel (pending Hyperliquid transactions) is served only at `wss://stream.0xarchive.io/ws` and is included with the Pro, Scale and Enterprise plans. See [Pending Transactions (Mempool)](#pending-transactions-mempool).
 
 Every connection selects API version `2026-10-01` (the `version` connection parameter). Server errors arrive on `on_message` as `WsError` messages with a stable `error_code` (see [Error Handling](#error-handling)): for example `unsupported_for_venue` when a channel does not offer the requested mode, `slow_consumer` when the connection fell behind and messages were dropped, and `endpoint_unsupported` when the endpoint does not serve the channel.
 
@@ -2152,6 +2154,65 @@ ws.subscribe("rh_lighter_orderbook", "BTC", interval_ms=250)
 
 Live trades are preliminary; `client.rh_lighter.trades.list()` serves the finalized record.
 
+### Pending Transactions (Mempool)
+
+The `mempool` channel streams signed Hyperliquid transactions (orders, cancels, modifies, TWAPs, leverage changes, transfers and every other action type) as our Hyperliquid node receives them from its peers, before they are included in a block. It covers every Hyperliquid product: perps, HIP-3, HIP-4 and spot.
+
+- **Live only.** There is no replay, history, REST route or export; `replay()` raises `ValueError` for it before sending.
+- **One endpoint.** It is served only at `wss://stream.0xarchive.io/ws` (`oxarchive.websocket.STREAM_WS_URL`), with the same API key and protocol. At `wss://api.0xarchive.io/ws`, the client default, a subscribe is answered with a `WsError` whose `error_code` is `endpoint_unsupported`. Use a separate client for the channels served at the default endpoint.
+- **Plans.** It is included with the Pro, Scale and Enterprise plans; on other plans a subscribe is answered with `error_code == "forbidden"`. Every other channel stays on every plan, Free included. Each data message is metered like any other WebSocket message.
+
+```python
+import asyncio
+from oxarchive import OxArchiveWs, WsError, WsOptions
+from oxarchive.websocket import STREAM_WS_URL
+
+async def main():
+    ws = OxArchiveWs(WsOptions(api_key="0xa_your_api_key", ws_url=STREAM_WS_URL))
+
+    def on_mempool(symbol, items):
+        for item in items:
+            print(symbol, item.received_at, item.action["type"], item.symbols)
+
+    def on_message(msg):
+        if isinstance(msg, WsError):
+            print(msg.error_code, msg.message)
+
+    ws.on_mempool(on_mempool)
+    ws.on_message(on_message)
+    await ws.connect()
+
+    ws.subscribe_mempool("BTC")       # actions that reference BTC
+    ws.subscribe_mempool("xyz:TSLA")  # HIP-3; spot "HYPE-USDC", HIP-4 "#49720"
+    # ws.subscribe_mempool()          # every pending transaction (unfiltered)
+
+    await asyncio.sleep(60)
+    await ws.disconnect()
+
+asyncio.run(main())
+```
+
+`symbol` is optional on this channel only. Without it you receive every pending transaction; with it, every action whose asset ids include that market, whole (an order batch that touches `BTC` and `ETH` reaches both subscriptions). Symbols are spelled as everywhere else: perps `BTC`, HIP-3 `xyz:TSLA`, spot `HYPE-USDC` (`HYPE/USDC` is also accepted) and HIP-4 `#49720`. An unknown symbol is answered with `invalid_symbol`. The `subscribed` acknowledgement carries the canonical symbol, or `None` for the unfiltered stream.
+
+The server sends one message per batch of transactions as it arrives. `on_mempool` receives the subscription's symbol (`None` when unfiltered) and one `MempoolItem` per signed action; `on_message` receives the whole message as `WsMempoolData`.
+
+| Field | Description |
+|-------|-------------|
+| `received_at` | When our node received the transaction: an RFC 3339 UTC string with nanosecond precision. Not a block time. |
+| `received_at_ms` | The same time in Unix milliseconds |
+| `symbols` | Markets the action's asset ids reference, in first-seen order without repeats. Empty for actions with no market, such as transfers, `noop`, `scheduleCancel` and validator actions |
+| `action` | The action exactly as signed, in Hyperliquid's exchange-action format: asset ids (`a` or `asset`) rather than symbols, prices and sizes as strings, keys in the order sent |
+| `nonce` | The action's nonce |
+| `vault_address` | The vault or subaccount the action acts for, or `None` |
+| `expires_after_ms` | The action's `expiresAfter` in Unix milliseconds, or `None` |
+| `signature` | `MempoolSignature` with `r`, `s` and `v`. The signer's address is not included |
+
+`action["type"]` names the action, for example `order`, `cancel`, `cancelByCloid`, `modify`, `batchModify`, `scheduleCancel`, `twapOrder`, `twapCancel`, `updateLeverage`, `updateIsolatedMargin`, `noop`, `evmRawTx`, or a transfer such as `usdSend`, `spotSend`, `usdClassTransfer` or `sendAsset`. Hyperliquid adds action types, so handle types you do not recognise.
+
+A pending transaction is not an executed one: it can still be rejected, expire or never land in a block. The same signed action can occasionally arrive twice; deduplicate on `signature` if that matters to you.
+
+**Volume and limits**: the unfiltered stream is several megabytes per second before compression. The client negotiates permessage-deflate compression by default; subscribe with a symbol where you can. Unfiltered subscriptions are limited server-wide, and when they are at capacity a subscribe without a symbol is answered with `rate_limited`; symbol subscriptions are not capped this way. A connection that reads too slowly is disconnected, as on any channel, and the usual per-connection limits apply (subscriptions per plan, 10 subscribe operations per second). If the feed is temporarily unavailable, a subscribe is answered with `upstream_unavailable`.
+
 ### Historical Replay
 
 Replay historical data with timing preserved. Perfect for backtesting.
@@ -2298,7 +2359,7 @@ Gap thresholds vary by channel:
 ```python
 ws = OxArchiveWs(WsOptions(
     api_key="0xa_your_api_key",
-    ws_url="wss://api.0xarchive.io/ws",  # Optional
+    ws_url="wss://api.0xarchive.io/ws",  # Optional; STREAM_WS_URL for mempool
     auto_reconnect=True,                  # Auto-reconnect on disconnect (default: True)
     reconnect_delay=1.0,                  # Initial reconnect delay in seconds (default: 1.0)
     max_reconnect_attempts=10,            # Max reconnect attempts (default: 10)
@@ -2315,6 +2376,9 @@ from oxarchive.websocket import WS_CHANNELS
 
 spec = WS_CHANNELS["spot_l4_diffs"]
 print(spec.venue, spec.live, spec.replay, spec.bulk_replay)  # spot True True True
+
+spec = WS_CHANNELS["mempool"]
+print(spec.ws_endpoint, spec.plans)  # wss://stream.0xarchive.io/ws ('pro', 'scale', 'enterprise')
 ```
 
 #### Hyperliquid Channels
@@ -2332,6 +2396,7 @@ print(spec.venue, spec.live, spec.replay, spec.bulk_replay)  # spot True True Tr
 | `l4_diffs` | L4 orderbook diffs with user attribution | Yes | Yes | Yes (bulk) |
 | `l4_orders` | Order lifecycle events with user attribution | Yes | Yes | Yes (bulk) |
 | `orderbook_full` | Full-depth L2 order book: every price level, then changed levels | Yes | Yes | Yes (bulk) |
+| `mempool` | Pending transactions on every Hyperliquid product, before they are in a block (Pro, Scale and Enterprise plans; served only at `wss://stream.0xarchive.io/ws`) | No (optional filter) | Yes | No |
 
 Bulk replays open with an `l4_snapshot` and continue with ordered `l4_batch` messages; see [L4 and Full-Depth Replay](#l4-and-full-depth-replay).
 

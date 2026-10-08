@@ -27,6 +27,13 @@ Examples:
         >>> ws.subscribe_rh_lighter_orderbook("AAPL-USDG")
         >>> ws.subscribe_rh_lighter_trades("BTC")
 
+    Pending Hyperliquid transactions (Pro, Scale and Enterprise plans), served
+    only at ``wss://stream.0xarchive.io/ws``:
+        >>> mempool = OxArchiveWs(WsOptions(api_key="ox_...", ws_url=STREAM_WS_URL))
+        >>> await mempool.connect()
+        >>> mempool.on_mempool(lambda symbol, items: print(symbol, len(items)))
+        >>> mempool.subscribe_mempool("BTC")
+
     Historical replay:
         >>> ws = OxArchiveWs(WsOptions(api_key="ox_..."))
         >>> await ws.connect()
@@ -71,6 +78,7 @@ from .types import (
     LighterMarketContext,
     LighterMarketContextUpdate,
     Liquidation,
+    MempoolItem,
     OrderBook,
     OrderbookDelta,
     PriceLevel,
@@ -81,6 +89,7 @@ from .types import (
     WsL4Snapshot,
     WsL4Batch,
     WsError,
+    WsMempoolData,
     WsOutcomeSettled,
     WsPong,
     WsSubscribed,
@@ -105,6 +114,15 @@ from .types import (
 logger = logging.getLogger("oxarchive.websocket")
 
 DEFAULT_WS_URL = "wss://api.0xarchive.io/ws"
+"""The client default: every channel except ``mempool``, and every replay."""
+
+STREAM_WS_URL = "wss://stream.0xarchive.io/ws"
+"""The only endpoint that serves ``mempool``, with the same API key and
+protocol as :data:`DEFAULT_WS_URL`. It serves a subset of the live channels;
+a channel it does not serve, and every replay, is answered with a
+:class:`~oxarchive.types.WsError` naming :data:`DEFAULT_WS_URL`. Use one
+client per endpoint: ``WsOptions(api_key=..., ws_url=STREAM_WS_URL)``."""
+
 DEFAULT_PING_INTERVAL = 30
 DEFAULT_RECONNECT_DELAY = 1.0
 DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
@@ -125,6 +143,13 @@ class WsChannelSpec:
             refused. It opens with an ``l4_snapshot`` from the nearest
             checkpoint at or before ``start`` and continues with ordered
             ``l4_batch`` messages.
+        ws_endpoint: The only WebSocket endpoint that serves the channel, when
+            that is not every endpoint (:data:`STREAM_WS_URL` for
+            ``mempool``). ``None`` means every endpoint, the client default
+            included.
+        plans: The plans that include the channel, when that is not every
+            plan (``("pro", "scale", "enterprise")`` for ``mempool``). ``None``
+            means every plan, Free included.
     """
 
     venue: str
@@ -132,14 +157,24 @@ class WsChannelSpec:
     live: bool
     replay: bool
     bulk_replay: bool = False
+    ws_endpoint: Optional[str] = None
+    plans: Optional[tuple[str, ...]] = None
 
 
 def _both(venue: str, datatype: str, *, bulk: bool = False) -> WsChannelSpec:
     return WsChannelSpec(venue, datatype, live=True, replay=True, bulk_replay=bulk)
 
 
-def _live_only(venue: str, datatype: str) -> WsChannelSpec:
-    return WsChannelSpec(venue, datatype, live=True, replay=False)
+def _live_only(
+    venue: str,
+    datatype: str,
+    *,
+    ws_endpoint: Optional[str] = None,
+    plans: Optional[tuple[str, ...]] = None,
+) -> WsChannelSpec:
+    return WsChannelSpec(
+        venue, datatype, live=True, replay=False, ws_endpoint=ws_endpoint, plans=plans
+    )
 
 
 def _replay_only(venue: str, datatype: str) -> WsChannelSpec:
@@ -164,6 +199,12 @@ WS_CHANNELS: Mapping[str, WsChannelSpec] = MappingProxyType(
         "liquidations": _both("hyperliquid", "liquidations"),
         "ticker": _live_only("hyperliquid", "ticker"),
         "all_tickers": _live_only("hyperliquid", "ticker"),
+        "mempool": _live_only(
+            "hyperliquid",
+            "mempool",
+            ws_endpoint=STREAM_WS_URL,
+            plans=("pro", "scale", "enterprise"),
+        ),
         # HIP-3
         "hip3_orderbook": _both("hip3", "l2_orderbook"),
         "hip3_orderbook_full": _both("hip3", "l2_full_depth", bulk=True),
@@ -211,7 +252,13 @@ from this table is sent as given and the server decides.
 ``hip4_orderbook`` and ``hip4_open_interest`` replay but do not stream live.
 ``spot_twap`` neither streams nor replays: capabilities lists spot TWAP as REST
 only (``client.spot.twap``), and it is kept here so that subscribing to it
-fails with that explanation instead of waiting for messages that never come."""
+fails with that explanation instead of waiting for messages that never come.
+
+``mempool`` streams live only, and only at the endpoint in its ``ws_endpoint``
+(:data:`STREAM_WS_URL`) with the plans in its ``plans``. The server decides
+both: elsewhere a subscribe is answered with a :class:`~oxarchive.types.WsError`
+whose ``error_code`` is ``"endpoint_unsupported"``, and on another plan with
+``"forbidden"``."""
 
 LIVE_CHANNELS: frozenset[str] = frozenset(c for c, spec in WS_CHANNELS.items() if spec.live)
 """Channels a subscription streams live."""
@@ -436,7 +483,8 @@ class WsOptions:
 
     Attributes:
         api_key: Your 0xarchive API key
-        ws_url: WebSocket server URL (default: wss://api.0xarchive.io/ws)
+        ws_url: WebSocket server URL (default: wss://api.0xarchive.io/ws). The
+            ``mempool`` channel is served only at :data:`STREAM_WS_URL`.
         auto_reconnect: Automatically reconnect on disconnect (default: True)
         reconnect_delay: Initial reconnect delay in seconds (default: 1.0)
         max_reconnect_attempts: Maximum reconnection attempts (default: 10)
@@ -462,6 +510,7 @@ MessageHandler = Callable[
             WsL4Snapshot,
             WsL4Batch,
             WsOutcomeSettled,
+            WsMempoolData,
         ]
     ],
     None,
@@ -469,6 +518,7 @@ MessageHandler = Callable[
 OrderbookHandler = Callable[[str, OrderBook], None]
 TradesHandler = Callable[[str, list[Trade]], None]
 LiquidationsHandler = Callable[[str, list[Liquidation]], None]
+MempoolHandler = Callable[[Optional[str], list[MempoolItem]], None]
 OutcomeSettledHandler = Callable[[WsOutcomeSettled], None]
 LighterMarketContextHandler = Callable[[WsChannel, str, LighterMarketContext], None]
 StateHandler = Callable[[WsConnectionState], None]
@@ -792,6 +842,7 @@ class OxArchiveWs:
         self._on_rh_lighter_orderbook: Optional[OrderbookHandler] = None
         self._on_rh_lighter_trades: Optional[TradesHandler] = None
         self._on_rh_lighter_market_context: Optional[LighterMarketContextHandler] = None
+        self._on_mempool: Optional[MempoolHandler] = None
         self._on_state_change: Optional[StateHandler] = None
         self._on_error: Optional[ErrorHandler] = None
         self._on_open: Optional[Callable[[], None]] = None
@@ -895,7 +946,9 @@ class OxArchiveWs:
 
         Args:
             channel: Channel type
-            coin: Coin symbol (required for coin-specific channels)
+            coin: Coin symbol (required for coin-specific channels; optional
+                on ``mempool``, where leaving it out subscribes to every
+                pending transaction)
             interval_ms: ``lighter_orderbook`` and ``rh_lighter_orderbook``
                 only. Send the newest book at most once per this many
                 milliseconds (100 to 5000). Leave it out for one book a
@@ -1288,6 +1341,40 @@ class OxArchiveWs:
         """Unsubscribe from live ``rh_lighter_funding`` updates."""
         self.unsubscribe("rh_lighter_funding", coin)
 
+    # -- Mempool (pending transactions, live only) ---------------------------
+    #
+    # Served only at ``wss://stream.0xarchive.io/ws`` (:data:`STREAM_WS_URL`),
+    # with the Pro, Scale and Enterprise plans. A subscribe sent to the default
+    # endpoint is answered with ``endpoint_unsupported``, and one on another
+    # plan with ``forbidden``.
+
+    def subscribe_mempool(self, symbol: Optional[str] = None) -> None:
+        """Subscribe to pending Hyperliquid transactions, before they are in a block.
+
+        Signed actions (orders, cancels, modifies, TWAPs, leverage changes,
+        transfers and every other action type) on every Hyperliquid product,
+        as our Hyperliquid node receives them from its peers. Live only: there
+        is no replay or history.
+
+        Without ``symbol``, every pending transaction. With one (``BTC``,
+        ``xyz:TSLA``, ``HYPE-USDC``, ``#49720``), only actions that reference
+        that market; an action that touches several markets reaches each of
+        their subscriptions whole. The unfiltered stream is several megabytes
+        a second before compression, and the server limits unfiltered
+        subscriptions: when they are at capacity, a subscribe without a
+        symbol is answered with ``rate_limited``. Subscribe with a symbol
+        where you can.
+
+        Messages arrive on :meth:`on_mempool` and, as
+        :class:`~oxarchive.types.WsMempoolData`, on :meth:`on_message`.
+        Connect the client to :data:`STREAM_WS_URL` first.
+        """
+        self.subscribe("mempool", symbol)
+
+    def unsubscribe_mempool(self, symbol: Optional[str] = None) -> None:
+        """Unsubscribe from pending transactions: the unfiltered stream, or one symbol's."""
+        self.unsubscribe("mempool", symbol)
+
     # =========================================================================
     # Historical Replay (Option B) - Like Tardis.dev
     # =========================================================================
@@ -1306,7 +1393,7 @@ class OxArchiveWs:
 
         Every channel whose :data:`WS_CHANNELS` entry has ``replay`` replays;
         the others (``ticker``, ``all_tickers``, ``spot_orderbook``,
-        ``spot_trades`` and ``spot_twap``) are refused here with
+        ``spot_trades``, ``spot_twap`` and ``mempool``) are refused here with
         ``ValueError`` before anything is sent.
 
         L4 channels (``l4_diffs``, ``l4_orders`` and the ``hip3_``, ``hip4_``
@@ -1653,6 +1740,15 @@ class OxArchiveWs:
         """
         self._on_rh_lighter_market_context = handler
 
+    def on_mempool(self, handler: MempoolHandler) -> None:
+        """Set handler for ``mempool`` messages (pending transactions).
+
+        Handler receives ``(symbol, [MempoolItem, ...])``: the subscription's
+        symbol, or ``None`` on the unfiltered stream, and one
+        :class:`~oxarchive.types.MempoolItem` per signed action.
+        """
+        self._on_mempool = handler
+
     def on_state_change(self, handler: StateHandler) -> None:
         """Set handler for state changes."""
         self._on_state_change = handler
@@ -1955,6 +2051,15 @@ class OxArchiveWs:
                 msg = WsError(**data)
                 if self._on_message:
                     self._on_message(msg)
+
+            # Pending transactions. The unfiltered stream has no symbol, so
+            # these frames have their own model instead of WsData.
+            elif msg_type == "data" and data.get("channel") == "mempool":
+                mempool = WsMempoolData.model_validate(data)
+                if self._on_message:
+                    self._on_message(mempool)
+                if self._on_mempool:
+                    self._on_mempool(mempool.symbol, mempool.data)
 
             elif msg_type == "data":
                 msg = WsData(**data)

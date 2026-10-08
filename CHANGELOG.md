@@ -5,6 +5,32 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-10-08
+
+### Added
+- The `mempool` WebSocket channel: signed Hyperliquid transactions as our
+  Hyperliquid node receives them from its peers, before they are included in
+  a block, for every Hyperliquid product. It is live only (`replay()` raises
+  `ValueError` for it before sending), served only at
+  `wss://stream.0xarchive.io/ws`, and included with the Pro, Scale and
+  Enterprise plans. Every other channel stays on every plan.
+- `subscribe_mempool(symbol=None)` and `unsubscribe_mempool(symbol=None)`.
+  Without a symbol they cover every pending transaction; with one, only the
+  actions that reference that market. `mempool` is the only channel whose
+  symbol is optional.
+- `on_mempool()` handler, receiving `(symbol, [MempoolItem, ...])`, with
+  `symbol` set to `None` on the unfiltered stream. Mempool messages reach
+  `on_message()` as `WsMempoolData`.
+- Typed items: `MempoolItem` (`received_at`, `received_at_ms`, `symbols`,
+  `action`, `nonce`, `vault_address`, `expires_after_ms`, `signature`) and
+  `MempoolSignature`. `action` is kept exactly as signed, as a dict in the
+  order sent.
+- `oxarchive.websocket.STREAM_WS_URL` (`wss://stream.0xarchive.io/ws`). Pass
+  it as `WsOptions(ws_url=...)` for a client that subscribes to `mempool`.
+- `ws_endpoint` and `plans` on `WsChannelSpec` and `Capability`, mirroring
+  the fields `/v1/capabilities` sets on the `mempool` row only. `None` means
+  every endpoint and every plan.
+
 ## [1.12.0] - 2026-10-05
 
 Builds on 1.11.0. Two venues, Hyperliquid and Lighter; Lighter now has two

@@ -1272,6 +1272,7 @@ WsChannel = Literal[
     "hip3_l4_diffs", "hip3_l4_orders",
     "orderbook_full", "hip3_orderbook_full",
     "spot_orderbook", "spot_trades", "spot_l4_diffs", "spot_l4_orders", "spot_twap",
+    "mempool",
 ]
 """Available WebSocket channels.
 
@@ -1288,8 +1289,8 @@ Which channels stream live and which replay is listed per channel in
 - Replay only: ``candles``, ``hip3_candles``, ``hip4_orderbook``,
   ``hip4_open_interest``, ``lighter_candles``, ``lighter_l3_orderbook`` and
   ``rh_lighter_candles``.
-- Live only: ``ticker``, ``all_tickers``, ``spot_orderbook`` and
-  ``spot_trades``.
+- Live only: ``ticker``, ``all_tickers``, ``spot_orderbook``,
+  ``spot_trades`` and ``mempool``.
 - Neither: ``spot_twap``. Spot TWAP statuses are served over REST only
   (``client.spot.twap``); subscribing raises ``ValueError``.
 
@@ -1304,6 +1305,11 @@ Liquidation items share the trades wire shape (a fill row with
 messages share one shape per channel (see :class:`LighterLiveTrade` and
 :class:`LighterMarketContext`). HIP-4 has no funding or liquidation channels,
 and spot has no funding, open interest or liquidation channels.
+
+``mempool`` carries pending Hyperliquid transactions (see
+:class:`MempoolItem`). It is the one channel served only at
+``wss://stream.0xarchive.io/ws`` and only with the Pro, Scale and Enterprise
+plans, and the one channel whose symbol is optional.
 """
 
 WsConnectionState = Literal["connecting", "connected", "disconnected", "reconnecting"]
@@ -1345,8 +1351,9 @@ class WsError(BaseModel):
     for example ``"invalid_parameter"``, ``"unsupported_for_venue"`` (the
     channel does not offer that mode), ``"slow_consumer"`` (the connection
     fell behind and messages were dropped: re-subscribe or restart the replay
-    to resync) or ``"endpoint_unsupported"`` (this endpoint does not serve the
-    channel; the message names the one that does).
+    to resync), ``"endpoint_unsupported"`` (this endpoint does not serve the
+    channel; the message names the one that does) or ``"forbidden"`` (the
+    channel is not included with your plan, as for ``mempool`` below Pro).
     """
 
     model_config = ConfigDict(extra="allow")
@@ -1405,6 +1412,101 @@ class WsL4Batch(BaseModel):
 
     data: list[dict[str, Any]]
     """Events in server order; each event carries its own block/sequence data."""
+
+
+# =============================================================================
+# WebSocket Mempool Types
+# =============================================================================
+#
+# ``mempool`` streams signed Hyperliquid transactions as our Hyperliquid node
+# receives them from its peers, before they are included in a block, for every
+# Hyperliquid product (perps, HIP-3, HIP-4 and spot). It is live only: there is
+# no replay, history or REST route. It is served only at
+# ``wss://stream.0xarchive.io/ws``, with the Pro, Scale and Enterprise plans.
+
+
+class MempoolSignature(BaseModel):
+    """The ``{r, s, v}`` signature of a pending action, as signed."""
+
+    model_config = ConfigDict(extra="allow")
+
+    r: str
+    """``r`` as a hex string."""
+
+    s: str
+    """``s`` as a hex string."""
+
+    v: int
+    """Recovery id."""
+
+
+class MempoolItem(BaseModel):
+    """One signed action from a ``mempool`` message.
+
+    A pending transaction is not an executed one: it can still be rejected,
+    expire or never land in a block. The same signed action can occasionally
+    arrive twice; deduplicate on :attr:`signature` if that matters to you.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    received_at: Optional[str] = None
+    """When our node received the transaction, as an RFC 3339 UTC string with
+    the node's nanosecond precision (``"2026-10-08T01:57:23.548737209Z"``). It
+    is not a block time. Kept as a string because ``datetime`` holds
+    microseconds only; :attr:`received_at_ms` has it as Unix milliseconds."""
+
+    received_at_ms: Optional[int] = None
+    """When our node received the transaction, in Unix milliseconds."""
+
+    symbols: list[str] = Field(default_factory=list)
+    """The markets the action's asset ids reference, spelled as everywhere else
+    (``BTC``, ``xyz:TSLA``, ``HYPE-USDC``, ``#49720``), in first-seen order
+    without repeats. Empty for actions with no market, such as transfers,
+    ``noop``, ``scheduleCancel`` and validator actions."""
+
+    action: dict[str, Any]
+    """The action exactly as signed, in Hyperliquid's exchange-action format:
+    asset ids (``a`` or ``asset``) rather than symbols, and prices and sizes as
+    strings, with keys in the order sent. ``action["type"]`` names it, for
+    example ``order``, ``cancel``, ``cancelByCloid``, ``modify``,
+    ``batchModify``, ``scheduleCancel``, ``twapOrder``, ``twapCancel``,
+    ``updateLeverage``, ``updateIsolatedMargin``, ``noop``, ``evmRawTx`` or a
+    transfer (``usdSend``, ``spotSend``, ``usdClassTransfer``, ``sendAsset``).
+    Hyperliquid adds action types, so handle types you do not recognise."""
+
+    nonce: Optional[int] = None
+    """The action's nonce."""
+
+    vault_address: Optional[str] = None
+    """The vault or subaccount the action acts for, or ``None``."""
+
+    expires_after_ms: Optional[int] = None
+    """The action's ``expiresAfter`` in Unix milliseconds, or ``None``."""
+
+    signature: Optional[MempoolSignature] = None
+    """The signature over the action. The signer's address is not included;
+    it can be recovered from the signature and the action."""
+
+
+class WsMempoolData(BaseModel):
+    """A ``mempool`` data message: one batch of pending transactions.
+
+    The server sends one message per batch our node receives from a peer, as
+    soon as it arrives. ``coin`` and ``symbol`` are the subscription's symbol,
+    or ``None`` on the unfiltered stream. A symbol subscription receives every
+    action that references that market, whole: an order batch that touches
+    ``BTC`` and ``ETH`` reaches both subscriptions.
+    """
+
+    type: Literal["data"]
+    channel: Literal["mempool"]
+    coin: Optional[str] = None
+    """The subscription's symbol, or ``None`` on the unfiltered stream."""
+    symbol: Optional[str] = None
+    """The subscription's symbol, or ``None`` on the unfiltered stream."""
+    data: list[MempoolItem]
+    """One item per signed action, in the order received."""
 
 
 # =============================================================================
@@ -2852,6 +2954,16 @@ class Capability(BaseModel):
 
     notes: Optional[str] = None
     """Anything else worth knowing, such as how its replay behaves."""
+
+    ws_endpoint: Optional[str] = None
+    """The only WebSocket endpoint that serves its channels, when that is not
+    every endpoint (``"wss://stream.0xarchive.io/ws"`` for ``mempool``).
+    ``None`` means every endpoint."""
+
+    plans: Optional[list[str]] = None
+    """The plans that include it, when that is not every plan (``["pro",
+    "scale", "enterprise"]`` for ``mempool``). ``None`` means every plan, Free
+    included."""
 
 
 # =============================================================================
