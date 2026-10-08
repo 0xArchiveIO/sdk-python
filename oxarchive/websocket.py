@@ -59,7 +59,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Callable, Literal, Mapping, Optional, Set, Union
+from typing import Any, Callable, Coroutine, Literal, Mapping, Optional, Set, Union
 from urllib.parse import urlencode
 
 try:
@@ -828,6 +828,10 @@ class OxArchiveWs:
         self._running = False
         self._ping_task: Optional[asyncio.Task] = None
         self._receive_task: Optional[asyncio.Task] = None
+        # Subscribe and unsubscribe frames sent in the background by the
+        # non-async methods; held here because asyncio keeps only weak
+        # references to tasks, and flushed by disconnect().
+        self._pending_sends: Set[asyncio.Task[None]] = set()
 
         # Event handlers
         self._on_message: Optional[MessageHandler] = None
@@ -920,7 +924,14 @@ class OxArchiveWs:
         return f"{self.options.ws_url}{separator}{query}"
 
     async def disconnect(self) -> None:
-        """Disconnect from the WebSocket server."""
+        """Disconnect from the WebSocket server.
+
+        Subscribe and unsubscribe calls made just before are sent first (for
+        up to 2 seconds), so an unsubscribe followed by ``disconnect()`` reaches
+        the server.
+        """
+        if self._pending_sends:
+            await asyncio.wait(set(self._pending_sends), timeout=2)
         self._running = False
         self._set_state("disconnected")
 
@@ -969,7 +980,7 @@ class OxArchiveWs:
         self._remember_subscription(channel, coin, interval_ms)
 
         if self.is_connected:
-            asyncio.create_task(self._send_subscribe(channel, coin, interval_ms))
+            self._send_in_background(self._send_subscribe(channel, coin, interval_ms))
 
     async def subscribe_async(
         self,
@@ -1012,7 +1023,7 @@ class OxArchiveWs:
         self._subscription_options.pop(key, None)
 
         if self.is_connected:
-            asyncio.create_task(self._send_unsubscribe(channel, coin))
+            self._send_in_background(self._send_unsubscribe(channel, coin))
 
     async def unsubscribe_async(self, channel: WsChannel, coin: Optional[str] = None) -> None:
         """Unsubscribe from a channel (async version)."""
@@ -1958,6 +1969,28 @@ class OxArchiveWs:
             self._subscription_options[key] = {"interval_ms": interval_ms}
         else:
             self._subscription_options.pop(key, None)
+
+    def _send_in_background(self, send: Coroutine[Any, Any, None]) -> None:
+        """Run a subscribe or unsubscribe send without blocking the caller."""
+        task = asyncio.create_task(send)
+        self._pending_sends.add(task)
+        task.add_done_callback(self._send_finished)
+
+    def _send_finished(self, task: asyncio.Task[None]) -> None:
+        """Retrieve a background send's outcome. A send that lost the
+        connection is dropped: the server forgets a closed connection's
+        subscriptions, and a reconnect resubscribes from the remembered set.
+        Any other failure goes to the error handler."""
+        self._pending_sends.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if not isinstance(exc, Exception) or isinstance(exc, ConnectionClosed):
+            return
+        if self._on_error:
+            self._on_error(exc)
+        else:
+            logger.warning("WebSocket send failed: %s", exc)
 
     async def _send_subscribe(
         self,

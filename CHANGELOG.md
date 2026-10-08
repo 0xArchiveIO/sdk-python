@@ -32,6 +32,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `ws_endpoint`, `None` means the default endpoint, `wss://api.0xarchive.io/ws`.
   For `plans`, `None` means every plan.
 
+### Fixed
+
+- `OxArchiveWs.disconnect()` now sends the subscribe and unsubscribe calls
+  made just before it (waiting up to 2 seconds), so an unsubscribe followed
+  by `disconnect()` reaches the server. A background send that finds the
+  connection already closed is dropped quietly instead of logging
+  `Task exception was never retrieved`; any other send failure goes to the
+  `on_error` handler.
+
 ## [1.12.0] - 2026-10-05
 
 Builds on 1.11.0. Two venues, Hyperliquid and Lighter; Lighter now has two
