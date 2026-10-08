@@ -203,6 +203,10 @@ from .types import (
     WsData,
     WsL4Snapshot,
     WsL4Batch,
+    # Mempool (pending transactions) types
+    MempoolItem,
+    MempoolSignature,
+    WsMempoolData,
     # Live Lighter payload types
     LighterLiveTrade,
     LighterMarketContext,
@@ -244,7 +248,7 @@ except ImportError:
     WS_CHANNELS = None  # type: ignore
     decode_lighter_payload = None  # type: ignore
 
-__version__ = "1.12.0"
+__version__ = "1.13.0"
 
 __all__ = [
     # Client
@@ -408,6 +412,10 @@ __all__ = [
     "WsData",
     "WsL4Snapshot",
     "WsL4Batch",
+    # Mempool (Pending Transactions) Types
+    "MempoolItem",
+    "MempoolSignature",
+    "WsMempoolData",
     # Live Lighter Payload Types
     "LighterLiveTrade",
     "LighterMarketContext",

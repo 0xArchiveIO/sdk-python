@@ -78,11 +78,13 @@ def test_capabilities_match_the_websocket_channel_table(client: Client) -> None:
     by_datatype = {(row.venue, row.datatype): row for row in rows}
     for row in rows:
         for channel in row.ws_channels:
-            served[channel] = (row.venue, row.live, row.replay)
+            plans = tuple(row.plans) if row.plans is not None else None
+            served[channel] = (row.venue, row.live, row.replay, row.ws_endpoint, plans)
     assert served, "no row names a WebSocket channel"
-    for channel, (venue, live, replay) in served.items():
+    for channel, (venue, live, replay, ws_endpoint, plans) in served.items():
         spec = WS_CHANNELS[channel]
         assert (spec.venue, spec.live, spec.replay) == (venue, live, replay), channel
+        assert (spec.ws_endpoint, spec.plans) == (ws_endpoint, plans), channel
     # A channel no row names must be one its datatype's row says neither
     # streams nor replays (spot TWAP is served over REST only).
     for channel, spec in WS_CHANNELS.items():
