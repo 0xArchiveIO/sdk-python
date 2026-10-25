@@ -2815,7 +2815,7 @@ For large-scale data exports (route-specific order books, fill-level trade histo
 - [Rust SDK](https://crates.io/crates/oxarchive)
 - [CLI](https://npmjs.com/package/@0xarchive/cli)
 - [MCP Server](https://docs.0xarchive.io/mcp-server)
-- [0xArchive Skill](https://github.com/0xArchiveIO/0xarchive-skill)
+- [0xArchive agent skills](https://github.com/0xArchiveIO/0xarchive-quant)
 - [Examples](https://github.com/0xArchiveIO/examples)
 
 ## Requirements
