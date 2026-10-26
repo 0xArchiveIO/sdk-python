@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0xArchiveIO/sdk-python/HEAD/assets/readme/hero-dark.png">
-  <img alt="oxarchive, the 0xArchive Python SDK: Hyperliquid and Lighter in your notebook. Over 30 days, about 2.3 wallets were long BTC on Hyperliquid for every wallet short." src="https://raw.githubusercontent.com/0xArchiveIO/sdk-python/HEAD/assets/readme/hero-light.png" width="800">
+  <img alt="oxarchive, the 0xArchive Python SDK: Hyperliquid and Lighter in your notebook. Long and short BTC wallet counts on Hyperliquid over time." src="https://raw.githubusercontent.com/0xArchiveIO/sdk-python/HEAD/assets/readme/hero-light.png" width="800">
 </picture>
 
 <a href="https://pypi.org/project/oxarchive/"><img alt="PyPI: oxarchive" src="https://img.shields.io/pypi/v/oxarchive?style=flat-square&label=pypi&labelColor=3a3a37&color=21C55E"></a> <img alt="python: 3.9+" src="https://img.shields.io/badge/python-3.9+-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="data: Hyperliquid · Lighter" src="https://img.shields.io/badge/data-Hyperliquid_·_Lighter-21C55E?style=flat-square&labelColor=3a3a37">
