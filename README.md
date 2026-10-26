@@ -13,8 +13,6 @@
 
 Pull Hyperliquid and Lighter market data into Python as typed objects: order books, fills, funding, open interest, liquidations and every wallet's positions, live or back through history.
 
-<sub>The chart: `client.hyperliquid.positions.iterate_market_summary("BTC", ...)`, hourly from 2026-09-26 to 2026-10-26. Both sides hold the same 20,964 BTC; the long side is spread over 29,087 wallets, the short side over 12,661.</sub>
-
 ## Highlights
 
 - **Two venues, one client.** Hyperliquid core perps, HIP-3, HIP-4 and Spot, and Lighter on mainnet and Robinhood Chain, as `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter` and `client.rh_lighter`.
