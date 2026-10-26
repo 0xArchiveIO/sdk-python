@@ -13,9 +13,10 @@
 
 Pull Hyperliquid and Lighter market data into Python as typed objects: order books, fills, funding, open interest, liquidations and every wallet's positions, live or back through history.
 
+0xArchive is granular market data infrastructure for two venues: Hyperliquid and Lighter. Hyperliquid includes core perps, HIP-3 builder perps, HIP-4 outcome markets, and Hyperliquid Spot. HIP-3, HIP-4, and Spot live under the Hyperliquid namespace (`/v1/hyperliquid/hip3`, `client.hyperliquid.hip3`, etc.). Lighter has two deployments: mainnet (`/v1/lighter`, `client.lighter`) and Robinhood Chain (`/v1/rh-lighter`, `client.rh_lighter`). Account positions are available on Hyperliquid, HIP-3, and both Lighter deployments.
+
 ## Highlights
 
-- **Two venues, one client.** Hyperliquid core perps, HIP-3, HIP-4 and Spot, and Lighter on mainnet and Robinhood Chain, as `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter` and `client.rh_lighter`.
 - **Every wallet's positions.** Current, as of any instant, hourly history and a fill-by-fill change log, for one wallet or a whole market.
 - **Books at every depth.** L2 snapshots, tick-level reconstruction from checkpoints and deltas, and L4 books with the wallet behind each order.
 - **Sync or async.** Every method has an `a`-prefixed async twin, and iterators follow cursors for you.
