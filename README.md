@@ -1,13 +1,28 @@
-# oxarchive
+<div align="center">
 
-[![PyPI version](https://img.shields.io/pypi/v/oxarchive.svg)](https://pypi.org/project/oxarchive/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0xArchiveIO/sdk-python/HEAD/assets/readme/hero-dark.png">
+  <img alt="oxarchive, the 0xArchive Python SDK: Hyperliquid and Lighter in your notebook. Over 30 days, about 2.3 wallets were long BTC on Hyperliquid for every wallet short." src="https://raw.githubusercontent.com/0xArchiveIO/sdk-python/HEAD/assets/readme/hero-light.png" width="800">
+</picture>
 
-Python client for 0xArchive market data in notebooks, research scripts, and data pipelines.
+<a href="https://pypi.org/project/oxarchive/"><img alt="PyPI: oxarchive" src="https://img.shields.io/pypi/v/oxarchive?style=flat-square&label=pypi&labelColor=3a3a37&color=21C55E"></a> <img alt="python: 3.9+" src="https://img.shields.io/badge/python-3.9+-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-21C55E?style=flat-square&labelColor=3a3a37"> <img alt="data: Hyperliquid · Lighter" src="https://img.shields.io/badge/data-Hyperliquid_·_Lighter-21C55E?style=flat-square&labelColor=3a3a37">
 
-0xArchive is granular market data infrastructure for two venues: Hyperliquid and Lighter. Hyperliquid includes core perps, HIP-3 builder perps, HIP-4 outcome markets, and Hyperliquid Spot. HIP-3, HIP-4, and Spot live under the Hyperliquid namespace (`/v1/hyperliquid/hip3`, `client.hyperliquid.hip3`, etc.). Lighter has two deployments: mainnet (`/v1/lighter`, `client.lighter`) and Robinhood Chain (`/v1/rh-lighter`, `client.rh_lighter`). Account positions are available on Hyperliquid, HIP-3, and both Lighter deployments.
+[Install](#installation) · [Quick start](#quick-start) · [Reference](#rest-api-reference) · [WebSocket](#websocket-client) · [Docs](https://docs.0xarchive.io/sdks)
 
-Use the Python SDK when the workflow already lives in Python and you want typed REST helpers, async support, WebSocket support, pagination, and reconstruction utilities before moving into a larger pipeline.
+</div>
+
+Pull Hyperliquid and Lighter market data into Python as typed objects: order books, fills, funding, open interest, liquidations and every wallet's positions, live or back through history.
+
+<sub>The chart: `client.hyperliquid.positions.iterate_market_summary("BTC", ...)`, hourly from 2026-09-26 to 2026-10-26. Both sides hold the same 20,964 BTC; the long side is spread over 29,087 wallets, the short side over 12,661.</sub>
+
+## Highlights
+
+- **Two venues, one client.** Hyperliquid core perps, HIP-3, HIP-4 and Spot, and Lighter on mainnet and Robinhood Chain, as `client.hyperliquid`, `client.hyperliquid.hip3`, `client.hyperliquid.hip4`, `client.spot`, `client.lighter` and `client.rh_lighter`.
+- **Every wallet's positions.** Current, as of any instant, hourly history and a fill-by-fill change log, for one wallet or a whole market.
+- **Books at every depth.** L2 snapshots, tick-level reconstruction from checkpoints and deltas, and L4 books with the wallet behind each order.
+- **Sync or async.** Every method has an `a`-prefixed async twin, and iterators follow cursors for you.
+- **Live and replay.** WebSocket streaming and historical replay with `pip install "oxarchive[websocket]"`.
+- **Typed.** Pydantic models for every response, shipped with `py.typed`.
 
 ## Installation
 
