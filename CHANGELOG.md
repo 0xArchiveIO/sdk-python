@@ -5,6 +5,54 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - Unreleased
+
+Four datasets included with the Build, Pro, Scale and Enterprise plans, on
+Hyperliquid core and HIP-3. Every other REST dataset stays on every plan.
+
+### Added
+- Trade intent: `client.hyperliquid.trade_intent` and
+  `client.hyperliquid.hip3.trade_intent`, with `history(symbol, ...)` and
+  `iterate(symbol, ...)` and their async twins. USD volume per bucket by
+  intent (new longs and shorts, profit taken, stopped out, flips), market
+  makers apart, and the market's trailing-72h winners and losers as
+  aggregates. Intervals `1s` to `1d`. Hourly intervals from 2025-05-25 15:00
+  UTC (HIP-3 from 2025-10-13 12:00 UTC), minute intervals from 2026-07-14
+  00:00 UTC, second intervals for the last 3 days. Records are
+  `TradeIntentBucket`.
+- USDC flows into and out of HyperCore (Hyperliquid only, from 2025-09-27
+  09:33 UTC): `client.hyperliquid.usdc_flows` with `history()` and `iterate()`
+  for the events (filters `min_usd` and `kind`: `deposit`, `withdraw`,
+  `evm_in`, `evm_out`), and `volume()` and `iterate_volume()` for totals per
+  bucket, plus async twins. Records are `UsdcFlowEvent` and
+  `UsdcFlowVolumeBucket`; each event names the HyperCore account (`user`)
+  and its identity (`id`).
+- Breadth above the n-day moving average: `client.hyperliquid.breadth_ma`
+  and `client.hyperliquid.hip3.breadth_ma`, with `current(n)`,
+  `history(n, ...)` and `iterate(n, ...)` and their async twins. `n` is
+  required (5, 20, 50 or 200), and each length starts on its own date:
+  Hyperliquid 2025-03-27, 2025-04-11, 2025-05-11 and 2025-10-08; HIP-3
+  2025-12-27, 2026-01-11, 2026-02-10 and 2026-07-10. Records are
+  `BreadthMaReading` with `BreadthMaCounts` and `BreadthMaDistance`.
+- Positioning: `client.hyperliquid.positioning.current(window)` and
+  `client.hyperliquid.hip3.positioning.current(window)` (and `acurrent`), the
+  current `1h`, `4h` or `24h` window of every listed perp: open interest
+  change, taker buy and sell volume, liquidations and the typical move over
+  windows of that length. Records are `PositioningReading`; `meta.as_of` is
+  the window's close.
+- `PlanRequiredError`, an `OxArchiveError` raised for a 403 `forbidden`
+  answer that names the plans including the dataset. It carries `datatype`,
+  `required_plans` and `upgrade_url`. Existing `except OxArchiveError`
+  handlers keep catching it.
+- Literal types `TradeIntentInterval`, `UsdcFlowKind`, `UsdcFlowInterval`,
+  `BreadthMaLength`, `BreadthMaInterval` and `PositioningWindow`.
+
+The new iterators follow `next_cursor` and stop only when a page has none,
+never on a short or empty page. Called without `end`, an iterator fixes it to
+the current time before its first request and sends the same `end` on every
+page. If the API ever answers with the cursor it was sent, the iterator
+raises `OxArchiveError` instead of requesting the same page again.
+
 ## [1.13.0] - 2026-10-08
 
 ### Added

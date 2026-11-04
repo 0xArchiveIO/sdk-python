@@ -16,6 +16,10 @@ two deployments: mainnet and Robinhood Chain.
   client.lighter.positions and client.rh_lighter.positions
 - Webhooks on client.webhooks, with WebhookVerifier to verify deliveries
 - What each venue serves, per datatype, and from when, on client.capabilities()
+- Build-and-above datasets on Hyperliquid core and HIP-3: trade intent
+  (client.hyperliquid.trade_intent), USDC flows (client.hyperliquid.usdc_flows),
+  breadth above the n-day moving average (client.hyperliquid.breadth_ma) and
+  positioning (client.hyperliquid.positioning). A Free key gets PlanRequiredError.
 
 Every request selects API version 2026-10-01 (the ``0xArchive-Version``
 header, and ``version`` on WebSocket connections). Errors raise
@@ -121,6 +125,7 @@ from .types import (
     Candle,
     CandleInterval,
     OxArchiveError,
+    PlanRequiredError,
     CursorResponse,
     ResponseMeta,
     # API contract: error codes, venues and capabilities
@@ -136,6 +141,21 @@ from .types import (
     Hip3OracleDiscoveryBounds,
     Hip3OracleExternalPrice,
     Hip4Question,
+    # Build-and-above datasets: trade intent, USDC flows, moving-average
+    # breadth and positioning
+    TradeIntentBucket,
+    TradeIntentInterval,
+    UsdcFlowEvent,
+    UsdcFlowKind,
+    UsdcFlowInterval,
+    UsdcFlowVolumeBucket,
+    BreadthMaReading,
+    BreadthMaCounts,
+    BreadthMaDistance,
+    BreadthMaLength,
+    BreadthMaInterval,
+    PositioningReading,
+    PositioningWindow,
     # Wallet classification and the symbol universe
     WalletClassifySort,
     WalletClassifyMetrics,
@@ -248,7 +268,7 @@ except ImportError:
     WS_CHANNELS = None  # type: ignore
     decode_lighter_payload = None  # type: ignore
 
-__version__ = "1.13.0"
+__version__ = "1.14.0"
 
 __all__ = [
     # Client
@@ -317,6 +337,7 @@ __all__ = [
     "Candle",
     "CandleInterval",
     "OxArchiveError",
+    "PlanRequiredError",
     "CursorResponse",
     "ResponseMeta",
     # API Contract
@@ -333,6 +354,20 @@ __all__ = [
     "Hip3OracleDiscoveryBounds",
     "Hip3OracleExternalPrice",
     "Hip4Question",
+    # Build-and-above datasets
+    "TradeIntentBucket",
+    "TradeIntentInterval",
+    "UsdcFlowEvent",
+    "UsdcFlowKind",
+    "UsdcFlowInterval",
+    "UsdcFlowVolumeBucket",
+    "BreadthMaReading",
+    "BreadthMaCounts",
+    "BreadthMaDistance",
+    "BreadthMaLength",
+    "BreadthMaInterval",
+    "PositioningReading",
+    "PositioningWindow",
     # Wallet Classification and the Symbol Universe
     "WalletClassifySort",
     "WalletClassifyMetrics",

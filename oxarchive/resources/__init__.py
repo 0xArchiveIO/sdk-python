@@ -1,6 +1,7 @@
 """Resource modules."""
 
 from .breadth import BreadthResource
+from .breadth_ma import BreadthMaResource
 from .candles import CandlesResource, Hip3CandlesResource, Hip4CandlesResource, SpotCandlesResource
 from .cvd import CvdResource
 from .data_quality import DataQualityResource
@@ -21,6 +22,7 @@ from .oracle import Hip3OracleResource
 from .orderbook import OrderBookResource
 from .orders import Hip4OrdersResource, OrdersResource, SpotOrdersResource
 from .outcomes import Hip4OutcomesResource, Hip4QuestionsResource
+from .positioning import PositioningResource
 from .positions import (
     HyperliquidPositionsResource,
     LighterAccountsResource,
@@ -28,7 +30,9 @@ from .positions import (
 )
 from .spot import SpotPairsResource, SpotTwapResource
 from .symbols import SymbolsResource
+from .trade_intent import TradeIntentResource
 from .trades import TradesResource
+from .usdc_flows import UsdcFlowsResource
 from .wallets import WalletsResource
 from .web3 import Web3Resource
 from .webhooks import WebhooksResource
@@ -71,4 +75,8 @@ __all__ = [
     "WalletsResource",
     "SymbolsResource",
     "WebhooksResource",
+    "TradeIntentResource",
+    "UsdcFlowsResource",
+    "BreadthMaResource",
+    "PositioningResource",
 ]
