@@ -75,6 +75,11 @@ ErrorCode = Literal[
 - ``not_found``: the route exists but the resource id does not.
 - ``unauthorized``, ``forbidden``, ``insufficient_credits``, ``rate_limited``,
   ``conflict``: authentication, plan, credit, rate and state refusals.
+  ``forbidden`` is also the plan refusal: the ``mempool`` WebSocket channel is
+  included with the Pro, Scale and Enterprise plans, and trade intent, USDC
+  flows, moving-average breadth and positioning with the Build, Pro, Scale and
+  Enterprise plans. Those REST refusals raise :class:`PlanRequiredError`,
+  which names the plans that include the dataset.
 - ``upstream_unavailable``: a dependency is unavailable; retry later.
 - ``internal_error``: an unexpected server error.
 - ``endpoint_unsupported`` (WebSocket only): this endpoint does not serve the
@@ -2129,6 +2134,27 @@ class OxArchiveError(Exception):
         valid_values = details.get("valid_values")
         param = details.get("param")
         request_id = details.get("request_id")
+        plans = details.get("required_plans")
+        if (
+            status == 403
+            and error_code == "forbidden"
+            and isinstance(plans, list)
+            and issubclass(PlanRequiredError, cls)
+        ):
+            datatype = details.get("datatype")
+            upgrade_url = details.get("upgrade_url")
+            return PlanRequiredError(
+                message,
+                status,
+                request_id if isinstance(request_id, str) else None,
+                error_code=error_code,
+                param=param if isinstance(param, str) else None,
+                valid_values=valid_values if isinstance(valid_values, list) else None,
+                details=details,
+                datatype=datatype if isinstance(datatype, str) else None,
+                required_plans=[p for p in plans if isinstance(p, str)],
+                upgrade_url=upgrade_url if isinstance(upgrade_url, str) else None,
+            )
         return cls(
             message,
             status,
@@ -2148,6 +2174,50 @@ class OxArchiveError(Exception):
         if context:
             return f"[{self.code}] {self.message} ({', '.join(context)})"
         return f"[{self.code}] {self.message}"
+
+
+class PlanRequiredError(OxArchiveError):
+    """The dataset is not included with the caller's plan (HTTP 403,
+    ``error_code`` ``"forbidden"``).
+
+    Trade intent, USDC flows, moving-average breadth and positioning are
+    included with the Build, Pro, Scale and Enterprise plans; a Free key is
+    refused with this error before the request is metered. It is an
+    :class:`OxArchiveError`, so ``except OxArchiveError`` keeps catching it.
+
+    Attributes:
+        datatype: The dataset that was refused, for example ``"usdc_flows"``.
+        required_plans: The plans that include it, for example
+            ``["build", "pro", "scale", "enterprise"]``.
+        upgrade_url: Where to change plans.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        code: int,
+        request_id: Optional[str] = None,
+        *,
+        error_code: Optional[str] = "forbidden",
+        param: Optional[str] = None,
+        valid_values: Optional[list[Any]] = None,
+        details: Optional[dict[str, Any]] = None,
+        datatype: Optional[str] = None,
+        required_plans: Optional[list[str]] = None,
+        upgrade_url: Optional[str] = None,
+    ):
+        super().__init__(
+            message,
+            code,
+            request_id,
+            error_code=error_code,
+            param=param,
+            valid_values=valid_values,
+            details=details,
+        )
+        self.datatype = datatype
+        self.required_plans: list[str] = list(required_plans or [])
+        self.upgrade_url = upgrade_url
 
 
 # =============================================================================
@@ -2962,9 +3032,10 @@ class Capability(BaseModel):
     ``None`` means the default endpoint, ``wss://api.0xarchive.io/ws``."""
 
     plans: Optional[list[str]] = None
-    """The plans that include it, when that is not every plan (``["pro",
-    "scale", "enterprise"]`` for ``mempool``). ``None`` means every plan, Free
-    included."""
+    """The plans that include it, when that is not every plan: ``["pro",
+    "scale", "enterprise"]`` for ``mempool``, and ``["build", "pro", "scale",
+    "enterprise"]`` for ``trade_intent``, ``usdc_flows``, ``breadth_ma`` and
+    ``positioning``. ``None`` means every plan, Free included."""
 
 
 # =============================================================================
@@ -3372,6 +3443,385 @@ class CvdBucket(BaseModel):
     cumulative_delta: float
     """Running total of ``delta`` from the first bucket of this response. It
     restarts on every page, so rebuild it from ``delta`` when joining pages."""
+
+
+# =============================================================================
+# Build-and-above datasets: trade intent, USDC flows, moving-average breadth,
+# positioning. Included with the Build, Pro, Scale and Enterprise plans; a Free
+# key is refused with PlanRequiredError (HTTP 403, error_code "forbidden").
+# =============================================================================
+
+TradeIntentInterval = Literal["1s", "5s", "15s", "1m", "5m", "15m", "1h", "4h", "1d"]
+"""Trade intent bucket widths. ``1h``, ``4h`` and ``1d`` reach back to the
+dataset's start; minute intervals start 2026-07-14 00:00 UTC; second intervals
+cover the last 3 days."""
+
+UsdcFlowKind = Literal["deposit", "withdraw", "evm_in", "evm_out"]
+"""A USDC flow's direction: ``deposit`` and ``withdraw`` are the Arbitrum
+bridge; ``evm_in`` and ``evm_out`` are USDC to and from HyperEVM (which also
+carries CCTP)."""
+
+UsdcFlowInterval = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+"""USDC flow volume bucket widths."""
+
+BreadthMaLength = Literal[5, 20, 50, 200]
+"""The moving average's length in days."""
+
+BreadthMaInterval = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+"""Moving-average breadth bucket widths."""
+
+PositioningWindow = Literal["1h", "4h", "24h"]
+"""The trailing window of a positioning cross-section."""
+
+
+class TradeIntentBucket(BaseModel):
+    """One trade intent bucket: why one market traded, in USD.
+
+    Both sides of every trade count, so buyers and sellers each sum to the
+    bucket's volume; market makers' legs are in ``mm_usd`` only and in no
+    intent figure. ``winners_*`` and ``losers_*`` describe the market's
+    trailing-72h winners and losers as aggregates: no wallet is named.
+
+    Second buckets (``1s``, ``5s``, ``15s``) carry no ``close``,
+    ``price_source`` or cohort net, gross and counts (``None``).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    timestamp: datetime
+    """Bucket open (UTC)."""
+
+    timestamp_ms: int
+    """Bucket open in Unix milliseconds."""
+
+    close: Optional[float] = None
+    """The price the bucket's end is marked at; ``None`` on second intervals."""
+
+    price_source: Optional[str] = None
+    """Where ``close`` comes from: ``"mark"``, ``"oracle"``, ``"carried"`` or
+    ``"trade"``; ``None`` on second intervals."""
+
+    open_long: float
+    """USD of new long positions."""
+
+    open_short: float
+    """USD of new short positions."""
+
+    tp_long: float
+    """USD of longs closed with a profit."""
+
+    tp_short: float
+    """USD of shorts closed with a profit."""
+
+    stop_long: float
+    """USD of longs closed at a loss, liquidated or auto-deleveraged."""
+
+    stop_short: float
+    """USD of shorts closed at a loss, liquidated or auto-deleveraged."""
+
+    flip_ls: float
+    """USD of positions flipped from long to short through zero."""
+
+    flip_sl: float
+    """USD of positions flipped from short to long through zero."""
+
+    mm_usd: float
+    """USD of market makers' legs, which are in no intent figure."""
+
+    winners_flow: Optional[float] = None
+    """What the trailing-72h winners bought less what they sold, in USD."""
+
+    losers_flow: Optional[float] = None
+    """What the trailing-72h losers bought less what they sold, in USD."""
+
+    winners_net: Optional[float] = None
+    """The winners' net position in USD; ``None`` on second intervals."""
+
+    winners_gross: Optional[float] = None
+    """The winners' gross position in USD; ``None`` on second intervals."""
+
+    losers_net: Optional[float] = None
+    """The losers' net position in USD; ``None`` on second intervals."""
+
+    losers_gross: Optional[float] = None
+    """The losers' gross position in USD; ``None`` on second intervals."""
+
+    winners_count: Optional[int] = None
+    """How many wallets are in the winners cohort; ``None`` on second intervals."""
+
+    losers_count: Optional[int] = None
+    """How many wallets are in the losers cohort; ``None`` on second intervals."""
+
+    quality: str
+    """``"ok"``, ``"partial"`` (the method's lookbacks were not yet full) or
+    ``"quarantined"`` (the cohort figures are ``None``; intent never is)."""
+
+    is_final: bool
+    """``True`` once the bucket will not change."""
+
+    preliminary: bool
+    """``True`` when the bucket holds data of the hour still in progress, which
+    is replaced as final data lands."""
+
+    preliminary_from: Optional[datetime] = None
+    """Where the preliminary data begins inside the bucket (its open when the
+    whole bucket is preliminary); ``None`` when ``preliminary`` is ``False``."""
+
+    preliminary_from_ms: Optional[int] = None
+    """``preliminary_from`` in Unix milliseconds."""
+
+    method: str
+    """The method version that computed the bucket, for example ``"who/3"``."""
+
+
+class UsdcFlowEvent(BaseModel):
+    """One USDC flow into or out of HyperCore."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    """The event's identity, ``"block:index"``. Join pages and deduplicate on
+    it: ``(timestamp, tx_hash)`` is not unique, because one bridge batch can
+    carry up to 10 withdrawals under one hash and one time."""
+
+    timestamp: datetime
+    """When the flow executed (UTC)."""
+
+    timestamp_ms: int
+    """``timestamp`` in Unix milliseconds."""
+
+    kind: str
+    """``"deposit"``, ``"withdraw"``, ``"evm_in"`` or ``"evm_out"`` (see
+    :data:`UsdcFlowKind`)."""
+
+    amount_usd: float
+    """USDC moved, at or above zero; ``kind`` gives the direction."""
+
+    fee_usd: float
+    """The withdrawal fee, or a transfer's fee charged in USDC, else 0."""
+
+    user: Optional[str] = None
+    """The HyperCore account."""
+
+    tx_hash: Optional[str] = None
+    """The transaction hash."""
+
+    block_number: int
+    """The block the flow executed in."""
+
+    event_index: int
+    """The flow's position in its block."""
+
+
+class UsdcFlowVolumeBucket(BaseModel):
+    """USDC flow totals for one bucket. Every flow counts, whatever its size."""
+
+    model_config = ConfigDict(extra="allow")
+
+    timestamp: datetime
+    """Bucket open (UTC)."""
+
+    timestamp_ms: int
+    """Bucket open in Unix milliseconds."""
+
+    deposit_usd: float
+    """USD deposited through the Arbitrum bridge."""
+
+    deposit_count: int
+    """Number of deposits."""
+
+    withdraw_usd: float
+    """USD withdrawn through the Arbitrum bridge."""
+
+    withdraw_count: int
+    """Number of withdrawals."""
+
+    evm_in_usd: float
+    """USD moved from HyperEVM into HyperCore."""
+
+    evm_in_count: int
+    """Number of transfers from HyperEVM."""
+
+    evm_out_usd: float
+    """USD moved from HyperCore to HyperEVM."""
+
+    evm_out_count: int
+    """Number of transfers to HyperEVM."""
+
+    net_usd: float
+    """``deposit_usd + evm_in_usd - withdraw_usd - evm_out_usd``."""
+
+
+class BreadthMaCounts(BaseModel):
+    """The markets behind one moving-average breadth reading."""
+
+    model_config = ConfigDict(extra="allow")
+
+    candidates: int
+    """``eligible + excluded_stale_price + excluded_short_history``."""
+
+    eligible: int
+    """Candidates with a recent price and n days of history."""
+
+    above: int
+    """Eligible markets above their moving average."""
+
+    at: int
+    """Eligible markets exactly at their moving average."""
+
+    below: int
+    """Eligible markets below their moving average."""
+
+    excluded_stale_price: int
+    """Candidates with no 1-minute bar in the 24 hours before the reading. A
+    delisted perp counts here from 24 hours after its last trade."""
+
+    excluded_short_history: int
+    """Candidates younger than n days before the reading's day."""
+
+
+class BreadthMaDistance(BaseModel):
+    """Quartiles of price / average - 1 over the eligible markets (6 decimals).
+    All ``None`` when no market is eligible."""
+
+    model_config = ConfigDict(extra="allow")
+
+    p25: Optional[float] = None
+    median: Optional[float] = None
+    p75: Optional[float] = None
+
+
+class BreadthMaReading(_ApiRecord):
+    """The share of perps above their n-day moving average, for one bucket.
+
+    A bucket carries its last reading, as of its end (``calculated_at``); the
+    bucket still forming is as of about 4 minutes before now, on the minute.
+    Never average ``value_pct`` across buckets.
+
+    Candidates are every perp the venue ever listed, from its first 1-minute
+    bar. ``coverage_ratio`` depends on n, is not a data-quality ratio and is
+    not comparable with above-VWAP breadth's.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    timestamp: datetime
+    """Bucket open (UTC)."""
+
+    timestamp_ms: int
+    """Bucket open in Unix milliseconds."""
+
+    calculated_at: datetime
+    """The instant the reading is as of: the bucket's end, or the settled edge
+    for the bucket still forming."""
+
+    calculated_at_ms: int
+    """``calculated_at`` in Unix milliseconds."""
+
+    n: int
+    """The moving average's length in days (5, 20, 50 or 200)."""
+
+    method: str
+    """The method version, for example ``"ma-breadth/1"``."""
+
+    value_pct: Optional[float] = None
+    """100 * above / eligible (4 decimals), or ``None`` when no market is
+    eligible (never 0)."""
+
+    coverage_ratio: float
+    """eligible / candidates (4 decimals)."""
+
+    counts: BreadthMaCounts
+    """The markets behind the reading."""
+
+    distance: BreadthMaDistance
+    """How far above or below their average the eligible markets are."""
+
+    is_final: bool
+    """``True`` once every bar the reading is made from is final. A final
+    reading can still change if the candles it reads are rebuilt."""
+
+
+class PositioningReading(BaseModel):
+    """One listed perp over a trailing window: open interest change, taker
+    flow, liquidations and its typical move over windows of that length.
+
+    The window is ``[window_start, window_end)``; ``window_end`` is the newest
+    5-minute close, about 4 minutes behind now, and equals the response's
+    ``meta.as_of``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    symbol: str
+    """The market (HIP-3 symbols keep their builder prefix)."""
+
+    window: str
+    """``"1h"``, ``"4h"`` or ``"24h"``."""
+
+    window_start: datetime
+    """Window start (UTC, inclusive)."""
+
+    window_start_ms: int
+    """``window_start`` in Unix milliseconds."""
+
+    window_end: datetime
+    """Window end (UTC, exclusive): the close."""
+
+    window_end_ms: int
+    """``window_end`` in Unix milliseconds."""
+
+    oi_start: Optional[float] = None
+    """Open interest in contracts in the 5-minute bucket before the window;
+    ``None`` (never 0) when that bucket has no reading."""
+
+    oi_end: Optional[float] = None
+    """Open interest in contracts in the window's last 5-minute bucket;
+    ``None`` when that bucket has no reading."""
+
+    mark_start: Optional[float] = None
+    """Mark price in the 5-minute bucket before the window; ``None`` when that
+    bucket has no reading."""
+
+    mark_end: Optional[float] = None
+    """Mark price in the window's last 5-minute bucket; ``None`` when that
+    bucket has no reading."""
+
+    oi_buckets: int
+    """5-minute open interest readings inside the window."""
+
+    buy_usd: float
+    """Taker buy notional in the window (0 means none)."""
+
+    sell_usd: float
+    """Taker sell notional in the window."""
+
+    liq_long_usd: float
+    """USD of long liquidations in the window."""
+
+    liq_short_usd: float
+    """USD of short liquidations in the window."""
+
+    liq_long_count: int
+    """Number of long liquidations."""
+
+    liq_short_count: int
+    """Number of short liquidations."""
+
+    typical_price: Optional[float] = None
+    """Median absolute relative change of the mark over windows of the same
+    length, sliding by 5 minutes over about the last 6.9 days; ``None`` under
+    288 counted windows."""
+
+    typical_oi: Optional[float] = None
+    """Median absolute relative change in open interest over those windows."""
+
+    typical_flow: Optional[float] = None
+    """Median absolute taker imbalance (buy - sell) / (buy + sell) over those
+    windows."""
+
+    typical_windows: int
+    """How many windows the ``typical_*`` figures count."""
 
 
 # =============================================================================

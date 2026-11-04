@@ -97,6 +97,10 @@ SYNC_CALLS: list[Callable[[oxarchive.Client], Any]] = [
     lambda c: c.data_quality.status(),
     lambda c: c.webhooks.list_endpoints(),
     lambda c: c.hyperliquid.positions.get("0xabc"),
+    lambda c: c.hyperliquid.trade_intent.history("BTC", start=T_START, end=T_END),
+    lambda c: c.hyperliquid.usdc_flows.volume(start=T_START, end=T_END),
+    lambda c: c.hyperliquid.hip3.breadth_ma.history(50, start=T_START, end=T_END),
+    lambda c: c.hyperliquid.hip3.positioning.current("24h"),
 ]
 
 

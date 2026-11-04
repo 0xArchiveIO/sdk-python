@@ -22,6 +22,7 @@ Pull Hyperliquid and Lighter market data into Python as typed objects: order boo
 - **Sync or async.** Every method has an `a`-prefixed async twin, and iterators follow cursors for you.
 - **Live and replay.** WebSocket streaming and historical replay with `pip install "oxarchive[websocket]"`.
 - **Typed.** Pydantic models for every response, shipped with `py.typed`.
+- **Why the market traded.** Trade intent, USDC flows into and out of HyperCore, breadth above the n-day moving average and a positioning cross-section of every perp, on the Build plan and above.
 
 ## Installation
 
@@ -110,9 +111,10 @@ First served instant of each dataset, as `client.capabilities()` reports it (tim
 | Hyperliquid Spot | Candles from 2025-03-22 10:50; trades from 2025-03-22 10:50:22; TWAP from 2026-05-05 13:05; order book from 2026-05-05 19:56; L4 from 2026-05-05 22:57 (PURR-USDC from 2026-03-11 01:03), with REST order history reaching back further | Dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`); `client.spot.pairs.list()` lists the pairs. Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
 | Lighter | Trades from 2025-01-17 08:43; candles from 2025-08-01; funding, OI and price history from 2025-08-25 15:28; order book from 2026-01-29 02:13; L3 from 2026-03-05 03:33; liquidations from 2026-06-10 | Exact starts vary by market. Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
 | Lighter on Robinhood Chain | Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch); candles from 2026-06-26 20:10; order book, OI, funding and price history from 2026-08-22 18:43 | The second Lighter deployment: USDG-quoted perps (`BTC`) and spot markets (`AAPL-USDG`); `client.rh_lighter.instruments.list()` lists them. No L3. |
+| Build-and-above datasets | Trade intent hourly from 2025-05-25 15:00 (HIP-3 from 2025-10-13 12:00), minute intervals from 2026-07-14 00:00, second intervals for the last 3 days; USDC flows from 2025-09-27 09:33; breadth above the 5-day moving average from 2025-03-27 (HIP-3 from 2025-12-27), each longer average later; positioning for the current window only | Included with the Build, Pro, Scale and Enterprise plans. See [Build-and-Above Datasets](#build-and-above-datasets). |
 | Account positions | Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13, hourly history from 2026-06-07; Lighter mainnet from 2025-01-17, Robinhood Chain from 2026-06-26 | Live snapshots every 5 minutes (Hyperliquid, HIP-3) or 2 minutes (Lighter). See [Account Positions](#account-positions). |
 
-`client.capabilities()` returns the first served instant of every datatype on every venue, and `client.symbols.list()` the coverage of each symbol, so a market listed later starts later. See [Capabilities](#capabilities). Free plans read the most recent 30 days of these datasets.
+`client.capabilities()` returns the first served instant of every datatype on every venue, and `client.symbols.list()` the coverage of each symbol, so a market listed later starts later. See [Capabilities](#capabilities). Free plans read the most recent 30 days of these datasets, except the Build-and-above datasets, which Free does not include.
 
 ## Async Support
 
@@ -1121,6 +1123,95 @@ async for bucket in client.hyperliquid.hip3.cvd.aiterate("xyz:TSLA", start=day_a
 ```
 
 Buckets are labelled by their open time (`timestamp`, a UTC `datetime`; `timestamp_ms` in Unix milliseconds) and omitted when they hold no trades. `4h`, `1d` and `1w` buckets open on UTC epoch boundaries, so `1w` buckets open on Thursdays, and at those widths the first and last bucket of a window can be partial. `cumulative_delta` restarts on every page: to join pages, rebuild the running total from `delta`. A response that is one page of several says so in `meta.notice`.
+
+### Build-and-Above Datasets
+
+Four datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average and positioning. Every other REST dataset is on every plan. A Free key is refused with `PlanRequiredError` (HTTP 403, `error_code == "forbidden"`), which names the plans that include the dataset; see [Error Handling](#error-handling). `client.capabilities()` lists the plans on each of their rows (`plans`).
+
+Every iterator below follows `next_cursor` and stops only when a page has none: a page can be short, or empty, and still not be the last. Pass `start` and `end` when paging by hand; an iterator called without `end` fixes it to the current time before its first request and sends the same `end` on every page.
+
+#### Trade Intent
+
+Why one market traded, per bucket, in USD: new longs and shorts (`open_long`, `open_short`), profit taken (`tp_long`, `tp_short`), stopped out (`stop_long`, `stop_short`: closes at a loss, liquidations and auto-deleveraging) and flips through zero (`flip_ls`, `flip_sl`). Both sides of every trade count; market makers' legs are in `mm_usd` only. The market's trailing-72h winners and losers are aggregates (`winners_net`, `winners_gross`, `winners_count`, `winners_flow` and the `losers_*` twins); no wallet is named. Hyperliquid core and HIP-3.
+
+```python
+page = client.hyperliquid.trade_intent.history(
+    "BTC",
+    start="2026-11-02T00:00:00Z",
+    end="2026-11-03T00:00:00Z",
+    interval="1h",  # 1s, 5s, 15s, 1m, 5m, 15m, 1h (default), 4h, 1d
+    limit=500,      # buckets per page (default 500, max 2000)
+)
+for bucket in page.data:
+    print(bucket.timestamp, bucket.open_long, bucket.stop_long, bucket.winners_flow)
+
+# HIP-3, following the cursor
+for bucket in client.hyperliquid.hip3.trade_intent.iterate(
+    "xyz:XYZ100", start="2026-11-02", end="2026-11-03", interval="15m"
+):
+    ...
+```
+
+Coverage (UTC): `1h`, `4h` and `1d` from 2025-05-25 15:00 on Hyperliquid and 2025-10-13 12:00 on HIP-3; minute intervals from 2026-07-14 00:00; second intervals for the last 3 days. Second buckets carry no `close`, `price_source` or cohort net, gross and counts (`None`), and a second without a record had no trades, as far as `meta.built_through` reaches. A market idle for more than 7 days has no buckets there: a gap, not zero. Buckets of the hour still in progress are `preliminary` (`preliminary_from` says where inside the bucket) and are replaced as final data lands; `is_final` marks a bucket that will not change. `quality` is `ok`, `partial` or `quarantined` (the cohort figures are `None`). Each bucket names its `method`. A 503 `upstream_unavailable` for a read that ran out of time is retryable: lower `limit` or narrow the window.
+
+#### USDC Flows
+
+USDC entering and leaving HyperCore: `deposit` and `withdraw` are the Arbitrum bridge, `evm_in` and `evm_out` are USDC to and from HyperEVM (which also carries CCTP). Each event names `user`, the HyperCore account. Hyperliquid only, from 2025-09-27 09:33 UTC.
+
+```python
+# Events, oldest first in execution order
+page = client.hyperliquid.usdc_flows.history(
+    start="2026-11-02", end="2026-11-03",
+    min_usd=1_000_000,  # optional, 0 to 1e12
+    kind="withdraw",    # optional: deposit, withdraw, evm_in, evm_out
+    limit=100,          # events per page (default 100, max 1000)
+)
+for event in client.hyperliquid.usdc_flows.iterate(start="2026-11-02", end="2026-11-03"):
+    print(event.id, event.kind, event.amount_usd, event.user)
+
+# Totals per bucket, zeros included (every flow counts: no min_usd or kind)
+totals = client.hyperliquid.usdc_flows.volume(
+    start="2026-11-02", end="2026-11-03", interval="1h"  # 1m, 5m, 15m, 30m, 1h, 4h, 1d
+)
+for bucket in totals.data:
+    print(bucket.timestamp, bucket.deposit_usd, bucket.withdraw_usd, bucket.net_usd)
+```
+
+`id` (`"block:index"`) is an event's identity: join pages and deduplicate on it, since one bridge batch can carry up to 10 withdrawals under one hash and one time. Events in the last 3 hours can still be added after you read them: re-read that span and deduplicate on `id`. A page reads at most 31 days, so with a sparse `min_usd` it can be empty and still carry a cursor. Volume buckets never run past the bucket still filling or before the bucket of the first flow; `net_usd` is deposits plus HyperEVM inflows less withdrawals and HyperEVM outflows.
+
+#### Breadth Above the n-Day Moving Average
+
+The share of perps above their n-day moving average, and the quartiles of how far above or below (`distance`: price / average - 1). Hyperliquid core and HIP-3. `n` is required: 5, 20, 50 or 200.
+
+```python
+latest = client.hyperliquid.breadth_ma.current(200)
+print(latest.value_pct, latest.counts.eligible, latest.distance.median)
+
+page = client.hyperliquid.hip3.breadth_ma.history(
+    50,
+    start="2026-11-01", end="2026-11-02",
+    interval="1h",  # 1m (default), 5m, 15m, 30m, 1h, 4h, 1d
+    limit=100,      # buckets per page (default 100, max 1000)
+)
+for reading in client.hyperliquid.breadth_ma.iterate(5, start="2026-10-01", end="2026-11-01", interval="1d"):
+    ...
+```
+
+Each length starts on its own date (UTC). Hyperliquid: n = 5 from 2025-03-27, 20 from 2025-04-11, 50 from 2025-05-11, 200 from 2025-10-08. HIP-3: n = 5 from 2025-12-27, 20 from 2026-01-11, 50 from 2026-02-10, 200 from 2026-07-10. A bucket carries its last reading, as of its end (`calculated_at`); the bucket still forming is as of about 4 minutes before now, on the minute, and `current()` is the newest 1-minute reading. Never average percentages across buckets. Candidates are every perp the venue ever listed, from its first 1-minute bar: a delisted perp stays a candidate, counted in `excluded_stale_price` from 24 hours after its last trade, and a perp younger than n days counts in `excluded_short_history`. So `coverage_ratio` depends on n, is not a data-quality ratio and is not comparable with above-VWAP breadth's. `value_pct` and `distance` are `None` when nothing is eligible, never 0. The cursor is opaque and is not the above-VWAP cursor. A 503 `upstream_unavailable` right after a server restart is retryable.
+
+#### Positioning
+
+Every listed perp's open interest change, taker buy and sell volume and liquidations over a trailing window, with its typical move over windows of that length. Hyperliquid core and HIP-3. `window` is required: `1h`, `4h` or `24h`.
+
+```python
+cross = client.hyperliquid.positioning.current("4h")
+print(cross.meta.as_of)  # the window's close
+for r in cross.data:
+    print(r.symbol, r.oi_start, r.oi_end, r.buy_usd - r.sell_usd, r.typical_price)
+btc = next(r for r in cross.data if r.symbol == "BTC")
+```
+
+The current window only: no history, no paging and no symbol filter (filter the records yourself). One record per listed perp, sorted by symbol. The window is `[window_start, window_end)`; `window_end` is the newest 5-minute close, about 4 minutes behind now. `oi_*` and `mark_*` are `None` when that 5-minute bucket has no reading, never 0. `typical_price`, `typical_oi` and `typical_flow` are the median absolute move over windows of the same length sliding by 5 minutes over about the last 6.9 days, `None` under 288 counted windows (`typical_windows`). A 503 `upstream_unavailable` ("still being prepared") is retryable.
 
 ### L4 Orderbook (Order-Level)
 
@@ -2724,6 +2815,19 @@ except OxArchiveError as e:
     print(e.details)       # the whole error body, including route-specific fields
 ```
 
+A dataset your plan does not include raises `PlanRequiredError`, an `OxArchiveError` with `error_code == "forbidden"` that names the dataset and the plans that include it. Trade intent, USDC flows, moving-average breadth and positioning are included with the Build, Pro, Scale and Enterprise plans:
+
+```python
+from oxarchive import PlanRequiredError
+
+try:
+    flows = client.hyperliquid.usdc_flows.history()
+except PlanRequiredError as e:
+    print(e.datatype)        # "usdc_flows"
+    print(e.required_plans)  # ["build", "pro", "scale", "enterprise"]
+    print(e.upgrade_url)     # "https://0xarchive.io/pricing"
+```
+
 | `error_code` | Meaning |
 |--------------|---------|
 | `invalid_parameter` | A parameter failed to parse or validate; `param` and `valid_values` say which and what it accepts |
@@ -2737,7 +2841,7 @@ except OxArchiveError as e:
 | `unsupported_for_venue` | The datatype, or the WebSocket mode, is not offered on this venue; `details["available_on"]` lists where it is |
 | `route_not_found` | No route matches the path |
 | `not_found` | The route exists but the resource id does not |
-| `unauthorized`, `forbidden` | Missing or invalid API key; not allowed on this plan |
+| `unauthorized`, `forbidden` | Missing or invalid API key; not allowed on this plan (`PlanRequiredError` when the dataset is not on the plan) |
 | `insufficient_credits`, `rate_limited` | Monthly credits spent; too many requests |
 | `conflict` | The request conflicts with current state |
 | `upstream_unavailable`, `internal_error` | Retry later; quote `request_id` if it persists |
@@ -2775,6 +2879,7 @@ from oxarchive.types import (
     Position, PositionChange, MarketPosition, MarketPositionsSummary, AccountSummary,
     WalletPositions, LighterL1Accounts,
     CvdBucket, Hip3OracleExternalPrice, Hip4Question, WalletClassification, SymbolEntry,
+    TradeIntentBucket, UsdcFlowEvent, UsdcFlowVolumeBucket, BreadthMaReading, PositioningReading,
     WebhookSubscription, WebhookEstimate, WebhookLimits,
     Capability, ErrorCode,
 )

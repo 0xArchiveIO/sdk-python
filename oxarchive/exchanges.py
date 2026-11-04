@@ -9,6 +9,7 @@ from urllib.parse import quote
 from ._time import to_unix_ms
 from .http import HttpClient
 from .resources import (
+    BreadthMaResource,
     BreadthResource,
     CandlesResource,
     CvdResource,
@@ -36,11 +37,14 @@ from .resources import (
     OpenInterestResource,
     OrderBookResource,
     OrdersResource,
+    PositioningResource,
     SpotCandlesResource,
     SpotOrdersResource,
     SpotPairsResource,
     SpotTwapResource,
+    TradeIntentResource,
     TradesResource,
+    UsdcFlowsResource,
     WalletsResource,
 )
 from .types import (
@@ -138,6 +142,24 @@ class HyperliquidClient:
 
         self.wallets = WalletsResource(http, base_path)
         """Wallet classification: daily behavior metrics for active wallets."""
+
+        self.trade_intent = TradeIntentResource(http, base_path)
+        """Trade intent: USD volume by intent per bucket, with the trailing-72h
+        winners and losers as aggregates (hourly from 2025-05-25 15:00 UTC).
+        Build and above."""
+
+        self.usdc_flows = UsdcFlowsResource(http, base_path)
+        """USDC entering and leaving HyperCore: events and totals per bucket
+        (from 2025-09-27 09:33 UTC). Build and above."""
+
+        self.breadth_ma = BreadthMaResource(http, base_path)
+        """Share of perps above their n-day moving average (n = 5 from
+        2025-03-27; each length has its own start). Build and above."""
+
+        self.positioning = PositioningResource(http, base_path)
+        """Every listed perp's open interest change, taker flow and
+        liquidations over a trailing window (current window only). Build and
+        above."""
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (trades from 2025-10-13)"""
@@ -411,6 +433,20 @@ class Hip3Client:
 
         self.wallets = WalletsResource(http, base_path)
         """Wallet classification: daily behavior metrics for active HIP-3 wallets."""
+
+        self.trade_intent = TradeIntentResource(http, base_path, coin_transform=coin_transform)
+        """Trade intent: USD volume by intent per bucket, with the trailing-72h
+        winners and losers as aggregates (hourly from 2025-10-13 12:00 UTC).
+        Build and above."""
+
+        self.breadth_ma = BreadthMaResource(http, base_path)
+        """Share of HIP-3 perps above their n-day moving average (n = 5 from
+        2025-12-27; each length has its own start). Build and above."""
+
+        self.positioning = PositioningResource(http, base_path)
+        """Every listed HIP-3 perp's open interest change, taker flow and
+        liquidations over a trailing window (current window only). Build and
+        above."""
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
