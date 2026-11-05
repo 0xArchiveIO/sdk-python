@@ -17,6 +17,7 @@ from .l3_orderbook import L3OrderBookResource
 from .l4_orderbook import L4OrderBookResource
 from .lighter_liquidations import LighterLiquidationsResource
 from .liquidations import Hip3LiquidationsResource, LiquidationsResource
+from .news import NewsResource
 from .openinterest import Hip4OpenInterestResource, OpenInterestResource
 from .oracle import Hip3OracleResource
 from .orderbook import OrderBookResource
@@ -77,6 +78,7 @@ __all__ = [
     "WebhooksResource",
     "TradeIntentResource",
     "UsdcFlowsResource",
+    "NewsResource",
     "BreadthMaResource",
     "PositioningResource",
 ]

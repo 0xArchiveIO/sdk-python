@@ -34,6 +34,7 @@ from .resources import (
     LighterLiquidationsResource,
     LighterPositionsResource,
     LiquidationsResource,
+    NewsResource,
     OpenInterestResource,
     OrderBookResource,
     OrdersResource,
@@ -155,6 +156,11 @@ class HyperliquidClient:
         self.breadth_ma = BreadthMaResource(http, base_path)
         """Share of perps above their n-day moving average (n = 5 from
         2025-03-27; each length has its own start). Build and above."""
+
+        self.news = NewsResource(http, base_path)
+        """Headlines and venue events as stories whose lead names a
+        Hyperliquid perp, with what that market did in the next 5 minutes.
+        Public-display stories only. Build and above."""
 
         self.positioning = PositioningResource(http, base_path)
         """Every listed perp's open interest change, taker flow and
@@ -447,6 +453,11 @@ class Hip3Client:
         """Every listed HIP-3 perp's open interest change, taker flow and
         liquidations over a trailing window (current window only). Build and
         above."""
+
+        self.news = NewsResource(http, base_path)
+        """Headlines and venue events as stories whose lead names a HIP-3
+        market, with what that market did in the next 5 minutes.
+        Public-display stories only. Build and above."""
 
     _convert_timestamp = staticmethod(to_unix_ms)
 
@@ -1141,6 +1152,11 @@ class LighterClient(_LighterDeploymentClient):
 
         self.accounts = LighterAccountsResource(http, base_path)
         """Resolve an L1 address to the Lighter account indices it owns."""
+
+        self.news = NewsResource(http, base_path)
+        """Headlines and venue events as stories whose lead names a Lighter
+        market, with what that market did in the next 5 minutes.
+        Public-display stories only. Build and above."""
 
 
 class RhLighterClient(_LighterDeploymentClient):

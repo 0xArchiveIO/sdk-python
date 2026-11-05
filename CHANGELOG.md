@@ -5,6 +5,21 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- News (Build, Pro, Scale and Enterprise plans): `client.hyperliquid.news`,
+  `client.hyperliquid.hip3.news` and `client.lighter.news`, with `list(...)` and
+  `iterate(...)` and their async twins (`alist`, `aiterate`). Headlines from
+  outlets and official sources, and our own market events, as stories newest
+  first, each with the reports that joined it, the markets it names and the
+  first market's reaction over 1 and 5 minutes (price move, liquidations, open
+  interest, volume, depth, `move_z` and `move_level`). Public-display stories
+  only. Filters: `symbols`, `topic`, `min_weight`, `start`, `end`, `as_of`.
+  A Free key raises `PlanRequiredError`. New types: `NewsStory`, `NewsReport`,
+  `NewsMarket`, `NewsReaction`, `NewsWindow` and the rest of the `News*` models.
+  The routes are dark until the API ships them.
+
 ## [1.14.0] - 2026-11-04
 
 Four datasets included with the Build, Pro, Scale and Enterprise plans, on

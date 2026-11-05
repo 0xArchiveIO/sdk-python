@@ -108,7 +108,11 @@ def test_rh_lighter_has_the_lighter_resources_minus_l3_and_the_l1_resolver() -> 
     assert isinstance(client.rh_lighter, RhLighterClient)
     assert isinstance(client.lighter, LighterClient)
     assert not isinstance(client.rh_lighter, LighterClient)
-    assert _public(client.lighter) - _public(client.rh_lighter) == {"l3_orderbook", "accounts"}
+    assert _public(client.lighter) - _public(client.rh_lighter) == {
+        "l3_orderbook",
+        "accounts",
+        "news",
+    }
     assert _public(client.rh_lighter) <= _public(client.lighter)
     assert {"liquidations", "positions"} <= _public(client.lighter)
     for method in ("get_freshness", "get_summary", "get_price_history"):

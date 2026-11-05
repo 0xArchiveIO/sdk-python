@@ -20,6 +20,8 @@ two deployments: mainnet and Robinhood Chain.
   (client.hyperliquid.trade_intent), USDC flows (client.hyperliquid.usdc_flows),
   breadth above the n-day moving average (client.hyperliquid.breadth_ma) and
   positioning (client.hyperliquid.positioning). A Free key gets PlanRequiredError.
+- News stories (Build and above) on client.hyperliquid.news,
+  client.hyperliquid.hip3.news and client.lighter.news.
 
 Every request selects API version 2026-10-01 (the ``0xArchive-Version``
 header, and ``version`` on WebSocket connections). Errors raise
@@ -149,6 +151,18 @@ from .types import (
     UsdcFlowKind,
     UsdcFlowInterval,
     UsdcFlowVolumeBucket,
+    NewsStory,
+    NewsReport,
+    NewsMarket,
+    NewsReaction,
+    NewsWindow,
+    NewsPrice,
+    NewsLiquidations,
+    NewsDepth,
+    NewsOtherMove,
+    NewsTopic,
+    NewsOrigin,
+    NewsMoveLevel,
     BreadthMaReading,
     BreadthMaCounts,
     BreadthMaDistance,
@@ -361,6 +375,19 @@ __all__ = [
     "UsdcFlowKind",
     "UsdcFlowInterval",
     "UsdcFlowVolumeBucket",
+    # News (Build and above)
+    "NewsStory",
+    "NewsReport",
+    "NewsMarket",
+    "NewsReaction",
+    "NewsWindow",
+    "NewsPrice",
+    "NewsLiquidations",
+    "NewsDepth",
+    "NewsOtherMove",
+    "NewsTopic",
+    "NewsOrigin",
+    "NewsMoveLevel",
     "BreadthMaReading",
     "BreadthMaCounts",
     "BreadthMaDistance",

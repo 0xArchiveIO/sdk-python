@@ -111,7 +111,7 @@ First served instant of each dataset, as `client.capabilities()` reports it (tim
 | Hyperliquid Spot | Candles from 2025-03-22 10:50; trades from 2025-03-22 10:50:22; TWAP from 2026-05-05 13:05; order book from 2026-05-05 19:56; L4 from 2026-05-05 22:57 (PURR-USDC from 2026-03-11 01:03), with REST order history reaching back further | Dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`); `client.spot.pairs.list()` lists the pairs. Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
 | Lighter | Trades from 2025-01-17 08:43; candles from 2025-08-01; funding, OI and price history from 2025-08-25 15:28; order book from 2026-01-29 02:13; L3 from 2026-03-05 03:33; liquidations from 2026-06-10 | Exact starts vary by market. Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
 | Lighter on Robinhood Chain | Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch); candles from 2026-06-26 20:10; order book, OI, funding and price history from 2026-08-22 18:43 | The second Lighter deployment: USDG-quoted perps (`BTC`) and spot markets (`AAPL-USDG`); `client.rh_lighter.instruments.list()` lists them. No L3. |
-| Build-and-above datasets | Trade intent hourly from 2025-05-25 15:00 (HIP-3 from 2025-10-13 12:00), minute intervals from 2026-07-14 00:00, second intervals for the last 3 days; USDC flows from 2025-09-27 09:33; breadth above the 5-day moving average from 2025-03-27 (HIP-3 from 2025-12-27), each longer average later; positioning for the current window only | Included with the Build, Pro, Scale and Enterprise plans. See [Build-and-Above Datasets](#build-and-above-datasets). |
+| Build-and-above datasets | Trade intent hourly from 2025-05-25 15:00 (HIP-3 from 2025-10-13 12:00), minute intervals from 2026-07-14 00:00, second intervals for the last 3 days; USDC flows from 2025-09-27 09:33; breadth above the 5-day moving average from 2025-03-27 (HIP-3 from 2025-12-27), each longer average later; positioning for the current window only; news from the start of the feed | Included with the Build, Pro, Scale and Enterprise plans. See [Build-and-Above Datasets](#build-and-above-datasets). |
 | Account positions | Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13, hourly history from 2026-06-07; Lighter mainnet from 2025-01-17, Robinhood Chain from 2026-06-26 | Live snapshots every 5 minutes (Hyperliquid, HIP-3) or 2 minutes (Lighter). See [Account Positions](#account-positions). |
 
 `client.capabilities()` returns the first served instant of every datatype on every venue, and `client.symbols.list()` the coverage of each symbol, so a market listed later starts later. See [Capabilities](#capabilities). Free plans read the most recent 30 days of these datasets, except the Build-and-above datasets, which Free does not include.
@@ -1126,7 +1126,7 @@ Buckets are labelled by their open time (`timestamp`, a UTC `datetime`; `timesta
 
 ### Build-and-Above Datasets
 
-Four datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average and positioning. Every other REST dataset is on every plan. A Free key is refused with `PlanRequiredError` (HTTP 403, `error_code == "forbidden"`), which names the plans that include the dataset; see [Error Handling](#error-handling). `client.capabilities()` lists the plans on each of their rows (`plans`).
+Five datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, positioning and news. Every other REST dataset is on every plan. A Free key is refused with `PlanRequiredError` (HTTP 403, `error_code == "forbidden"`), which names the plans that include the dataset; see [Error Handling](#error-handling). `client.capabilities()` lists the plans on each of their rows (`plans`).
 
 Every iterator below follows `next_cursor` and stops only when a page has none: a page can be short, or empty, and still not be the last. Pass `start` and `end` when paging by hand; an iterator called without `end` fixes it to the current time before its first request and sends the same `end` on every page.
 
@@ -1178,6 +1178,33 @@ for bucket in totals.data:
 ```
 
 `id` (`"block:index"`) is an event's identity: join pages and deduplicate on it, since one bridge batch can carry up to 10 withdrawals under one hash and one time. Events in the last 3 hours can still be added after you read them: re-read that span and deduplicate on `id`. A page reads at most 31 days, so with a sparse `min_usd` it can be empty and still carry a cursor. Volume buckets never run past the bucket still filling or before the bucket of the first flow; `net_usd` is deposits plus HyperEVM inflows less withdrawals and HyperEVM outflows.
+
+#### News
+
+Headlines and our own market events as stories: each carries the reports that joined it, the markets it names and, when a market was matched, what the first one did in the minutes after we first saw the story. Stories whose lead report names a market on the venue: `client.hyperliquid.news` (perps), `client.hyperliquid.hip3.news` and `client.lighter.news`. Public-display stories only; each names its `source` (and `source_line`, for example `via Tree News`) and links to the source `url`. `headline` is the source's own words, cleaned by rules, never rewritten.
+
+```python
+page = client.hyperliquid.news.list(
+    symbols="BTC,ETH",   # optional, at most 20, matched to the lead report's markets
+    topic="liquidation", # optional: listing, delisting, liquidation, hack, outage, upgrade, etf, regulation, macro, earnings, partnership, funding, other
+    min_weight=2,        # optional, 1 to 3 (default 1)
+    start="2026-11-04", end="2026-11-05",  # first_seen_at window (default: the 24 hours before end)
+    as_of="2026-11-05T00:00:00Z",          # optional: the feed as we knew it then
+    limit=100,           # stories per page (default 100, max 500)
+)
+for story in page.data:
+    print(story.first_seen_at, story.headline, story.source, story.url)
+    r = story.reaction  # None when no market was matched
+    if r and "5m" in r.windows and r.windows["5m"].move_level in ("unusual", "large"):
+        w = r.windows["5m"]
+        print(r.market.symbol, w.price.move_pct, w.liquidations_usd.total, w.oi_change_pct)
+
+# Newest first, following the cursor
+for story in client.lighter.news.iterate(start="2026-11-04", min_weight=2):
+    ...
+```
+
+A story's `reaction` is a measurement, not a cause: it holds the market's price move, liquidations, open interest change, volume against the prior window and (5 minutes only) book depth within 25 basis points and `move_z`, for the 1 minute and 5 minutes after `first_seen_at`. `status` is `measuring` until both windows close (a window not yet due is absent), then `final`. Story moves are mostly noise: `move_z` is the 5-minute move over that market's own trailing 24-hour standard deviation of 5-minute moves, and `move_level` is `normal`, `unusual` (from 2) or `large` (from 3). Treat a move as typical unless `move_level` is `unusual` or `large`; the raw `move_pct` stays available. A figure we could not measure is `None`, never 0. Lighter reports liquidations as a `total` only (`long` and `short` are `None`). `others` holds the other markets a story names, over 5 minutes. Stories are ordered by `first_seen_at`, newest first; `limit` is 1 to 500; an `as_of` in the future is now. A story with no matched market has an empty `markets` and no `reaction`.
 
 #### Breadth Above the n-Day Moving Average
 
@@ -2815,7 +2842,7 @@ except OxArchiveError as e:
     print(e.details)       # the whole error body, including route-specific fields
 ```
 
-A dataset your plan does not include raises `PlanRequiredError`, an `OxArchiveError` with `error_code == "forbidden"` that names the dataset and the plans that include it. Trade intent, USDC flows, moving-average breadth and positioning are included with the Build, Pro, Scale and Enterprise plans:
+A dataset your plan does not include raises `PlanRequiredError`, an `OxArchiveError` with `error_code == "forbidden"` that names the dataset and the plans that include it. Trade intent, USDC flows, moving-average breadth, positioning and news are included with the Build, Pro, Scale and Enterprise plans:
 
 ```python
 from oxarchive import PlanRequiredError

@@ -7,7 +7,6 @@ from typing import Any, Generic, Literal, Optional, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
-
 # =============================================================================
 # Base Types
 # =============================================================================
@@ -3650,6 +3649,200 @@ class UsdcFlowVolumeBucket(BaseModel):
 
     net_usd: float
     """``deposit_usd + evm_in_usd - withdraw_usd - evm_out_usd``."""
+
+
+NewsTopic = Literal[
+    "listing",
+    "delisting",
+    "liquidation",
+    "hack",
+    "outage",
+    "upgrade",
+    "etf",
+    "regulation",
+    "macro",
+    "earnings",
+    "partnership",
+    "funding",
+    "other",
+]
+"""A story's topic, set by rules. Pass one to ``topic`` to filter. The API
+accepts any lowercase word and returns an empty page for one it does not use,
+so a new topic does not need a new SDK."""
+
+NewsOrigin = Literal["outlet", "official", "venue"]
+"""Where a story's lead report comes from: a news outlet, an official source
+(a regulator, an agency, a project's own feed) or our own venue events."""
+
+NewsMoveLevel = Literal["normal", "unusual", "large"]
+"""How far a 5-minute move is from the market's own normal, from ``|move_z|``:
+``unusual`` from 2, ``large`` from 3."""
+
+
+class NewsMarket(BaseModel):
+    """A market a story names."""
+
+    model_config = ConfigDict(extra="allow")
+
+    venue: str
+    """``"hyperliquid"``, ``"hip3"`` or ``"lighter"``."""
+
+    symbol: str
+    """The venue's symbol as the API spells it (``BTC``, ``xyz:CL``)."""
+
+
+class NewsReport(BaseModel):
+    """One report that joined a story."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    source: str
+    """Credit for the report, for example ``"Tree News"``."""
+
+    url: Optional[str] = None
+    headline: str
+    published_at: Optional[datetime] = None
+    """The source's own time."""
+
+    observed_at: datetime
+    """When we first saw the report."""
+
+
+class NewsPrice(BaseModel):
+    """A market's price at the start and end of a window."""
+
+    model_config = ConfigDict(extra="allow")
+
+    at: Optional[float] = None
+    end: Optional[float] = None
+    move_pct: Optional[float] = None
+
+
+class NewsLiquidations(BaseModel):
+    """Liquidations in a window, in USD. Lighter reports a total only."""
+
+    model_config = ConfigDict(extra="allow")
+
+    long: Optional[float] = None
+    short: Optional[float] = None
+    total: Optional[float] = None
+
+
+class NewsDepth(BaseModel):
+    """Book depth within 25 basis points of the mid, in USD."""
+
+    model_config = ConfigDict(extra="allow")
+
+    at: Optional[float] = None
+    end: Optional[float] = None
+
+
+class NewsWindow(BaseModel):
+    """What one market did in the minute or 5 minutes after a story was first seen.
+
+    The 5-minute window also carries ``bid_depth_25bp_usd``,
+    ``ask_depth_25bp_usd``, ``move_z`` and ``move_level``. A figure we could
+    not measure is ``None``, never 0.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    end: datetime
+    price: Optional[NewsPrice] = None
+    liquidations_usd: Optional[NewsLiquidations] = None
+    oi_change_pct: Optional[float] = None
+    volume_vs_prior: Optional[float] = None
+    bid_depth_25bp_usd: Optional[NewsDepth] = None
+    ask_depth_25bp_usd: Optional[NewsDepth] = None
+    move_z: Optional[float] = None
+    """The 5-minute move divided by the market's trailing 24-hour standard
+    deviation of 5-minute moves; ``None`` when that cannot be computed."""
+
+    move_level: Optional[NewsMoveLevel] = None
+    """``"normal"``, ``"unusual"`` or ``"large"``; ``None`` with ``move_z``.
+    Story moves are mostly noise: show the move as typical unless this is
+    ``unusual`` or ``large``."""
+
+
+class NewsOtherMove(BaseModel):
+    """Another market the story names, over the first 5 minutes."""
+
+    model_config = ConfigDict(extra="allow")
+
+    market: NewsMarket
+    move_pct_5m: Optional[float] = None
+    oi_change_pct_5m: Optional[float] = None
+
+
+class NewsReaction(BaseModel):
+    """What the story's first market did after the story was first seen.
+
+    This is a measurement, not a cause: the SDK and the API make no claim that
+    the story moved the market. ``status`` is ``"measuring"`` until the
+    windows close, then ``"final"``.
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    market: NewsMarket
+    from_: datetime = Field(alias="from")
+    """The story's ``first_seen_at``; the windows start here."""
+
+    status: str
+    """``"measuring"`` or ``"final"``."""
+
+    windows: dict[str, NewsWindow] = Field(default_factory=dict)
+    """Keyed ``"1m"`` and ``"5m"``; a window not yet due is absent."""
+
+    others: list[NewsOtherMove] = Field(default_factory=list)
+    known_at: Optional[datetime] = None
+    """When we recorded this measurement."""
+
+
+class NewsStory(BaseModel):
+    """One news story: a headline, the reports behind it and the markets it names.
+
+    Public-display stories only. ``headline`` is the source's own words,
+    cleaned by rules and never rewritten; ``source`` and ``source_line`` credit
+    it and ``url`` links to it.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    """``"st_"`` plus the lead report's id."""
+
+    headline: str
+    source: str
+    """Credit for the lead report, for example ``"Federal Reserve"``."""
+
+    source_line: Optional[str] = None
+    url: Optional[str] = None
+    origin: str
+    """``"outlet"``, ``"official"`` or ``"venue"`` (see :data:`NewsOrigin`)."""
+
+    topic: str
+    """See :data:`NewsTopic`."""
+
+    weight: int
+    """1 to 3, set by rules."""
+
+    weight_rule: Optional[str] = None
+    published_at: Optional[datetime] = None
+    first_seen_at: datetime
+    """When we first saw the story. Stories are ordered by it, newest first."""
+
+    known_at: Optional[datetime] = None
+    """When we recorded the lead report."""
+
+    markets: list[NewsMarket] = Field(default_factory=list)
+    """The markets the lead report names, the first being the one the
+    reaction describes. Empty when no market was matched."""
+
+    reports: list[NewsReport] = Field(default_factory=list)
+    reaction: Optional[NewsReaction] = None
+    """``None`` when there is no reaction (no market, or a weak match)."""
 
 
 class BreadthMaCounts(BaseModel):
