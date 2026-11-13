@@ -5,6 +5,36 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1] - Unreleased
+
+Times that describe market data are the time of the data, and are `None` when
+that time is unknown. Responses that carry these fields as before still parse.
+
+### Changed
+- `CoinSummary.timestamp` (`get_summary()` on Hyperliquid, HIP-3, HIP-4,
+  Lighter and Lighter on Robinhood Chain) is `Optional[datetime]`. It is the
+  time of the market data the summary is built from, not the time of the
+  request, and `None` when no market data was available.
+- `TriggerLevels.as_of` (`orders.trigger_levels()` on Hyperliquid and HIP-3)
+  is `Optional[str]`. It is the block time of the newest trigger order event
+  the map reflects, with millisecond precision, and no longer the server read
+  time. An answer served from a cache keeps the time of its data.
+- `WsL4Snapshot.timestamp` is `Optional[int]`: the block time of
+  `last_block_number` in Unix milliseconds, or `None` while that block's time
+  is not known. This covers the snapshot that opens `l4_diffs`,
+  `hip3_l4_diffs`, `spot_l4_diffs`, `hip4_l4_diffs`, `orderbook_full` and
+  `hip3_orderbook_full`, live and in replay.
+
+### Added
+- `TriggerLevels.as_of_block`: the block the trigger map reflects, or `None`
+  when it is unknown or not sent.
+
+### Fixed
+- An `l4_snapshot` with a `null` `timestamp` no longer fails validation, so it
+  reaches `on_message` and `on_l4_snapshot` instead of being dropped. A
+  summary or trigger map with a `null` time no longer raises
+  `ValidationError`.
+
 ## [1.14.0] - 2026-11-04
 
 Four datasets included with the Build, Pro, Scale and Enterprise plans, on

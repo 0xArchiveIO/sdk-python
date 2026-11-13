@@ -950,6 +950,7 @@ print(f"24h volume: {summary.volume_24h}")
 print(f"24h liquidation volume: ${summary.liquidation_volume_24h}")
 print(f"  Long: ${summary.long_liquidation_volume_24h}")
 print(f"  Short: ${summary.short_liquidation_volume_24h}")
+print(f"Data time: {summary.timestamp}")  # None when the time of the data is unknown
 
 # Lighter (price, funding, OI; no volume/liquidation data)
 lighter_summary = client.lighter.get_summary("BTC")
@@ -2168,7 +2169,7 @@ ws.subscribe_orderbook_full("BTC")
 ws.subscribe_hip3_orderbook_full("xyz:TSLA")  # case-sensitive
 ```
 
-Each level is `{"px", "sz", "n"}` with numeric values; a changed level also carries `side` (`"B"` or `"A"`) and `bn`, the block it was applied in. The snapshot's `data` also holds `bid_count`, `ask_count`, `total_bid_size`, `total_ask_size`, `mid_price`, `spread`, `spread_bps` and `is_crossed`, and `last_block_number` on the message is the block the snapshot reflects.
+Each level is `{"px", "sz", "n"}` with numeric values; a changed level also carries `side` (`"B"` or `"A"`) and `bn`, the block it was applied in. The snapshot's `data` also holds `bid_count`, `ask_count`, `total_bid_size`, `total_ask_size`, `mid_price`, `spread`, `spread_bps` and `is_crossed`, and `last_block_number` on the message is the block the snapshot reflects. The message's `timestamp` is that block's time in Unix milliseconds, or `None` while the time of the block is not known yet.
 
 ### Live Lighter Data
 
