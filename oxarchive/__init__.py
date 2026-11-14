@@ -268,7 +268,7 @@ except ImportError:
     WS_CHANNELS = None  # type: ignore
     decode_lighter_payload = None  # type: ignore
 
-__version__ = "1.14.1"
+__version__ = "1.15.0"
 
 __all__ = [
     # Client

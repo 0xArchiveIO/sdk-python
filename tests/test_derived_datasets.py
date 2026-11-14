@@ -829,4 +829,4 @@ def test_sdk_intervals_match_the_capability_rows() -> None:
 
 
 def test_version_is_1_14_1() -> None:
-    assert oxarchive.__version__ == "1.14.1"
+    assert oxarchive.__version__ == "1.15.0"
