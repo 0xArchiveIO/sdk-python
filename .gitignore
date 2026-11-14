@@ -8,6 +8,7 @@ tests/*
 !tests/test_rh_lighter.py
 !tests/test_mempool.py
 !tests/test_websocket_sends.py
+!tests/test_nullable_times.py
 !tests/_mock_api.py
 !tests/test_timestamps.py
 !tests/test_spec_fixes.py

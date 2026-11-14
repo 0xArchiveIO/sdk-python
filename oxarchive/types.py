@@ -1085,8 +1085,15 @@ class TriggerLevels(_ApiRecord):
     mid_price: float
     """Current mid/mark price, center of the requested range."""
 
-    as_of: str
-    """UTC RFC3339 server time the pending-trigger state was read."""
+    as_of: Optional[str] = None
+    """Block time of the newest trigger order event the map reflects, as a
+    UTC RFC 3339 string with millisecond precision. An answer served from a
+    cache keeps the time of the data it was built from. ``None`` when the time
+    of the data is unknown."""
+
+    as_of_block: Optional[int] = None
+    """Hyperliquid block number the map reflects. ``None`` when it is unknown,
+    or when the API does not send it."""
 
     total_bid_size: float
     """Total pending bid size across the returned window."""
@@ -1171,8 +1178,11 @@ class CoinSummary(_ApiRecord):
     coin: str
     """Trading pair symbol."""
 
-    timestamp: datetime
-    """Summary timestamp."""
+    timestamp: Optional[datetime] = None
+    """Time of the market data the summary is built from: the sample its
+    prices, open interest and funding come from. It is not the time of the
+    request, and the 24h volume and liquidation totals do not move it.
+    ``None`` when the time of the data is unknown."""
 
     mark_price: Optional[str] = None
     """Current mark price."""
@@ -1400,8 +1410,9 @@ class WsL4Snapshot(BaseModel):
     last_block_number: int
     """Highest block applied to this snapshot."""
 
-    timestamp: int
-    """Snapshot timestamp in Unix milliseconds."""
+    timestamp: Optional[int] = None
+    """Block time of ``last_block_number`` in Unix milliseconds. ``None`` when
+    the time of that block is not known yet."""
 
     data: dict[str, Any]
     """Full L4 book state."""

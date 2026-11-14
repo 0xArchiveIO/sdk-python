@@ -50,7 +50,9 @@ class L2OrderBookResource:
             depth: Number of price levels per side (omit for full depth)
 
         Returns:
-            L2 order book with aggregated price levels (px, sz, n per level)
+            L2 order book with aggregated price levels (px, sz, n per level).
+            Its ``timestamp`` is the block time of the book as a UTC RFC 3339
+            string, or ``None`` when the time of the data is unknown.
         """
         symbol = self._resolve_symbol(symbol, kwargs)
         data = self._http.get(

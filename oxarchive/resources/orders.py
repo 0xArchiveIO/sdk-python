@@ -324,7 +324,8 @@ class OrdersResource(_OrderFlowResource):
         into price buckets near the current mid/mark price. Voluntary trigger
         orders, not projected forced liquidations (see
         ``liquidations.levels`` for those). The response's ``as_of`` is the
-        server read time.
+        block time of the newest trigger order event the map reflects, and
+        ``as_of_block`` is that block; either is ``None`` when unknown.
 
         Args:
             symbol: The symbol (e.g., 'BTC', or 'xyz:TSLA' on HIP-3)

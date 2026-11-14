@@ -828,5 +828,5 @@ def test_sdk_intervals_match_the_capability_rows() -> None:
             assert row["page_limit"] == USDC_FLOWS_MAX_LIMIT
 
 
-def test_version_is_1_14_0() -> None:
-    assert oxarchive.__version__ == "1.14.0"
+def test_version_is_1_14_1() -> None:
+    assert oxarchive.__version__ == "1.15.0"
