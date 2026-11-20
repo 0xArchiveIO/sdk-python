@@ -722,6 +722,39 @@ def test_a_403_without_required_plans_stays_a_plain_error() -> None:
     assert not isinstance(caught.value, PlanRequiredError)
 
 
+def test_a_free_refusal_for_todays_data_is_a_plan_error_with_its_reason() -> None:
+    # The body the API sends from 2026-11-23 when a Free account past its
+    # first 30 days asks for today's data: no datatype, the plans that serve
+    # today, and the reason and last day served as extra fields.
+    body = {
+        "success": False,
+        "code": 403,
+        "error_code": "forbidden",
+        "reason": "today_needs_build",
+        "data_ends_on": "2026-11-22",
+        "required_plans": ["build", "pro", "scale", "enterprise"],
+        "upgrade_url": "https://0xarchive.io/pricing",
+        "error": "Free data runs through yesterday: the latest instant Free serves is "
+        "2026-11-22T23:59:59.999Z. Today's data and live streams need Build. "
+        "Upgrade at https://0xarchive.io/pricing.",
+        "request_id": "req-today",
+    }
+    client, api = mock_client(lambda path, q: httpx.Response(403, json=body))
+
+    with pytest.raises(PlanRequiredError) as caught:
+        client.hyperliquid.orderbook.get("BTC")
+
+    error = caught.value
+    assert error.status == 403 and error.error_code == "forbidden"
+    assert error.datatype is None
+    assert error.required_plans == ["build", "pro", "scale", "enterprise"]
+    assert error.upgrade_url == "https://0xarchive.io/pricing"
+    assert error.details["reason"] == "today_needs_build"
+    assert error.details["data_ends_on"] == "2026-11-22"
+    assert error.request_id == "req-today"
+    assert len(api.calls) == 1
+
+
 def test_plan_required_error_from_response_directly() -> None:
     body = fixture("usdc_flows_free_forbidden")["body"]
 

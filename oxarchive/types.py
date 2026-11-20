@@ -79,7 +79,12 @@ ErrorCode = Literal[
   included with the Pro, Scale and Enterprise plans, and trade intent, USDC
   flows, moving-average breadth and positioning with the Build, Pro, Scale and
   Enterprise plans. Those REST refusals raise :class:`PlanRequiredError`,
-  which names the plans that include the dataset.
+  which names the plans that include the dataset. From November 23, 2026,
+  after an account's first 30 days, Free data runs through yesterday (UTC):
+  a Free REST request that reaches into today also raises
+  :class:`PlanRequiredError` (``details["reason"]`` is
+  ``"today_needs_build"``), and a live subscribe or a replay that reaches
+  into today is answered with ``forbidden``.
 - ``upstream_unavailable``: a dependency is unavailable; retry later.
 - ``internal_error``: an unexpected server error.
 - ``endpoint_unsupported`` (WebSocket only): this endpoint does not serve the
@@ -1369,7 +1374,9 @@ class WsError(BaseModel):
     to resync), ``"endpoint_unsupported"`` (this endpoint does not serve the
     channel; the message names the one that does) or ``"forbidden"`` (the
     channel is not included with your plan, as for ``mempool`` on plans other
-    than Pro, Scale and Enterprise).
+    than Pro, Scale and Enterprise; from November 23, 2026, also a live
+    subscribe, or a replay that reaches into today, on a Free account past
+    its first 30 days).
     """
 
     model_config = ConfigDict(extra="allow")
@@ -2188,7 +2195,7 @@ class OxArchiveError(Exception):
 
 
 class PlanRequiredError(OxArchiveError):
-    """The dataset is not included with the caller's plan (HTTP 403,
+    """The caller's plan does not include the data asked for (HTTP 403,
     ``error_code`` ``"forbidden"``).
 
     Trade intent, USDC flows, moving-average breadth and positioning are
@@ -2196,8 +2203,16 @@ class PlanRequiredError(OxArchiveError):
     refused with this error before the request is metered. It is an
     :class:`OxArchiveError`, so ``except OxArchiveError`` keeps catching it.
 
+    From November 23, 2026, after an account's first 30 days, Free data runs
+    through yesterday (UTC), and a Free request whose window reaches into
+    today raises this error too, before it is metered. ``datatype`` is then
+    ``None``, ``details["reason"]`` is ``"today_needs_build"`` and
+    ``details["data_ends_on"]`` is the last day Free serves (``YYYY-MM-DD``,
+    UTC).
+
     Attributes:
-        datatype: The dataset that was refused, for example ``"usdc_flows"``.
+        datatype: The dataset that was refused, for example ``"usdc_flows"``;
+            ``None`` when the refusal is for today's data.
         required_plans: The plans that include it, for example
             ``["build", "pro", "scale", "enterprise"]``.
         upgrade_url: Where to change plans.
