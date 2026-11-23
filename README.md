@@ -22,7 +22,7 @@ Pull Hyperliquid and Lighter market data into Python as typed objects: order boo
 - **Sync or async.** Every method has an `a`-prefixed async twin, and iterators follow cursors for you.
 - **Live and replay.** WebSocket streaming and historical replay with `pip install "oxarchive[websocket]"`.
 - **Typed.** Pydantic models for every response, shipped with `py.typed`.
-- **Why the market traded.** Trade intent, USDC flows into and out of HyperCore, breadth above the n-day moving average and a positioning cross-section of every perp, on the Build plan and above.
+- **Why the market traded.** Trade intent, USDC flows into and out of HyperCore, breadth above the n-day moving average, a positioning cross-section of every perp and the momentum factor, on the Build plan and above.
 
 ## Installation
 
@@ -111,7 +111,7 @@ First served instant of each dataset, as `client.capabilities()` reports it (tim
 | Hyperliquid Spot | Candles from 2025-03-22 10:50; trades from 2025-03-22 10:50:22; TWAP from 2026-05-05 13:05; order book from 2026-05-05 19:56; L4 from 2026-05-05 22:57 (PURR-USDC from 2026-03-11 01:03), with REST order history reaching back further | Dashed canonical symbols (`HYPE-USDC`, `PURR-USDC`); `client.spot.pairs.list()` lists the pairs. Candle intervals are 1m/5m/15m/30m/1h/4h/1d/1w with a 1,000-row page cap and numeric timestamp-string cursors; pass each `next_cursor` back unchanged. No funding/OI/liquidations. |
 | Lighter | Trades from 2025-01-17 08:43; candles from 2025-08-01; funding, OI and price history from 2025-08-25 15:28; order book from 2026-01-29 02:13; L3 from 2026-03-05 03:33; liquidations from 2026-06-10 | Exact starts vary by market. Maker/taker trade context; L3 caps at 250 orders per side; funding/OI update at ~10s. |
 | Lighter on Robinhood Chain | Trades and liquidations from 2026-06-26 20:10:26 UTC (venue launch); candles from 2026-06-26 20:10; order book, OI, funding and price history from 2026-08-22 18:43 | The second Lighter deployment: USDG-quoted perps (`BTC`) and spot markets (`AAPL-USDG`); `client.rh_lighter.instruments.list()` lists them. No L3. |
-| Build-and-above datasets | Trade intent hourly from 2025-05-25 15:00 (HIP-3 from 2025-10-13 12:00), minute intervals from 2026-07-14 00:00, second intervals for the last 3 days; USDC flows from 2025-09-27 09:33; breadth above the 5-day moving average from 2025-03-27 (HIP-3 from 2025-12-27), each longer average later; positioning for the current window only | Included with the Build, Pro, Scale and Enterprise plans. See [Build-and-Above Datasets](#build-and-above-datasets). |
+| Build-and-above datasets | Trade intent hourly from 2025-05-25 15:00 (HIP-3 from 2025-10-13 12:00), minute intervals from 2026-07-14 00:00, second intervals for the last 3 days; USDC flows from 2025-09-27 09:33; breadth above the 5-day moving average from 2025-03-27 (HIP-3 from 2025-12-27), each longer average later; positioning for the current window only; the momentum factor from 2025-05-24 01:00 | Included with the Build, Pro, Scale and Enterprise plans. See [Build-and-Above Datasets](#build-and-above-datasets). |
 | Account positions | Hyperliquid change log from 2025-05-25, HIP-3 from 2025-10-13, hourly history from 2026-06-07; Lighter mainnet from 2025-01-17, Robinhood Chain from 2026-06-26 | Live snapshots every 5 minutes (Hyperliquid, HIP-3) or 2 minutes (Lighter). See [Account Positions](#account-positions). |
 
 `client.capabilities()` returns the first served instant of every datatype on every venue, and `client.symbols.list()` the coverage of each symbol, so a market listed later starts later. See [Capabilities](#capabilities). Free plans read the most recent 30 days of these datasets, except the Build-and-above datasets, which Free does not include.
@@ -1127,7 +1127,7 @@ Buckets are labelled by their open time (`timestamp`, a UTC `datetime`; `timesta
 
 ### Build-and-Above Datasets
 
-Four datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average and positioning. Every other REST dataset is on every plan. A Free key is refused with `PlanRequiredError` (HTTP 403, `error_code == "forbidden"`), which names the plans that include the dataset; see [Error Handling](#error-handling). `client.capabilities()` lists the plans on each of their rows (`plans`).
+Five datasets are included with the Build, Pro, Scale and Enterprise plans: trade intent, USDC flows, breadth above the n-day moving average, positioning and the momentum factor. Every other REST dataset is on every plan. A Free key is refused with `PlanRequiredError` (HTTP 403, `error_code == "forbidden"`), which names the plans that include the dataset; see [Error Handling](#error-handling). `client.capabilities()` lists the plans on each of their rows (`plans`).
 
 Every iterator below follows `next_cursor` and stops only when a page has none: a page can be short, or empty, and still not be the last. Pass `start` and `end` when paging by hand; an iterator called without `end` fixes it to the current time before its first request and sends the same `end` on every page.
 
@@ -1213,6 +1213,44 @@ btc = next(r for r in cross.data if r.symbol == "BTC")
 ```
 
 The current window only: no history, no paging and no symbol filter (filter the records yourself). One record per listed perp, sorted by symbol. The window is `[window_start, window_end)`; `window_end` is the newest 5-minute close, about 4 minutes behind now. `oi_*` and `mark_*` are `None` when that 5-minute bucket has no reading, never 0. `typical_price`, `typical_oi` and `typical_flow` are the median absolute move over windows of the same length sliding by 5 minutes over about the last 6.9 days, `None` under 288 counted windows (`typical_windows`). A 503 `upstream_unavailable` ("still being prepared") is retryable.
+
+#### Momentum Factor
+
+Every Hyperliquid core perp's momentum score at an hour, and the returns of the long-short momentum factor built from those scores (method `momentum/1`). Hyperliquid core perps only, on `client.hyperliquid.factors.momentum`. `lookback` is required on every call: `7d` or `14d`. A perp's `score` is its close-to-close return over the lookback (`ret`) divided by the standard deviation of its last 30 days of hourly returns (`vol`).
+
+```python
+# The newest reading: every eligible perp, strongest first
+scores = client.hyperliquid.factors.momentum.current("7d")
+for s in scores.data[:5]:
+    print(s.symbol, s.ret, s.vol, s.score, s.pct_rank, s.quintile, s.in_top25)
+
+# The reading as of the close of an earlier hour
+past = client.hyperliquid.factors.momentum.get("14d", at="2026-11-01T12:00:00Z")
+
+# The factor's returns, oldest first
+page = client.hyperliquid.factors.momentum.returns(
+    "7d",
+    universe="top25",  # top25 (default) or top50
+    start="2026-10-01", end="2026-11-01",
+    interval="1d",     # 1d (default) or 1h
+    holdings=True,     # add each bucket's weights
+    limit=100,         # buckets per page (default 100, max 1000)
+)
+for bucket in page.data:
+    print(bucket.timestamp, bucket.ret, bucket.long_ret, bucket.short_ret, bucket.longs, bucket.shorts)
+
+# Every bucket, following the cursor
+for bucket in client.hyperliquid.factors.momentum.iterate_returns(
+    "14d", universe="top50", start="2025-06-01", end="2026-11-01"
+):
+    ...
+```
+
+A reading (`get()` and `current()`) is as of the close of the hour at or before `at` (default now; a later time gets the newest reading) and lists every perp eligible then: 60 days of history and dollar volume in the 30 days before the universe pick in force. `pct_rank` is the score's percentile rank among them (ties averaged), `quintile` the fifth it falls in (5 at or above 0.8, 1 at or below 0.2), and `in_top25` and `in_top50` say whether the perp is in each universe at that hour. A reading is never paged.
+
+The factor's universe is the top 25 or top 50 perps by 30-day dollar volume, re-picked every 30 days, with delisted perps included while they traded. Every 168 hours (Saturdays 00:00 UTC, earning from 01:00) it goes long the top fifth of the universe on the score and short the bottom fifth, each leg weighted by inverse volatility and summing to 1. A bucket's `ret` is `long_ret` minus `short_ret`, the sum of the factor's hourly returns over the `hours` it holds (simple, not compounded), gross of fees and funding. `longs` and `shorts` are the legs' sizes in force at the bucket's last hour, and with `holdings=True`, `holdings` lists that rebalance's weights (positive long, negative short). Buckets open on UTC boundaries; `start` defaults to 30 days before `end`, and `end` to now.
+
+Scores and returns start 2025-05-24 01:00 UTC. A request that ends before then is empty, with `meta.coverage_from` and `meta.notice`. `is_final` is `True` once every candle a record is made from is final (and, for a bucket, once the bucket has closed). A 503 `upstream_unavailable` ("still being prepared") on the first request after a server restart is retryable.
 
 ### L4 Orderbook (Order-Level)
 
@@ -2816,7 +2854,7 @@ except OxArchiveError as e:
     print(e.details)       # the whole error body, including route-specific fields
 ```
 
-A dataset your plan does not include raises `PlanRequiredError`, an `OxArchiveError` with `error_code == "forbidden"` that names the dataset and the plans that include it. Trade intent, USDC flows, moving-average breadth and positioning are included with the Build, Pro, Scale and Enterprise plans:
+A dataset your plan does not include raises `PlanRequiredError`, an `OxArchiveError` with `error_code == "forbidden"` that names the dataset and the plans that include it. Trade intent, USDC flows, moving-average breadth, positioning and the momentum factor are included with the Build, Pro, Scale and Enterprise plans:
 
 ```python
 from oxarchive import PlanRequiredError
@@ -2881,6 +2919,7 @@ from oxarchive.types import (
     WalletPositions, LighterL1Accounts,
     CvdBucket, Hip3OracleExternalPrice, Hip4Question, WalletClassification, SymbolEntry,
     TradeIntentBucket, UsdcFlowEvent, UsdcFlowVolumeBucket, BreadthMaReading, PositioningReading,
+    MomentumScore, MomentumReturn, MomentumHolding,
     WebhookSubscription, WebhookEstimate, WebhookLimits,
     Capability, ErrorCode,
 )

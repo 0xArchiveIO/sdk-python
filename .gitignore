@@ -20,6 +20,7 @@ tests/*
 !tests/test_api_contract.py
 !tests/test_api_contract_live.py
 !tests/test_derived_datasets.py
+!tests/test_momentum.py
 !tests/fixtures/
 
 # Byte-compiled / optimized / DLL files
