@@ -5,6 +5,38 @@ All notable changes to the `oxarchive` Python SDK are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - Unreleased
+
+The momentum factor on Hyperliquid core perps, included with the Build, Pro,
+Scale and Enterprise plans.
+
+### Added
+- `client.hyperliquid.factors.momentum`, with `get(lookback, at=...)`,
+  `current(lookback)`, `returns(lookback, ...)` and
+  `iterate_returns(lookback, ...)`, and their async twins (`aget`,
+  `acurrent`, `areturns`, `aiterate_returns`). `lookback` is required on
+  every call: `7d` or `14d`.
+- `get()` and `current()` return one reading as of the close of an hour:
+  every eligible perp, strongest first, with its lookback return, 30-day
+  hourly volatility, score (return over volatility), percentile rank,
+  quintile and whether it is in the top-25 and top-50 universes. Records are
+  `MomentumScore`.
+- `returns()` returns the long-short factor's return per `1d` (default) or
+  `1h` bucket on the `top25` (default) or `top50` universe, oldest first,
+  with each leg's return, the legs' sizes and, with `holdings=True`, the
+  rebalance's weights. `start` defaults to 30 days before `end`, and pages
+  hold up to 1,000 buckets (default 100). Records are `MomentumReturn` with
+  `MomentumHolding`.
+- Literal types `MomentumLookback`, `MomentumUniverse` and
+  `MomentumInterval`.
+
+Scores and returns start 2025-05-24 01:00 UTC; a request that ends before
+then is empty, with `meta.coverage_from` and `meta.notice`. A Free key raises
+`PlanRequiredError` with `datatype == "momentum"`. `iterate_returns()` follows
+`next_cursor` like the other iterators: it stops only when a page has none,
+fixes `end` once when it is omitted, and raises if the API repeats a cursor.
+Parameters are checked before a request is sent.
+
 ## [1.15.0] - 2026-11-14
 
 Times that describe market data are the time of the data, and are `None` when

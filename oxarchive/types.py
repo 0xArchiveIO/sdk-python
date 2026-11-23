@@ -3836,6 +3836,156 @@ class PositioningReading(BaseModel):
 
 
 # =============================================================================
+# The momentum factor (Hyperliquid core perps). Included with the Build, Pro,
+# Scale and Enterprise plans; a Free key is refused with PlanRequiredError
+# (HTTP 403, error_code "forbidden").
+# =============================================================================
+
+MomentumLookback = Literal["7d", "14d"]
+"""The window of the return each perp is ranked on. Required on every
+momentum call: there is no default."""
+
+MomentumUniverse = Literal["top25", "top50"]
+"""The perps the factor's baskets are built from: the top 25 or top 50 by
+30-day dollar volume, re-picked every 30 days."""
+
+MomentumInterval = Literal["1h", "1d"]
+"""Bucket widths of the momentum factor's returns, on UTC boundaries."""
+
+
+class MomentumScore(BaseModel):
+    """One perp's momentum reading as of the close of one hour.
+
+    A reading lists every perp eligible at that hour (60 days of history and
+    dollar volume in the 30 days before the universe pick in force),
+    strongest first. ``score`` is ``ret`` over ``vol``: what the perps are
+    ranked on.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    symbol: str
+    """The perp."""
+
+    timestamp: datetime
+    """The reading's instant: the close of its hour (UTC)."""
+
+    timestamp_ms: int
+    """``timestamp`` in Unix milliseconds."""
+
+    lookback: str
+    """``"7d"`` or ``"14d"``."""
+
+    method: str
+    """The method version, for example ``"momentum/1"``."""
+
+    ret: Optional[float] = None
+    """The close-to-close return over the lookback, as a fraction (0.05 is
+    5%)."""
+
+    vol: Optional[float] = None
+    """The standard deviation of the last 30 days of hourly returns (not
+    annualised)."""
+
+    score: float
+    """``ret / vol``: the signal the perps are ranked on."""
+
+    pct_rank: float
+    """The score's percentile rank among the perps in this reading, in
+    ``(0, 1]``, ties averaged."""
+
+    quintile: int
+    """The fifth ``pct_rank`` falls in: 5 at or above 0.8, 1 at or below 0.2.
+    The factor's baskets rank within their own universe, so a perp's place
+    in a basket is in the returns' ``holdings``."""
+
+    in_top25: bool
+    """Whether the perp is in the top-25 universe in force at that hour."""
+
+    in_top50: bool
+    """Whether the perp is in the top-50 universe in force at that hour."""
+
+    is_final: bool
+    """``True`` once every candle the reading is made from is final. A final
+    reading can still change if those candles are rebuilt."""
+
+
+class MomentumHolding(BaseModel):
+    """One perp's weight in the momentum factor after a rebalance."""
+
+    model_config = ConfigDict(extra="allow")
+
+    symbol: str
+    """The perp."""
+
+    weight: float
+    """Positive for the long leg, negative for the short leg. Each leg's
+    weights sum to 1 in size."""
+
+
+class MomentumReturn(BaseModel):
+    """The momentum factor's return over one bucket.
+
+    Long the top fifth of the universe on the score, short the bottom fifth,
+    each leg weighted by inverse volatility, rebalanced every 168 hours
+    (Saturdays 00:00 UTC, earning from 01:00). ``ret`` is the sum of the
+    factor's hourly returns over the hours the bucket holds (simple, not
+    compounded), gross of fees and funding.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    timestamp: datetime
+    """The bucket's open (UTC)."""
+
+    timestamp_ms: int
+    """``timestamp`` in Unix milliseconds."""
+
+    calculated_at: datetime
+    """The close of the last hour the bucket holds."""
+
+    calculated_at_ms: int
+    """``calculated_at`` in Unix milliseconds."""
+
+    lookback: str
+    """``"7d"`` or ``"14d"``."""
+
+    universe: str
+    """``"top25"`` or ``"top50"``."""
+
+    method: str
+    """The method version, for example ``"momentum/1"``."""
+
+    ret: float
+    """The factor's return: ``long_ret`` minus ``short_ret``, as a fraction."""
+
+    long_ret: float
+    """The long leg's return over the bucket."""
+
+    short_ret: float
+    """The short leg's return over the bucket: what the perps held short did,
+    so a rise lowers ``ret``."""
+
+    hours: int
+    """The hours summed: fewer than the interval's for the bucket still
+    forming and for the first bucket of coverage."""
+
+    longs: int
+    """Perps in the long leg in force at the bucket's last hour."""
+
+    shorts: int
+    """Perps in the short leg in force at the bucket's last hour."""
+
+    holdings: Optional[list[MomentumHolding]] = None
+    """With ``holdings=True``, the weights of the rebalance in force at the
+    bucket's last hour, long leg first; ``None`` when not asked for."""
+
+    is_final: bool
+    """``True`` once the whole bucket has closed and every candle it is made
+    from is final."""
+
+
+# =============================================================================
 # HIP-3 Oracle Types
 # =============================================================================
 

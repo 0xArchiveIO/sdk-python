@@ -18,8 +18,9 @@ two deployments: mainnet and Robinhood Chain.
 - What each venue serves, per datatype, and from when, on client.capabilities()
 - Build-and-above datasets on Hyperliquid core and HIP-3: trade intent
   (client.hyperliquid.trade_intent), USDC flows (client.hyperliquid.usdc_flows),
-  breadth above the n-day moving average (client.hyperliquid.breadth_ma) and
-  positioning (client.hyperliquid.positioning). A Free key gets PlanRequiredError.
+  breadth above the n-day moving average (client.hyperliquid.breadth_ma),
+  positioning (client.hyperliquid.positioning) and the momentum factor on core
+  perps (client.hyperliquid.factors.momentum). A Free key gets PlanRequiredError.
 
 Every request selects API version 2026-10-01 (the ``0xArchive-Version``
 header, and ``version`` on WebSocket connections). Errors raise
@@ -156,6 +157,13 @@ from .types import (
     BreadthMaInterval,
     PositioningReading,
     PositioningWindow,
+    # The momentum factor (Build and above)
+    MomentumScore,
+    MomentumReturn,
+    MomentumHolding,
+    MomentumLookback,
+    MomentumUniverse,
+    MomentumInterval,
     # Wallet classification and the symbol universe
     WalletClassifySort,
     WalletClassifyMetrics,
@@ -268,7 +276,7 @@ except ImportError:
     WS_CHANNELS = None  # type: ignore
     decode_lighter_payload = None  # type: ignore
 
-__version__ = "1.15.0"
+__version__ = "1.16.0"
 
 __all__ = [
     # Client
@@ -368,6 +376,13 @@ __all__ = [
     "BreadthMaInterval",
     "PositioningReading",
     "PositioningWindow",
+    # The momentum factor
+    "MomentumScore",
+    "MomentumReturn",
+    "MomentumHolding",
+    "MomentumLookback",
+    "MomentumUniverse",
+    "MomentumInterval",
     # Wallet Classification and the Symbol Universe
     "WalletClassifySort",
     "WalletClassifyMetrics",

@@ -13,6 +13,7 @@ from .resources import (
     BreadthResource,
     CandlesResource,
     CvdResource,
+    FactorsResource,
     FundingResource,
     Hip3CandlesResource,
     Hip3InstrumentsResource,
@@ -160,6 +161,11 @@ class HyperliquidClient:
         """Every listed perp's open interest change, taker flow and
         liquidations over a trailing window (current window only). Build and
         above."""
+
+        self.factors = FactorsResource(http, base_path)
+        """Factors on core perps: ``factors.momentum``, every perp's momentum
+        score at an hour and the long-short factor's returns (from
+        2025-05-24 01:00 UTC). Build and above."""
 
         self.hip3 = Hip3Client(http)
         """HIP-3 builder-deployed perpetuals (trades from 2025-10-13)"""

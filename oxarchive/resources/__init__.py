@@ -17,6 +17,7 @@ from .l3_orderbook import L3OrderBookResource
 from .l4_orderbook import L4OrderBookResource
 from .lighter_liquidations import LighterLiquidationsResource
 from .liquidations import Hip3LiquidationsResource, LiquidationsResource
+from .momentum import FactorsResource, MomentumResource
 from .openinterest import Hip4OpenInterestResource, OpenInterestResource
 from .oracle import Hip3OracleResource
 from .orderbook import OrderBookResource
@@ -79,4 +80,6 @@ __all__ = [
     "UsdcFlowsResource",
     "BreadthMaResource",
     "PositioningResource",
+    "FactorsResource",
+    "MomentumResource",
 ]
